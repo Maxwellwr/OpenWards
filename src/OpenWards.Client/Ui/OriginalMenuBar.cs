@@ -58,6 +58,16 @@ internal sealed class OriginalMenuBar
         host.Graphics is { } graphics && graphics.Sheet("PULLDV", OriginalGraphics.MainPalette, "DATA") is not null
         && graphics.Font("FONT01V", OriginalGraphics.MainPalette) is not null && graphics.Font("FONT02V", OriginalGraphics.MainPalette) is not null;
 
+    /// <summary>
+    /// <c>UIMenuBar:appear</c> (Esc, <c>GameUI:showMenuBar</c>): shows the bar wherever the cursor is; it goes as usual a
+    /// while after, unless the cursor comes to it.
+    /// </summary>
+    public void Appear(long now)
+    {
+        IsVisible = true;
+        _hideAt = now + HideAfter;
+    }
+
     /// <summary>The menus' places on the bar: each as wide as its title and 32 more (addMenu).</summary>
     public static List<Rectangle> TitleAreas(IReadOnlyList<MenuBarMenu> menus, Func<string, int> measure)
     {
