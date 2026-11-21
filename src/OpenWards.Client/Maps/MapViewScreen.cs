@@ -1007,7 +1007,6 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
         }
         else
         {
-            DrawBriefLine(batch, building);
             if (_bottomPanel is null)
             {
                 // Without the original bottom panel nothing else shows the date and speed.
@@ -1044,14 +1043,26 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
             _menuBackground = null;
         }
 
+        // The bottom panel shows the brief line in its info bar; where it is not drawn, the line has a strip of its own.
+        var panelDrawn = false;
         if (IsWindowHostReady)
         {
             var pointer = InputScript.Mouse();
             if (!inMainMenu || _menuBackground is null)
             {
-                DrawBottomPanel(batch, viewport, new Point(pointer.X, pointer.Y));
+                panelDrawn = DrawBottomPanel(batch, viewport, new Point(pointer.X, pointer.Y));
                 DrawAdviser(batch, viewport);
             }
+        }
+
+        if (!ShowsStatusBar && !panelDrawn)
+        {
+            DrawBriefLine(batch, viewport, building);
+        }
+
+        if (IsWindowHostReady)
+        {
+            var pointer = InputScript.Mouse();
 
             DrawSubtitles(batch);
             _windows.Draw(batch, _text, _pixel, new Point(pointer.X, pointer.Y));
@@ -5921,11 +5932,12 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
         _ => false,
     };
 
-    private void DrawBottomPanel(SpriteBatch batch, Viewport viewport, Point mouse)
+    /// <returns>Whether the panel was drawn.</returns>
+    private bool DrawBottomPanel(SpriteBatch batch, Viewport viewport, Point mouse)
     {
         if (_bottomPanel is null || Simulation is not { } simulation || _session is null || _session.Player >= simulation.Hospitals.Count)
         {
-            return;
+            return false;
         }
 
         var hospital = simulation.Hospitals[_session.Player];
@@ -5939,30 +5951,64 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
             PanelFaxes(),
             PanelDialogOpen,
             Tutorial.Lit,
-            [.. FaxWindow.Pending(simulation, _session.Player, ((IWindowHost)this).IsWinLetterPending), .. RaiseRequests().Select(staff => string.Create(CultureInfo.InvariantCulture, $"strike:{staff.Id}"))]);
+            [.. FaxWindow.Pending(simulation, _session.Player, ((IWindowHost)this).IsWinLetterPending), .. RaiseRequests().Select(staff => string.Create(CultureInfo.InvariantCulture, $"strike:{staff.Id}"))],
+            ShowsStatusBar ? null : BriefLine(inPanel: true));
         _bottomPanel.Draw(batch, viewport, state, mouse, InputScript.Mouse());
+        return true;
     }
 
     /// <summary>
-    /// Without the status bar, what still has to be read at the top left: an error, the build tool's line, or a notice
-    /// such as "Quick saved", each on a dark strip as wide as its text.
+    /// Without the status bar, what still has to be read: an error, the build tool's line while building, or a notice
+    /// such as "Quick saved".
     /// </summary>
-    private void DrawBriefLine(SpriteBatch batch, bool building)
+    /// <param name="inPanel">
+    /// Whether the line goes in the bottom panel's info bar, where room is short: the build tool's line goes without
+    /// its "BUILD MODE" heading, which the blue frame round the map already says.
+    /// </param>
+    private string? BriefLine(bool inPanel = false) =>
+        _error
+        ?? (_buildTool.IsActive || _furnishTool.IsActive ? (inPanel ? BuildHint() : TileLine()) : null)
+        ?? (_notice is not null && Environment.TickCount64 < _noticeUntil ? _notice : null);
+
+    /// <summary>The build tool's line without its heading: the reminder to finish the room first, if it shows, and the tool's status.</summary>
+    private string BuildHint()
     {
-        var line = _error
-            ?? (building ? TileLine() : null)
-            ?? (_notice is not null && Environment.TickCount64 < _noticeUntil ? _notice : null);
-        if (line is null)
+        var status = _buildTool.IsActive ? _buildTool.Status(Simulation) : _furnishTool.Status(Simulation);
+        var reminder = _buildTool.IsActive && Environment.TickCount64 < _buildReminderUntil
+            ? UiText.Get("openwards.status.finish_room_first", " (finish or cancel the room to use other keys)").Trim()
+            : string.Empty;
+        return reminder.Length > 0 ? reminder + "   " + status : status;
+    }
+
+    /// <summary>
+    /// The brief line where the bottom panel does not show it in its info bar (the main menu, or no original
+    /// graphics): at the bottom middle of the screen on a strip as wide as its text, blue while building.
+    /// </summary>
+    private void DrawBriefLine(SpriteBatch batch, Viewport viewport, bool building)
+    {
+        if (BriefLine() is not { } line)
         {
             return;
         }
 
-        // Below the original menu bar while it shows, so that the bar does not cover the line.
-        var top = _menuBar.IsVisible ? OriginalMenuBar.Height : 0;
-        var box = new Rectangle(0, top, _text.Measure(line).Width + 16, _text.LineHeight + 8);
+        var maxWidth = Math.Max(1, viewport.Width - (2 * BriefLinePadding));
+        var lines = _text.Measure(line).Width <= maxWidth ? [line] : WrapToWidth(line, maxWidth, text => _text.Measure(text).Width);
+        var lineHeight = _text.LineHeight + 2;
+        var size = new Point(lines.Max(text => _text.Measure(text).Width) + (2 * BriefLinePadding), (lines.Count * lineHeight) + 6);
+        var box = BriefLineBox(new Point(viewport.Width, viewport.Height), size);
         batch.Draw(_pixel, box, building ? BuildModeColor : Color.Black * 0.75f);
-        _text.Draw(batch, line, new Vector2(8, top + 4));
+        for (var i = 0; i < lines.Count; i++)
+        {
+            _text.Draw(batch, lines[i], new Vector2(box.X + BriefLinePadding, box.Y + 4 + (i * lineHeight)));
+        }
     }
+
+    /// <summary>The room left and right of the brief line's text.</summary>
+    private const int BriefLinePadding = 8;
+
+    /// <summary>Where the brief line goes without the bottom panel: centred at the bottom of the screen, above the build frame.</summary>
+    internal static Rectangle BriefLineBox(Point screen, Point size) =>
+        new(Math.Max(0, (screen.X - size.X) / 2), Math.Max(0, screen.Y - BuildFrameWidth - 2 - size.Y), size.X, size.Y);
 
     /// <summary>
     /// --debug-status: the debug lines (the level, money, people, overlay, zoom, the tile under the cursor and the keys)

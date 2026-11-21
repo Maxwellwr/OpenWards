@@ -22,6 +22,10 @@ namespace OpenWards.Client.Ui;
 /// <param name="IsOn">Whether a button's dialog is open, so the button shows pressed (toggle buttons).</param>
 /// <param name="IsLit">Whether the tutorial's flashing button is lit now.</param>
 /// <param name="FaxKeys">What tells each fax apart (<see cref="Ui.Windows.FaxWindow.Pending"/>), so its icon keeps its place; by default its kind and place.</param>
+/// <param name="Hint">
+/// A line the player has to read (the build tool's line, an error, or a notice such as "Quick saved"), shown in the
+/// info bar in place of the pause text and the info of what is under the cursor; its parts are separated by three spaces.
+/// </param>
 internal sealed record BottomPanelState(
     long Balance,
     int Reputation,
@@ -31,7 +35,8 @@ internal sealed record BottomPanelState(
     IReadOnlyList<string> Faxes,
     Func<string, bool> IsOn,
     Func<string, bool> IsLit,
-    IReadOnlyList<string>? FaxKeys = null);
+    IReadOnlyList<string>? FaxKeys = null,
+    string? Hint = null);
 
 /// <summary>
 /// The original's bottom panel, 640 by 48 pixels at the bottom middle of the screen: the bank button, the balance and
@@ -392,6 +397,18 @@ internal sealed class OriginalBottomPanel : IDisposable
     /// </summary>
     private void DrawDynamicInfo(SpriteBatch batch, int x, int y, int width, BottomPanelState state)
     {
+        if (state.Hint is { } hint)
+        {
+            // OpenWards: the hint takes the info bar's three lines, in its white font, where the pause text stands.
+            var hintLines = HintLines(hint, HintWidth(width), text => _whiteFont.Measure(text).Width);
+            for (var i = 0; i < hintLines.Count; i++)
+            {
+                _whiteFont.Draw(batch, hintLines[i], new Vector2(x + 20, y + (10 * (i + 1))));
+            }
+
+            return;
+        }
+
         if (state.Pause is { } pause)
         {
             var pauseWidth = _pauseFont.Measure(pause).Width;
@@ -410,7 +427,7 @@ internal sealed class OriginalBottomPanel : IDisposable
         var right = x + (width - 364);
         for (var i = 1; i <= lines.Count; i++)
         {
-            foreach (var line in Maps.MapViewScreen.WrapToWidth(lines[i - 1], 240, text => _whiteFont.Measure(text).Width).Take(1))
+            foreach (var line in Maps.MapViewScreen.WrapToWidth(lines[i - 1], InfoTextWidth, text => _whiteFont.Measure(text).Width).Take(1))
             {
                 _whiteFont.Draw(batch, line, new Vector2(x + 20, y + (10 * i)));
             }
@@ -457,6 +474,79 @@ internal sealed class OriginalBottomPanel : IDisposable
             {
                 _whiteFont.Draw(batch, lines[(strip * InfoLinesPerStrip) + i], new Vector2(x + InfoTextLeft, y + (10 * (i + 1))));
             }
+        }
+    }
+
+    /// <summary>How wide a line of the info bar's text may be.</summary>
+    private const int InfoTextWidth = 240;
+
+    /// <summary>How wide a hint's line may be: the info bar from its text's left to its right end, less a margin.</summary>
+    private static int HintWidth(int panelWidth) => panelWidth - 364 - InfoTextLeft - InfoTextRight;
+
+    /// <summary>
+    /// A hint laid out on the info bar's three lines: its parts (split at three spaces) share a line while they fit and
+    /// a long part is wrapped. When that takes more than three lines, the longest part loses words from its end (but
+    /// not a closing remark in brackets, such as why a blueprint cannot be built) and gets an ellipsis instead, so that
+    /// the shorter parts, such as the keys, stay whole.
+    /// </summary>
+    internal static IReadOnlyList<string> HintLines(string hint, int width, Func<string, int> measure)
+    {
+        var parts = hint.Split("   ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(HintPart.Of).ToList();
+        while (true)
+        {
+            var lines = Maps.MapViewScreen.PackSegments(parts.Select(part => part.Text), width, measure);
+            if (lines.Count <= InfoLinesPerStrip)
+            {
+                return lines;
+            }
+
+            var longest = parts.Where(part => part.Words.Count > 1).MaxBy(part => measure(part.Text));
+            if (longest is null)
+            {
+                var cut = lines.Take(InfoLinesPerStrip).ToList();
+                cut[^1] = cut[^1].TrimEnd() + "…";
+                return cut;
+            }
+
+            longest.Shorten();
+        }
+    }
+
+    /// <summary>A part of a hint: its words, which may be cut short, and a remark in brackets at its end, which stays.</summary>
+    private sealed class HintPart
+    {
+        private HintPart(List<string> words, string remark)
+        {
+            Words = words;
+            Remark = remark;
+        }
+
+        public List<string> Words { get; }
+
+        private string Remark { get; }
+
+        private bool Shortened { get; set; }
+
+        public string Text => string.Join(' ', Words) + (Shortened ? "…" : string.Empty) + (Remark.Length > 0 ? " " + Remark : string.Empty);
+
+        public static HintPart Of(string text)
+        {
+            var remark = string.Empty;
+            var open = text.LastIndexOf('(');
+            if (text.EndsWith(')') && open > 0)
+            {
+                remark = text[open..];
+                text = text[..open];
+            }
+
+            return new HintPart([.. text.Split(' ', StringSplitOptions.RemoveEmptyEntries)], remark);
+        }
+
+        public void Shorten()
+        {
+            Words.RemoveAt(Words.Count - 1);
+            Words[^1] = Words[^1].TrimEnd(',', ';', ':', '.', '-', '—', '–');
+            Shortened = true;
         }
     }
 
