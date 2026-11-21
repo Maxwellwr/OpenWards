@@ -831,7 +831,7 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
             _scrollMilliseconds -= MapScrolling.TickMilliseconds;
             var step = _scrolling.Tick(new ScrollInput(keyX, keyY, shiftHeld, edgeX, edgeY, dragging));
             _camera.Center += new Vector2((float)step.X, (float)step.Y);
-            if (step.Zoom != 0 && _scrolling.Zoomed(_camera.Zoom, step.Zoom, _device.Viewport.Width) is { } zoomed)
+            if (step.Zoom != 0 && _scrolling.Zoomed(_camera.Zoom, step.Zoom, _device.Viewport.Width) is { } zoomed && zoomed >= MinimumZoom(viewSize))
             {
                 _camera.ZoomAt((float)zoomed, zoomAnchor, viewSize);
             }
@@ -1800,8 +1800,18 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
     private bool _limitCamera = true;
 
     /// <summary>
-    /// With the camera limited, its middle stays over the map's diamond (<c>GameUI:limitCamera</c>); without, only within
-    /// the map's bounding box.
+    /// The least zoom (<c>GameUI:calculateMinimumZoom</c>), with the camera limited outside the map editor; 0 otherwise,
+    /// as CorsixTH's setZoom then refuses nothing.
+    /// </summary>
+    private float MinimumZoom(Point viewSize) => _limitCamera && _editorTool is null && Map is { } map
+        ? (float)VisibleDiamond.MinimumZoom(Math.Max(map.Width, map.Height), viewSize.X, viewSize.Y)
+        : 0f;
+
+    /// <summary>
+    /// With the camera limited, the map covers all of the screen (<c>GameUI:scrollMap</c> with
+    /// <c>limit_to_visible_diamond</c>): the screen's top-left corner stays in the visible diamond, and the zoom out
+    /// stops where the map would no longer fill the window (<c>GameUI:calculateMinimumZoom</c>). Without the limit, the
+    /// middle of the screen stays only within the map's bounding box.
     /// </summary>
     private void ClampCamera()
     {
@@ -1812,8 +1822,32 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
 
         if (_limitCamera)
         {
-            var tileX = Math.Clamp(((_camera.Center.X / 32f) + (_camera.Center.Y / 16f)) / 2f, 0f, map.Width);
-            var tileY = Math.Clamp(((_camera.Center.Y / 16f) - (_camera.Center.X / 32f)) / 2f, 0f, map.Height);
+            var viewSize = ViewSize;
+            var minimumZoom = MinimumZoom(viewSize);
+            if (_camera.Zoom < minimumZoom)
+            {
+                _camera.ZoomAt(minimumZoom, new Point(viewSize.X / 2, viewSize.Y / 2), viewSize);
+            }
+
+            var width = viewSize.X / (double)_camera.Zoom;
+            var height = viewSize.Y / (double)_camera.Zoom;
+            if (map.Width == map.Height)
+            {
+                var diamond = VisibleDiamond.For(map.Width, width, height, _editorTool is not null);
+                if (!diamond.IsEmpty)
+                {
+                    var (left, top) = diamond.Limit(_camera.Center.X - (width / 2), _camera.Center.Y - (height / 2));
+                    _camera.Center = new Vector2((float)(left + (width / 2)), (float)(top + (height / 2)));
+                    return;
+                }
+            }
+
+            // CorsixTH only has square maps; for others, keep the screen's corners over the map in tile coordinates.
+            var margin = (float)((width / 64) + (height / 32));
+            var tileX = ((_camera.Center.X / 32f) + (_camera.Center.Y / 16f)) / 2f;
+            var tileY = ((_camera.Center.Y / 16f) - (_camera.Center.X / 32f)) / 2f;
+            tileX = 2 * margin > map.Width ? map.Width / 2f : Math.Clamp(tileX, margin, map.Width - margin);
+            tileY = 2 * margin > map.Height ? map.Height / 2f : Math.Clamp(tileY, margin, map.Height - margin);
             _camera.Center = new Vector2(32f * (tileX - tileY), 16f * (tileX + tileY));
             return;
         }
