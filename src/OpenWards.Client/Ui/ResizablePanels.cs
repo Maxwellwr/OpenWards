@@ -14,9 +14,10 @@ namespace OpenWards.Client.Ui;
 /// <summary>
 /// A bevelled panel of a CorsixTH dialog: where it is, its label and colour, whether it is lowered (a caption, or a
 /// toggle button that is on), and for a button what a click does (+1 for the left button, -1 for the right) and its
-/// tooltip. A caption's highlight and shadow can be the window's colour (<c>col.caption, col.bg, col.bg</c>).
+/// tooltip. A caption's highlight and shadow can be the window's colour (<c>col.caption, col.bg, col.bg</c>). A label
+/// can go on the left instead of in the middle.
 /// </summary>
-internal sealed record DialogPanel(Rectangle Area, string? Label, Color Colour, bool Lowered = false, Action<int>? Click = null, string? Tooltip = null, bool Enabled = true, Color? Highlight = null, Color? Shadow = null)
+internal sealed record DialogPanel(Rectangle Area, string? Label, Color Colour, bool Lowered = false, Action<int>? Click = null, string? Tooltip = null, bool Enabled = true, Color? Highlight = null, Color? Shadow = null, bool LeftAligned = false)
 {
     /// <summary>CorsixTH's caption colour (<c>Colours.Caption</c>), drawn lowered with the window's colour round it.</summary>
     public static readonly Color CaptionColour = new(134, 126, 178);
@@ -65,7 +66,7 @@ internal sealed class ResizablePanels
             var panel = panels[i];
             var area = new Rectangle(origin + panel.Area.Location, panel.Area.Size);
             var pressed = held && _pressed == i && panel.Area.Contains(local);
-            look.DrawBevel(batch, area, panel.Colour, panel.Lowered != pressed, panel.Label, font, highlight: panel.Highlight, shadow: panel.Shadow);
+            look.DrawBevel(batch, area, panel.Colour, panel.Lowered != pressed, panel.Label, font, highlight: panel.Highlight, shadow: panel.Shadow, leftAligned: panel.LeftAligned);
         }
     }
 

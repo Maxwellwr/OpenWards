@@ -430,11 +430,21 @@ internal abstract class UiWindow
     /// <summary>The size of the window drawn by itself: 640 by 480 for a fullscreen dialog, its own for a smaller one.</summary>
     public virtual Point FullscreenSize => new(640, 480);
 
+    /// <summary>The size of the window drawn by itself on a screen of that area: <see cref="FullscreenSize"/> unless it depends on the screen.</summary>
+    public virtual Point FullscreenSizeOn(Rectangle screen) => FullscreenSize;
+
     /// <summary>Where a window drawn by itself opens from the top left of the screen's free area; null centres it.</summary>
     public virtual Vector2? FullscreenPosition => null;
 
     /// <summary>Where on the screen the window in its original look goes, kept within the area, such as a popup at the cursor; before <see cref="FullscreenPosition"/>.</summary>
     public virtual Point? FullscreenScreenPosition => null;
+
+    /// <summary>
+    /// Whether the window is one of the original's full 640 by 480 screens (CorsixTH's <c>UIFullscreen</c>: reports, bank,
+    /// casebook, research, policy, graphs...), which gets CorsixTH's frame round it on a bigger screen and is dragged by it;
+    /// by default a window of that size centred on the screen.
+    /// </summary>
+    public virtual bool HasFullscreenBorder => FullscreenSize == new Point(640, 480) && FullscreenPosition is null && FullscreenScreenPosition is null;
 
     /// <summary>
     /// Whether the window, one CorsixTH added to the game (a <c>UIResizable</c>: options, menus, file browsers), is drawn

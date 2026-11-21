@@ -95,9 +95,10 @@ internal sealed class OriginalBottomPanel : IDisposable
     {
         _sprites = new SpriteAtlas(device, install.LoadSpriteSheet("DATA", "PANEL02V", complex: true), palette);
         _moneyFont = Font(device, install, "FONT05V", palette);
-        _dateFont = Font(device, install, "FONT16V", palette);
+        // UIBottomPanel: the date and pause fonts give the TrueType face their colours (ttf_color).
+        _dateFont = Font(device, install, "FONT16V", palette, new Color(175, 50, 15));
         _whiteFont = Font(device, install, "FONT01V", palette);
-        _pauseFont = Font(device, install, "FONT124V", palette);
+        _pauseFont = Font(device, install, "FONT124V", palette, new Color(35, 138, 173));
         _auxSprites = AuxSprites.Load() is { } aux ? new SpriteAtlas(device, aux, palette) : null;
         _pixel = new Texture2D(device, 1, 1);
         _pixel.SetData([Color.White]);
@@ -304,7 +305,7 @@ internal sealed class OriginalBottomPanel : IDisposable
         }
 
         var dateWidth = _dateFont.Measure(state.Date).Width;
-        _dateFont.Draw(batch, state.Date, new Vector2(x + 140 + ((60 - dateWidth) / 2), y + 20), tint: _dateFont.IsTrueTypeFor(state.Date) ? new Color(175, 50, 15) : null);
+        _dateFont.Draw(batch, state.Date, new Vector2(x + 140 + ((60 - dateWidth) / 2), y + 20));
 
         if (!hovering)
         {
@@ -385,15 +386,16 @@ internal sealed class OriginalBottomPanel : IDisposable
     }
 
     /// <summary>
-    /// drawDynamicInfo: while paused the pause text in the middle, unless something is under the cursor; else the info's
-    /// lines, ten pixels apart.
+    /// drawDynamicInfo: while paused the pause text in the middle, even with something under the cursor (CorsixTH shows
+    /// the info instead only with <c>allow_user_actions_while_paused</c>, off by default and not offered here); else the
+    /// info's lines, ten pixels apart.
     /// </summary>
     private void DrawDynamicInfo(SpriteBatch batch, int x, int y, int width, BottomPanelState state)
     {
-        if (state.Pause is { } pause && state.Info is null)
+        if (state.Pause is { } pause)
         {
             var pauseWidth = _pauseFont.Measure(pause).Width;
-            _pauseFont.Draw(batch, pause, new Vector2(x + 10 + ((255 - pauseWidth) / 2), y + 14), tint: _pauseFont.IsTrueTypeFor(pause) ? new Color(35, 138, 173) : null);
+            _pauseFont.Draw(batch, pause, new Vector2(x + 10 + ((255 - pauseWidth) / 2), y + 14));
             return;
         }
 
@@ -527,8 +529,8 @@ internal sealed class OriginalBottomPanel : IDisposable
         return null;
     }
 
-    private static TextRenderer Font(GraphicsDevice device, ThemeHospitalInstall install, string name, Palette palette) =>
-        new(device, new BitmapFont(install.LoadSpriteSheet("QDATA", name, complex: false)), palette);
+    private static TextRenderer Font(GraphicsDevice device, ThemeHospitalInstall install, string name, Palette palette, Color? trueTypeColor = null) =>
+        new(device, new BitmapFont(install.LoadSpriteSheet("QDATA", name, complex: false)), palette) { TrueTypeColor = trueTypeColor };
 
     /// <summary>
     /// A button: its key, label (for scripts), panel sprite and where it goes, the area that takes clicks within it and

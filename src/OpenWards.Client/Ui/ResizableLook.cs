@@ -1,6 +1,7 @@
 // The look of CorsixTH's own windows, ported from CorsixTH CorsixTH/Lua/dialogs/resizable.lua (UIResizable: the border of
 // aux_ui sprites round a window of one colour) and window.lua (addBevelPanel and panel_bevel_draw: raised and lowered
-// panels with a highlight and a shadow, Panel:drawLabel).
+// panels with a highlight and a shadow, Panel:drawLabel); the frame alone round the original's 640 by 480 screens from
+// fullscreen.lua (UIFullscreen:draw).
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using Microsoft.Xna.Framework;
@@ -33,6 +34,9 @@ internal sealed class ResizableLook : IDisposable
     /// <summary>Draws one of the tree control's sprites (<see cref="AuxSprites.LoadTree"/>) with its top left at x, y.</summary>
     public void DrawTreeIcon(SpriteBatch batch, int sprite, int x, int y) => _tree?.Draw(batch, sprite, x, y, Color.White);
 
+    /// <summary>Draws one of CorsixTH's aux_ui sprites (<c>loadSpriteTable("Bitmap", "aux_ui", true)</c>) with its top left at x, y.</summary>
+    public void DrawAux(SpriteBatch batch, int sprite, int x, int y) => _borders?.Draw(batch, sprite, x, y, Color.White);
+
     /// <summary><c>canvas:drawRect</c>: a rectangle of one colour.</summary>
     public void Fill(SpriteBatch batch, Rectangle area, Color colour) => batch.Draw(_pixel, area, colour);
 
@@ -46,6 +50,15 @@ internal sealed class ResizableLook : IDisposable
     public void DrawWindow(SpriteBatch batch, Rectangle area, Color colour)
     {
         batch.Draw(_pixel, area, colour);
+        DrawFrame(batch, area);
+    }
+
+    /// <summary>
+    /// The frame alone, round a window that draws its own picture: the original's 640 by 480 screens on a bigger screen
+    /// (CorsixTH CorsixTH/Lua/dialogs/fullscreen.lua, <c>UIFullscreen:draw</c>, which draws the same sprites).
+    /// </summary>
+    public void DrawFrame(SpriteBatch batch, Rectangle area)
+    {
         if (_borders is not { } sprites)
         {
             return;
@@ -74,9 +87,10 @@ internal sealed class ResizableLook : IDisposable
 
     /// <summary>
     /// <c>panel_bevel_draw</c>: raised, the shadow one pixel down and right, the highlight, then the colour inside; lowered
-    /// (a button held down), the highlight, the shadow, then the colour inside. The label goes in the middle.
+    /// (a button held down), the highlight, the shadow, then the colour inside. The label goes in the middle, or on the
+    /// left 2 pixels in (<c>setLabel(label, nil, "left")</c>).
     /// </summary>
-    public void DrawBevel(SpriteBatch batch, Rectangle area, Color colour, bool lowered, string? label = null, TextRenderer? font = null, Color? tint = null, Color? highlight = null, Color? shadow = null)
+    public void DrawBevel(SpriteBatch batch, Rectangle area, Color colour, bool lowered, string? label = null, TextRenderer? font = null, Color? tint = null, Color? highlight = null, Color? shadow = null, bool leftAligned = false)
     {
         var (light, dark) = (highlight ?? Shade(colour, 60), shadow ?? Shade(colour, -60));
         if (lowered)
@@ -107,7 +121,7 @@ internal sealed class ResizableLook : IDisposable
             foreach (var line in lines)
             {
                 var text = ClipLine(line, area.Width - 4, Width);
-                font.Draw(batch, text, new Vector2(area.X + 2 + ((area.Width - 4 - Width(text)) / 2), top), tint: tint);
+                font.Draw(batch, text, new Vector2(area.X + 2 + (leftAligned ? 0 : (area.Width - 4 - Width(text)) / 2), top), tint: tint);
                 top += font.LineHeight;
             }
         }

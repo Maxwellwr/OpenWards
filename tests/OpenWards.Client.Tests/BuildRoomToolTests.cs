@@ -272,6 +272,68 @@ public class BuildRoomToolTests
         Assert.True(tool.IsFurnishing);
         Assert.Equal(balance, hospital.Balance);
     }
+
+    [Fact]
+    public void TheRoomConfirmsWithExtraObjectsBoughtButNotPlaced()
+    {
+        // UIEditRoom:checkEnableConfirm asks only for the needed objects; confirming closes UIPlaceObjects, whose
+        // removeAllObjects drops what is still on the list.
+        var host = new WindowTestHost();
+        var simulation = host.Simulation;
+        var definition = simulation.Content.FindRoom("toilets")!;
+        host.Submit(new BuildRoomCommand(new RoomPlan("toilets", new TileRect(4, 4, 6, 6), new DoorPlacement(new(5, 4), EdgeOrientation.North))));
+        var room = Assert.Single(simulation.Entities.OfType<Room>());
+        foreach (var needed in new[] { "loo", "sink" })
+        {
+            host.Submit(new PlaceObjectCommand(needed, FreeSpot(simulation, room, needed), Direction.North));
+        }
+
+        var tool = new BuildRoomTool();
+        tool.StartEditing(definition, room.Id, simulation.Tick);
+        tool.PlaceExtra(simulation.Content.FindObject("sink")!);
+        tool.PlaceExtra(simulation.Content.FindObject("sink")!);
+        tool.Update(simulation, 0, Mouse(new(6, 6)));
+        Assert.Equal("sink", tool.Ghost?.ObjectType);
+        Assert.True(tool.CanConfirm(simulation));
+        Assert.True(tool.CanPressConfirm(simulation));
+
+        // Picking up does not get in the way either (UIEditRoom:confirm stops it first).
+        tool.Update(simulation, 0, new BuildInput(new(6, 6), 128, 128, false, false, false, false, false, false, true));
+        Assert.True(tool.IsPickingUp);
+        Assert.True(tool.CanConfirm(simulation));
+
+        var balance = simulation.Hospitals[0].Balance;
+        var confirm = tool.Update(simulation, 0, new BuildInput(new(6, 6), 128, 128, false, false, false, false, true, false, false));
+        Assert.Equal(room.Id, Assert.IsType<ConfirmRoomCommand>(confirm).RoomId);
+        Assert.False(tool.IsFurnishing);
+        Assert.False(tool.IsPickingUp);
+        Assert.Null(tool.Ghost);
+        Assert.Equal(0, tool.ExtrasToPlace("sink"));
+
+        host.Submit(confirm!);
+        Assert.Single(simulation.Entities.OfType<RoomObject>(), o => o.RoomId == room.Id && o.ObjectType == "sink");
+        Assert.True(simulation.Hospitals[0].Balance <= balance);
+    }
+
+    [Fact]
+    public void TheRoomDoesNotConfirmWhileANeededObjectIsMissing()
+    {
+        var host = new WindowTestHost();
+        var simulation = host.Simulation;
+        var definition = simulation.Content.FindRoom("toilets")!;
+        host.Submit(new BuildRoomCommand(new RoomPlan("toilets", new TileRect(4, 4, 6, 6), new DoorPlacement(new(5, 4), EdgeOrientation.North))));
+        var room = Assert.Single(simulation.Entities.OfType<Room>());
+        host.Submit(new PlaceObjectCommand("loo", FreeSpot(simulation, room, "loo"), Direction.North));
+
+        var tool = new BuildRoomTool();
+        tool.StartEditing(definition, room.Id, simulation.Tick);
+        tool.PlaceExtra(simulation.Content.FindObject("loo")!);
+        tool.Update(simulation, 0, Mouse(new(6, 6)));
+        Assert.False(tool.CanConfirm(simulation));
+        Assert.Null(tool.Update(simulation, 0, new BuildInput(new(6, 6), 128, 128, false, false, false, false, true, false, false)));
+        Assert.True(tool.IsFurnishing);
+    }
+
     [Fact]
     public void SeveralExtrasBoughtAtOnceArePlacedOneAfterAnother()
     {
