@@ -420,10 +420,12 @@ public sealed record PlaceObjectCommand(string ObjectType, TilePosition Tile, Di
             return;
         }
 
+        var roomId = simulation.Map[Tile.X, Tile.Y].RoomId;
         ObjectPlacer.Place(simulation, simulation.Content.FindObject(ObjectType)!, Tile, Orientation);
         if (extra)
         {
             RoomPurchases.BuyObject(simulation, ObjectType, player);
+            RoomRebuild.OnExtraPlaced(simulation, roomId, ObjectType, player);
         }
     }
 
