@@ -227,6 +227,56 @@ public class WindowTests
         Assert.False(layer.Update(host, At(20, 60), At(0, 0), Screen));
     }
 
+    [Fact]
+    public void TheOriginalsFullScreensHaveAFrameThatTakesTheMouseAndDragsThemAll()
+    {
+        var host = new WindowTestHost();
+        var layer = new WindowLayer(text => text.Length * 6, 10);
+        var report = new FullWindow("Report");
+        layer.Open(report);
+        MouseState At(int x, int y, bool down = false) => new(x, y, 0, down ? ButtonState.Pressed : ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
+
+        // Centred in the free area (UIFullscreen:onChangeResolution); its frame reaches 9 pixels out and keeps the map's clicks.
+        layer.Update(host, At(0, 0), At(0, 0), Screen);
+        var bounds = layer.BoundsOf(report)!.Value;
+        Assert.Equal(new Rectangle(320, 140, 640, 480), bounds);
+        Assert.True(layer.Update(host, At(bounds.X - 5, bounds.Y + 100), At(0, 0), Screen));
+        Assert.False(layer.Update(host, At(bounds.X - 10, bounds.Y + 100), At(0, 0), Screen));
+        Assert.Equal(0, report.Clicks);
+
+        // Dragged by its frame; the next one opens where it was left, its frame kept on the screen.
+        layer.Update(host, At(bounds.X - 5, bounds.Y), At(bounds.X - 5, bounds.Y), Screen);
+        layer.Update(host, At(bounds.X - 5, bounds.Y, true), At(bounds.X - 5, bounds.Y), Screen);
+        layer.Update(host, At(bounds.X - 105, bounds.Y - 50, true), At(bounds.X - 5, bounds.Y, true), Screen);
+        layer.Update(host, At(bounds.X - 105, bounds.Y - 50), At(bounds.X - 105, bounds.Y - 50, true), Screen);
+        Assert.Equal(new Point(220, 90), layer.BoundsOf(report)!.Value.Location);
+        layer.Close(report);
+        var casebook = new FullWindow("Casebook");
+        layer.Open(casebook);
+        layer.Update(host, At(-1000, -1000, true), At(-1000, -1000), Screen);
+        Assert.Equal(new Point(220, 90), layer.BoundsOf(casebook)!.Value.Location);
+        layer.Update(host, At(-1000, -1000), At(-1000, -1000), Screen);
+
+        // On a screen no bigger than the dialog there is no frame, as in the original.
+        layer.Update(host, At(0, 0), At(0, 0), new Rectangle(0, 0, 640, 480));
+        Assert.Equal(new Rectangle(0, 0, 640, 480), layer.BoundsOf(casebook));
+    }
+
+    private sealed class FullWindow(string title) : UiWindow
+    {
+        public int Clicks { get; private set; }
+
+        public override string Title => title;
+
+        public override bool IsSameAs(UiWindow other) => ReferenceEquals(other, this);
+
+        public override IEnumerable<WindowRow> Rows(IWindowHost host) => [];
+
+        public override bool IsFullscreen(IWindowHost host) => true;
+
+        public override void FullscreenMouse(IWindowHost host, Point local, MouseState mouse, MouseState previous) => Clicks++;
+    }
+
     private sealed class TestWindow(Action onClick) : UiWindow
     {
         public override string Title => "Test";

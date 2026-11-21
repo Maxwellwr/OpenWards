@@ -1,6 +1,7 @@
 // The look of CorsixTH's own windows, ported from CorsixTH CorsixTH/Lua/dialogs/resizable.lua (UIResizable: the border of
 // aux_ui sprites round a window of one colour) and window.lua (addBevelPanel and panel_bevel_draw: raised and lowered
-// panels with a highlight and a shadow, Panel:drawLabel).
+// panels with a highlight and a shadow, Panel:drawLabel); the frame alone round the original's 640 by 480 screens from
+// fullscreen.lua (UIFullscreen:draw).
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using Microsoft.Xna.Framework;
@@ -49,6 +50,15 @@ internal sealed class ResizableLook : IDisposable
     public void DrawWindow(SpriteBatch batch, Rectangle area, Color colour)
     {
         batch.Draw(_pixel, area, colour);
+        DrawFrame(batch, area);
+    }
+
+    /// <summary>
+    /// The frame alone, round a window that draws its own picture: the original's 640 by 480 screens on a bigger screen
+    /// (CorsixTH CorsixTH/Lua/dialogs/fullscreen.lua, <c>UIFullscreen:draw</c>, which draws the same sprites).
+    /// </summary>
+    public void DrawFrame(SpriteBatch batch, Rectangle area)
+    {
         if (_borders is not { } sprites)
         {
             return;
