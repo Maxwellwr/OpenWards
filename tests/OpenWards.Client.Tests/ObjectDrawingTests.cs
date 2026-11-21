@@ -35,4 +35,22 @@ public sealed class ObjectDrawingTests
         var east = ObjectDrawing.Split("crash_trolley", new TilePosition(10, 12), Direction.East)!.ToList();
         Assert.Equal([(new TilePosition(10, 12), -96, -32), (new TilePosition(11, 11), -32, 32)], east);
     }
+
+    // bed.lua's render_attach_position { {-2, 0}, {-1, 0}, {0, 0}, {0, -1} } facing south: the bed's head stands against
+    // the south wall, which the tiles west of it draw, so each tile draws only its own column of the bed.
+    [Fact]
+    public void The_bed_facing_south_is_drawn_split_over_four_tiles()
+    {
+        var parts = ObjectDrawing.Split("bed", new TilePosition(10, 12), Direction.South)!.ToList();
+
+        Assert.Equal(
+            [
+                (new TilePosition(8, 12), -160, -96),
+                (new TilePosition(9, 12), -128, -64),
+                (new TilePosition(10, 12), -96, -32),
+                (new TilePosition(10, 11), -64, 0),
+            ],
+            parts);
+        Assert.Null(ObjectDrawing.Split("bed", new TilePosition(10, 12), Direction.North));
+    }
 }

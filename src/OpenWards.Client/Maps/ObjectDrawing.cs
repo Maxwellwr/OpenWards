@@ -115,6 +115,10 @@ internal sealed class ObjectDrawing
 
         // bench.lua: north { {0, 0}, {-1, 0}, {0, -1} }; the other facings are drawn from the bench's own tile.
         ["bench"] = new() { [N] = [(0, 0), (-1, 0), (0, -1)] },
+
+        // bed.lua: south { {-2, 0}, {-1, 0}, {0, 0}, {0, -1} }, so its foot stays behind the wall south of it; the other
+        // facings are drawn from the bed's own tile.
+        ["bed"] = new() { [S] = [(-2, 0), (-1, 0), (0, 0), (0, -1)] },
     };
 
     private readonly AnimationRenderer _renderer;
