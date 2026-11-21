@@ -272,6 +272,7 @@ public class BuildRoomToolTests
         Assert.True(tool.IsFurnishing);
         Assert.Equal(balance, hospital.Balance);
     }
+
     [Fact]
     public void TheRoomConfirmsWithExtraObjectsBoughtButNotPlaced()
     {
