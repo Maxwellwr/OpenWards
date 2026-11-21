@@ -1,3 +1,4 @@
+using OpenWards.Client.Ui;
 using OpenWards.Client.Ui.Windows;
 using OpenWards.Sim.Commands;
 using OpenWards.Sim.Economy;
@@ -61,5 +62,16 @@ public class HireAndTownWindowTests
         Assert.True(host.Simulation.Hospitals[0].IsOpen);
         Assert.True(window.IsDone(host));
         Assert.IsType<OpenHospitalCommand>(host.Submitted[^1]);
+    }
+
+    [Fact]
+    public void EscDoesNotCloseTheWatch()
+    {
+        // UIWatch's esc_closes = false: the countdown to the opening stays on screen until it ends.
+        var layer = new WindowLayer(text => text.Length * 8, 12);
+        layer.Open(new WatchWindow());
+
+        Assert.False(layer.CloseTop());
+        Assert.Single(layer.Windows.OfType<WatchWindow>());
     }
 }
