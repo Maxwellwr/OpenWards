@@ -437,6 +437,13 @@ internal abstract class UiWindow
     public virtual Point? FullscreenScreenPosition => null;
 
     /// <summary>
+    /// Whether the window is one of the original's full 640 by 480 screens (CorsixTH's <c>UIFullscreen</c>: reports, bank,
+    /// casebook, research, policy, graphs...), which gets CorsixTH's frame round it on a bigger screen and is dragged by it;
+    /// by default a window of that size centred on the screen.
+    /// </summary>
+    public virtual bool HasFullscreenBorder => FullscreenSize == new Point(640, 480) && FullscreenPosition is null && FullscreenScreenPosition is null;
+
+    /// <summary>
     /// Whether the window, one CorsixTH added to the game (a <c>UIResizable</c>: options, menus, file browsers), is drawn
     /// in CorsixTH's own look (<see cref="ResizableLook"/>) when its sprites are there, rather than as a plain table.
     /// </summary>

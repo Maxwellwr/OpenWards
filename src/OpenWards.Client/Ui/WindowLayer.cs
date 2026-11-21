@@ -29,6 +29,12 @@ internal sealed class WindowLayer
     private readonly Func<int> _textHeight;
     private OpenWindow? _dragging;
 
+    /// <summary>
+    /// Where the original's 640 by 480 screens were dragged to by their frame, shared by all of them (UIFullscreen's
+    /// <c>getSavedWindowPositionName</c>); null centres them.
+    /// </summary>
+    private Point? _fullscreenAt;
+
     /// <summary>Whether windows stay where they are (the options menu's lock windows, <c>runtime_config.lock_windows</c>).</summary>
     public bool LockWindows { get; set; }
     private Point _dragOffset;
@@ -116,10 +122,10 @@ internal sealed class WindowLayer
     /// </summary>
     public string? TooltipAt(Point mouse)
     {
-        var hit = _open.LastOrDefault(open => open.Layout is { } layout && layout.Bounds.Contains(mouse));
+        var hit = _open.LastOrDefault(open => open.Layout is { } layout && layout.Area.Contains(mouse));
         if (hit?.Layout is { Fullscreen: true } full && _host is { } host)
         {
-            return hit.Window.FullscreenTooltip(host, mouse - full.Bounds.Location);
+            return full.Bounds.Contains(mouse) ? hit.Window.FullscreenTooltip(host, mouse - full.Bounds.Location) : null;
         }
 
         return hit?.Layout!.Cells.FirstOrDefault(cell => cell.Area.Contains(mouse)).Cell?.Tooltip;
@@ -216,6 +222,10 @@ internal sealed class WindowLayer
             {
                 _dragging = null;
             }
+            else if (dragged.Layout is { Border.IsEmpty: false })
+            {
+                _fullscreenAt = point - _dragOffset;
+            }
             else
             {
                 dragged.Position = point - _dragOffset;
@@ -231,7 +241,7 @@ internal sealed class WindowLayer
             return true;
         }
 
-        var hit = _open.LastOrDefault(open => open.Layout!.Bounds.Contains(point));
+        var hit = _open.LastOrDefault(open => open.Layout!.Area.Contains(point));
         if (hit is null)
         {
             return false;
@@ -244,6 +254,18 @@ internal sealed class WindowLayer
             {
                 _open.Remove(hit);
                 _open.Add(hit);
+            }
+
+            if (!full.Bounds.Contains(point))
+            {
+                // UIFullscreen:onMouseDown: its frame drags it, unless the windows are locked.
+                if (pressed && !LockWindows)
+                {
+                    _dragging = hit;
+                    _dragOffset = point - full.Bounds.Location;
+                }
+
+                return true;
             }
 
             hit.Window.FullscreenMouse(host, point - full.Bounds.Location, mouse, previous);
@@ -321,6 +343,12 @@ internal sealed class WindowLayer
             {
                 if (_host is { } host)
                 {
+                    // UIFullscreen:draw: the frame first, under the dialog's corners.
+                    if (!layout.Border.IsEmpty)
+                    {
+                        host.Graphics?.Resizable?.DrawFrame(batch, layout.Bounds);
+                    }
+
                     open.Window.DrawFullscreen(batch, host, layout.Bounds.Location, InputScript.Mouse());
                 }
 
@@ -429,6 +457,22 @@ internal sealed class WindowLayer
             // UIFullscreen: 640 by 480, centred on the screen, and kept on it from the top left.
             // A smaller one opens where it says (Window:setDefaultPosition), kept on the screen.
             var size = open.Window.FullscreenSize;
+            if (open.Window.HasFullscreenBorder && (screen.Width > size.X || screen.Height > size.Y))
+            {
+                // UIFullscreen:onChangeResolution: on a screen bigger than the dialog, CorsixTH's frame round it, 9 pixels
+                // out; centred, or where the frame dragged it, with the frame kept on the screen where there is room.
+                var at = _fullscreenAt ?? new Point(screen.X + ((screen.Width - size.X) / 2), screen.Y + ((screen.Height - size.Y) / 2));
+                var bordered = new Rectangle(
+                    KeepFramed(at.X, screen.X, screen.Width, size.X),
+                    KeepFramed(at.Y, screen.Y, screen.Height, size.Y),
+                    size.X,
+                    size.Y);
+                open.Position = bordered.Location;
+                var border = bordered;
+                border.Inflate(FullscreenBorder, FullscreenBorder);
+                return new WindowLayout(bordered, Rectangle.Empty, Rectangle.Empty, open.Window.Title, [], 0, 0, Rectangle.Empty, Fullscreen: true, Border: border);
+            }
+
             var full = open.Window.FullscreenScreenPosition is { } fixedAt
                 ? new Rectangle(Math.Clamp(fixedAt.X, screen.X, Math.Max(screen.X, screen.Right - size.X)), Math.Clamp(fixedAt.Y, screen.Y, Math.Max(screen.Y, screen.Bottom - size.Y)), size.X, size.Y)
                 : open.Window.FullscreenPosition is { } at
@@ -524,6 +568,18 @@ internal sealed class WindowLayer
         return new WindowLayout(bounds, titleBar, close, title, cells, visibleRows, maxScroll, canvasArea);
     }
 
+    /// <summary>How far CorsixTH's frame round a fullscreen dialog reaches out from it.</summary>
+    private const int FullscreenBorder = 9;
+
+    /// <summary>
+    /// One coordinate of a framed fullscreen dialog kept on the screen: its frame too where there is room for it, else
+    /// the dialog from the top left.
+    /// </summary>
+    private static int KeepFramed(int value, int start, int area, int size) =>
+        area >= size + (2 * FullscreenBorder)
+            ? Math.Clamp(value, start + FullscreenBorder, start + area - size - FullscreenBorder)
+            : Math.Clamp(value, start, Math.Max(start, start + area - size));
+
     /// <summary>One coordinate of CorsixTH's <c>Window:setPosition</c> within an area from <paramref name="start"/>.</summary>
     private static int Place(float value, int start, int area, int size) => value switch
     {
@@ -566,5 +622,10 @@ internal sealed class WindowLayer
         int VisibleRows,
         int MaxScroll,
         Rectangle Canvas,
-        bool Fullscreen = false);
+        bool Fullscreen = false,
+        Rectangle Border = default)
+    {
+        /// <summary>The area that takes the mouse: the window, with its frame if it has one.</summary>
+        public Rectangle Area => Border.IsEmpty ? Bounds : Border;
+    }
 }
