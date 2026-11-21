@@ -1045,7 +1045,7 @@ internal sealed class BuildRoomTool
             return null;
         }
 
-        if (input.RightClicked || input.Rotate)
+        if ((input.RightClicked || input.Rotate) && !_placing.HeadAgainstWall)
         {
             // UIPlaceObjects:tryNextOrientation, on a right click or the rotate object key.
             PlaySound?.Invoke("swoosh.wav");
@@ -1053,6 +1053,12 @@ internal sealed class BuildRoomTool
         }
 
         FollowCursor(room, input.Hovered);
+        if (_placing.HeadAgainstWall && _ghostTile is { } cursor)
+        {
+            // The bed sticks to the nearest wall and turns to face it by itself, as in the original game.
+            (_ghostTile, _orientation) = ObjectPlacer.SnapToWall(simulation, _placing, room.Area, cursor, player);
+        }
+
         _placeProblem = _ghostTile is { } tile
             ? ObjectPlacer.Check(simulation, _placing.Id, tile, _orientation, player)
             : ObjectPlacementProblem.OutsideMap;

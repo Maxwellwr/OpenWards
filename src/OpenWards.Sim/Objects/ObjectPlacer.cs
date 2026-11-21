@@ -140,6 +140,50 @@ public static class ObjectPlacer
     }
 
     /// <summary>
+    /// Where an object that stands with its head against a wall (<see cref="ObjectDefinition.HeadAgainstWall"/>) goes
+    /// with the cursor over <paramref name="cursor"/> in the room <paramref name="area"/>: as in the original game, the
+    /// bed sticks to the nearest wall, facing it, and cannot be turned. Along the wall it follows the cursor. When the
+    /// nearest wall has no room for it, the next nearest one that does is taken; when none does, the nearest.
+    /// </summary>
+    public static (TilePosition Tile, Direction Orientation) SnapToWall(
+        Simulation simulation, ObjectDefinition definition, TileRect area, TilePosition cursor, int player)
+    {
+        var candidates = new List<(int Distance, TilePosition Tile, Direction Orientation)>();
+        foreach (var (orientation, layout) in definition.Orientations.OrderBy(pair => pair.Key))
+        {
+            var solid = layout.Footprint.Where(part => !part.IsUsePosition && !part.IsSide).ToList();
+            if (solid.Count == 0)
+            {
+                continue;
+            }
+
+            candidates.Add(orientation switch
+            {
+                Direction.North => (cursor.Y - area.Y, cursor with { Y = area.Y - solid.Min(p => p.Y) }, orientation),
+                Direction.South => (area.Bottom - 1 - cursor.Y, cursor with { Y = area.Bottom - 1 - solid.Max(p => p.Y) }, orientation),
+                Direction.West => (cursor.X - area.X, cursor with { X = area.X - solid.Min(p => p.X) }, orientation),
+                _ => (area.Right - 1 - cursor.X, cursor with { X = area.Right - 1 - solid.Max(p => p.X) }, orientation),
+            });
+        }
+
+        if (candidates.Count == 0)
+        {
+            return (cursor, definition.Orientations.Keys.Min());
+        }
+
+        var ordered = candidates.OrderBy(c => c.Distance).ThenBy(c => c.Orientation).ToList();
+        foreach (var (_, tile, orientation) in ordered)
+        {
+            if (Check(simulation, definition.Id, tile, orientation, player) == ObjectPlacementProblem.None)
+            {
+                return (tile, orientation);
+            }
+        }
+
+        return (ordered[0].Tile, ordered[0].Orientation);
+    }
+
+    /// <summary>
     /// Whether every tile of the object's end toward the side it faces backs onto the room's wall: the ward's beds in the
     /// original game stand with their heads against a wall (the beds of the original's saves all touch the wall on the
     /// side they face). CorsixTH lets them stand anywhere.
