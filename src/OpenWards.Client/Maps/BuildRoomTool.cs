@@ -280,10 +280,15 @@ internal sealed class BuildRoomTool
     public IReadOnlyList<(string ObjectType, int Count)> Missing(Simulation simulation) =>
         _phase == Phase.Objects && simulation.FindEntity(_roomId) is Room room ? Remaining(simulation, room) : [];
 
-    /// <summary>Whether Enter would confirm the room now.</summary>
+    /// <summary>
+    /// Whether Enter would confirm the room now: once every object the room needs stands in it (CorsixTH's
+    /// <c>UIEditRoom:checkEnableConfirm</c>), even with extra objects bought but not placed yet or while picking up.
+    /// </summary>
     public bool CanConfirm(Simulation simulation) =>
-        _phase == Phase.Objects && !_pickingUp && _pending.Count == 0 && simulation.FindEntity(_roomId) is Room room
-        && Remaining(simulation, room).Count == 0 && RoomBuilder.CanConfirm(simulation, room, _player);
+        _phase == Phase.Objects && simulation.FindEntity(_roomId) is Room room && CanConfirm(simulation, room, _player);
+
+    private bool CanConfirm(Simulation simulation, Room room, int player) =>
+        _pending.Count == 0 && Remaining(simulation, room).Count == 0 && RoomBuilder.CanConfirm(simulation, room, player);
 
     /// <summary>
     /// Buys one more of an extra object the room allows while furnishing (the edit panel's buy list, CorsixTH's
@@ -1002,6 +1007,19 @@ internal sealed class BuildRoomTool
             return room.IsPaid ? new ReturnToBlueprintCommand(room.Id) : new CancelRoomCommand(room.Id);
         }
 
+        if (input.Confirm && CanConfirm(simulation, room, player))
+        {
+            // UIEditRoom:confirm stops picking up and closes the furnishing; UIPlaceObjects:close then removes every
+            // object still on the list (removeAllObjects). Here an extra one bought but not placed was never paid for,
+            // and one picked up off the floor was already sold back by PickUpObjectCommand, so they are just dropped.
+            _phase = Phase.Inactive;
+            _editing = false;
+            _pickingUp = false;
+            _extras.Clear();
+            StopPlacing();
+            return new ConfirmRoomCommand(room.Id);
+        }
+
         if (input.PickUp)
         {
             _pickingUp = !_pickingUp;
@@ -1031,13 +1049,6 @@ internal sealed class BuildRoomTool
         if (_placing is null && NextToPlace(simulation, room) is { } next)
         {
             StartPlacing(next, Turns.First(next.Orientations.ContainsKey));
-        }
-
-        if (input.Confirm && _placing is null && _pending.Count == 0 && RoomBuilder.CanConfirm(simulation, room, player))
-        {
-            _phase = Phase.Inactive;
-            _editing = false;
-            return new ConfirmRoomCommand(room.Id);
         }
 
         if (_placing is null)
