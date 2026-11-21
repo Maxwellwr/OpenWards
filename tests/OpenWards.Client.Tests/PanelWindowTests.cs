@@ -56,13 +56,20 @@ public class PanelWindowTests
     }
 
     [Fact]
-    public void TheRoomEditPanelIsOnlyThereWhileFurnishing()
+    public void TheRoomEditPanelIsThereFromTheBlueprintOn()
     {
         var host = new WindowTestHost();
         var tool = new BuildRoomTool();
 
         Assert.True(new RoomEditWindow(tool, _ => { }).IsDone(host));
         tool.Start(host.Simulation.Content.FindRoom("gp")!);
-        Assert.True(new RoomEditWindow(tool, _ => { }).IsDone(host));
+        var window = new RoomEditWindow(tool, _ => { });
+        Assert.False(window.IsDone(host));
+        Assert.Equal(EditPanelStep.Walls, tool.PanelStep);
+
+        // No blueprint yet: nothing to confirm, but cancel works.
+        Assert.False(tool.CanPressConfirm(host.Simulation));
+        tool.Stop();
+        Assert.True(window.IsDone(host));
     }
 }

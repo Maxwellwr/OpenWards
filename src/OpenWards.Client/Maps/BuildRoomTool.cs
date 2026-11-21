@@ -198,6 +198,35 @@ internal sealed class BuildRoomTool
     /// <summary>Whether the room is being furnished: the step with the edit panel's items and buttons.</summary>
     public bool IsFurnishing => _phase == Phase.Objects;
 
+    /// <summary>
+    /// Whether the room edit panel is up: CorsixTH's <c>UIEditRoom</c> is open from the walls to the objects
+    /// (<c>dialogs/edit_room.lua</c>), only its text and buttons change; the copy of a room (our addition) has none.
+    /// </summary>
+    public bool HasEditPanel => _phase is Phase.Blueprint or Phase.Door or Phase.Windows or Phase.Waiting or Phase.Objects;
+
+    /// <summary>The step the edit panel describes (its <c>desc_text</c>); waiting for the site to clear keeps the windows' text.</summary>
+    public EditPanelStep PanelStep => _phase switch
+    {
+        Phase.Blueprint => EditPanelStep.Walls,
+        Phase.Door => EditPanelStep.Door,
+        Phase.Windows or Phase.Waiting => EditPanelStep.Windows,
+        Phase.Objects => EditPanelStep.Objects,
+        _ => EditPanelStep.None,
+    };
+
+    /// <summary>
+    /// Whether the edit panel's confirm button is enabled (<c>confirm_button:enable</c> in UIEditRoom): on a blueprint
+    /// that can be built (setBlueprintRect), not while placing the door (it confirms itself), always for the windows, not
+    /// while the site clears, and while furnishing once the room is complete (<see cref="CanConfirm"/>).
+    /// </summary>
+    public bool CanPressConfirm(Simulation simulation) => _phase switch
+    {
+        Phase.Blueprint => _area is not null && _problem == RoomPlanProblem.None,
+        Phase.Windows => true,
+        Phase.Objects => CanConfirm(simulation),
+        _ => false,
+    };
+
     /// <summary>Whether an object follows the cursor to be placed in the room, so the rotate object key turns it.</summary>
     public bool IsPlacingObject => _phase == Phase.Objects && _placing is not null;
 
@@ -1217,4 +1246,14 @@ internal sealed class BuildRoomTool
             return simulation.Entities.OfType<RoomObject>().Any(o => o.Id >= minimumId && o.RoomId == room.Id && o.ObjectType == type && o.Tile == tile && o.Orientation == orientation);
         }
     }
+}
+
+/// <summary>The step of building a room the edit panel describes (UIEditRoom's phases with a text of their own).</summary>
+internal enum EditPanelStep
+{
+    None,
+    Walls,
+    Door,
+    Windows,
+    Objects,
 }
