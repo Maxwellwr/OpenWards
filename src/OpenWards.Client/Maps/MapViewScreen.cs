@@ -5056,7 +5056,12 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
         _roomList = false;
         _overlay = MapOverlay.None;
         _windows.CloseAll();
-        _windows.Open(new BottomPanel(BottomPanelAction));
+        if (_bottomPanel is null)
+        {
+            // Without the original panel's graphics, the text panel stands in, as when the game starts.
+            _windows.Open(new BottomPanel(BottomPanelAction));
+        }
+
         SelectLevel(0);
         OpenMainMenu();
     }
