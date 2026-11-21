@@ -889,6 +889,8 @@ steps:
       charts: '  Отчеты'
       display: '  Отображение  '
       debug: '  Отладка  '
+      cheats_title: '  Читы  '
+      cheats: '  (%1%) Читы  '
     menu_file:
       save: '  (%1%) Сохранить'
       load: '  (%1%) Загрузить'
@@ -3122,6 +3124,7 @@ steps:
       debug_script: '  (%1%) Запуск скрипта отладки  '
       transparent_walls: '  (%1%) Прозрачные стены  '
       make_debug_fax: '  Создать текстовый факс  '
+      make_debug_rat: '  Создать отладочную крысу  '
       display_pager: '  Отобразить пейджер        '
       cheats: '  (%1%) Читы  '
       remove_objects: '  Удалить объекты       '

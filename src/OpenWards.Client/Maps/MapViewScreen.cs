@@ -41,7 +41,7 @@ internal sealed record LevelSource(string Name, Func<LoadedLevelMap> Load);
 /// <remarks>
 /// Keys: arrows/WASD, screen edges or right/middle-drag pan, wheel or =/− zoom, 0 original size, Alt+digit remember
 /// the view and Ctrl+digit go back to it, Home reset camera,
-/// F3 list of levels to pick from (local games), O cycle overlay, U cycle sprite upscaling, Esc close the front window or open the menu (save, load, options, quit).
+/// F3 list of levels to pick from (local games), O cycle overlay, U cycle sprite upscaling, Esc close the front window or show the menu bar (save, load, options, quit).
 /// Clicking a member of staff, a patient, a room or a desk opens their window; C faxes, Y hire staff, F4 town map.
 /// F1 bank manager, F2 bank statement, Shift+F3 staff management, F5 casebook, F7 progress report, F11 cheats, F6 research, F8 graphs, F9 policy, F10 machines (windows, see <see cref="WindowLayer"/>).
 /// Simulation test controls: H spawn a patient at the cursor, G spawn ten in the hospital,
@@ -194,7 +194,7 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
 
     private string? _error;
 
-    /// <summary>--debug-status: show the debug window at the bottom left.</summary>
+    /// <summary>--debug-status: debug mode (CorsixTH's <c>config.debug</c>): the debug window at the bottom left and the debug and cheats menus.</summary>
     private readonly bool _debugStatus;
     private MapOverlay _overlay;
     private RenderTarget2D? _target;
@@ -664,8 +664,16 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
             }
             else if (IsWindowHostReady)
             {
-                // CorsixTH's Esc shows the menu bar; quitting is on it.
-                _windows.Open(new MenuWindow(MenuAction));
+                // CorsixTH's Esc shows the menu bar (ingame_showmenubar, GameUI:showMenuBar); without the original's
+                // graphics there is no bar, and the menu window stands in for it.
+                if (OriginalMenuBar.IsAvailable(this))
+                {
+                    _menuBar.Appear(Environment.TickCount64);
+                }
+                else
+                {
+                    _windows.Open(new MenuWindow(MenuAction));
+                }
             }
             else
             {
@@ -3793,9 +3801,11 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
     private int MenuBarMeasure(string text) => ((IWindowHost)this).Graphics?.Font("FONT01V", OriginalGraphics.MainPalette)?.Measure(text).Width ?? 0;
 
     /// <summary>
-    /// makeGameMenu's menus: file (load, save, quick save and load, restart, quit), options, charts (the dialogs) and
-    /// debug (replays), and once the fax's 24328 has unlocked them the cheats (<c>UIMenuBar:unlockCheats</c>). CorsixTH's
-    /// own options and debug items this game has no counterpart for are left out.
+    /// makeGameMenu's menus: file (load, save, restart, quit), options (audio_options, display_options, the adviser, wage
+    /// requests, warmth colours, game speed) and charts (the dialogs, the adviser's history, the briefing). The debug menu
+    /// shows only in debug mode (<c>app.config.debug</c>, here --debug-status), and the cheats once the fax's 24328 has
+    /// unlocked them or in debug mode (<c>UIMenuBar:unlockCheats</c>). CorsixTH's own options and debug items this game has
+    /// no counterpart for are left out; a network game's options keep the lobby.
     /// </summary>
     private List<MenuBarMenu> MenuBarMenus()
     {
@@ -3811,29 +3821,28 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
             new(Item("menu.file", "FILE"), [
                 Do("menu_file.load", "LOAD", "load"),
                 Do("menu_file.save", "SAVE", "save"),
-                Do("openwards.menu.quick_save", "Quick save", "quicksave"),
-                Do("openwards.menu.quick_load", "Quick load", "quickload"),
                 Do("menu_file.restart", "RESTART", "restart"),
                 Do("menu_file.quit", "QUIT", "quit")]),
             new(Item("menu.options", "OPTIONS"), [
-                Do("openwards.menu.settings", "Settings", "options"),
-                Do("openwards.menu.levels", "Levels", "levels"),
+                .. (_session is NetworkSession
+                    ? [Do("openwards.menu.levels", "Levels", "levels")]
+                    : Array.Empty<MenuBarItem>()),
+                // audio_options: the sounds, announcements and music, appendVolume's submenus of their volumes (10 % to
+                // 100 %) and the jukebox.
                 new(Item("menu_options.sound", "SOUND"), ToggleSounds, () => _config.PlaySounds),
                 new(Item("menu_options.announcements", "ANNOUNCEMENTS"), ToggleAnnouncements, () => _config.PlayAnnouncements),
-                .. (_music.HasMusic
-                    ? [new MenuBarItem(Item("menu_options.music", "MUSIC"), ToggleMusic, () => _config.PlayMusic), new MenuBarItem(Item("menu_options.jukebox", "JUKEBOX"), () => _windows.Open(new JukeboxWindow(_music.Playlist.Count)))]
-                    : Array.Empty<MenuBarItem>()),
-                new(Item("menu_options.adviser_disabled", "ADVISER"), ToggleAdviser, () => !_config.AdviserDisabled),
-                new(Item("menu_debug.transparent_walls", "TRANSPARENT WALLS"), () => _wallsTransparentToggled = !_wallsTransparentToggled, () => _wallsTransparentToggled),
-                // appendVolume's submenus of the sound, announcements and music volumes, 10 % to 100 %.
+                .. (_music.HasMusic ? [new MenuBarItem(Item("menu_options.music", "MUSIC"), ToggleMusic, () => _config.PlayMusic)] : Array.Empty<MenuBarItem>()),
                 MenuBarItem.Menu(Item("menu_options.sound_vol", "SOUND VOLUME"), Volumes(_config.SoundVolume, v => _config with { SoundVolume = v, PlaySounds = true })),
                 MenuBarItem.Menu(Item("menu_options.announcements_vol", "ANNOUNCEMENTS VOLUME"), Volumes(_config.AnnouncementVolume, v => _config with { AnnouncementVolume = v, PlayAnnouncements = true })),
-                .. (_music.HasMusic ? [MenuBarItem.Menu(Item("menu_options.music_vol", "MUSIC VOLUME"), Volumes(_config.MusicVolume, v => _config with { MusicVolume = v }))] : Array.Empty<MenuBarItem>()),
+                .. (_music.HasMusic
+                    ? [MenuBarItem.Menu(Item("menu_options.music_vol", "MUSIC VOLUME"), Volumes(_config.MusicVolume, v => _config with { MusicVolume = v })), new MenuBarItem(Item("menu_options.jukebox", "JUKEBOX"), () => _windows.Open(new JukeboxWindow(_music.Playlist.Count)))]
+                    : Array.Empty<MenuBarItem>()),
                 // display_options: lock windows (for this run only), edge scrolling, capture mouse, the 24 hour clock.
                 new(Item("menu_options.lock_windows", "LOCK WINDOWS"), () => _windows.LockWindows = !_windows.LockWindows, () => _windows.LockWindows),
                 new(Item("menu_options.edge_scrolling", "EDGE SCROLLING"), () => ApplyConfig(_config with { PreventEdgeScrolling = !_config.PreventEdgeScrolling }), () => !_config.PreventEdgeScrolling),
                 new(Item("menu_options.capture_mouse", "CAPTURE MOUSE"), () => ApplyConfig(_config with { CaptureMouse = !_config.CaptureMouse }), () => _config.CaptureMouse),
                 new(Item("menu_options.twentyfour_hour_clock", "24 HOUR CLOCK"), () => ApplyConfig(_config with { TwentyFourHourClock = !_config.TwentyFourHourClock }), () => _config.TwentyFourHourClock),
+                new(Item("menu_options.adviser_disabled", "ADVISER"), ToggleAdviser, () => !_config.AdviserDisabled),
                 MenuBarItem.Menu(Item("menu_options.wage_increase", "WAGE REQUESTS"), [
                     new(Item("menu_options_wage_increase.grant", "GRANT"), () => _session?.Submit(new SetPolicyCommand(PolicyKind.GrantWageIncrease, 1)), () => OwnPolicies()?.GrantWageIncrease == true),
                     new(Item("menu_options_wage_increase.deny", "DENY"), () => _session?.Submit(new SetPolicyCommand(PolicyKind.GrantWageIncrease, 0)), () => OwnPolicies()?.GrantWageIncrease == false)]),
@@ -3859,14 +3868,20 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
                 Open("menu_charts.status", "STATUS", () => new ProgressReportWindow()),
                 Open("menu_charts.graphs", "GRAPHS", () => new GraphWindow()),
                 Open("menu_charts.policy", "POLICY", () => new PolicyWindow()),
-                Open("menu_charts.machine_menu", "MACHINE MENU", () => new MachineMenuWindow())]),
-            new(Item("menu.debug", "DEBUG"), [
+                Open("menu_charts.machine_menu", "MACHINE MENU", () => new MachineMenuWindow()),
+                Open("menu_charts.adviser_history", "ADVISER HISTORY", () => new AdviserHistoryWindow()),
+                new(Item("menu_charts.briefing", "BRIEFING"), ShowBriefing)]),
+        ];
+        if (_debugStatus)
+        {
+            menus.Add(new(Item("menu.debug", "DEBUG"), [
                 // makeDebugMenu: jump to level (local games), limit camera, disable salary raise, the debug patient and
                 // rat, the console, and the map overlays.
                 .. (_session is LocalSession && _levels.Count > 0
                     ? [MenuBarItem.Menu(Item("menu_debug.jump_to_level", "JUMP TO LEVEL"), [.. _levels.Take(12).Select((_, index) =>
                         new MenuBarItem(string.Create(CultureInfo.InvariantCulture, $"L{index + 1}"), () => SelectLevel(index), () => _levelIndex == index))])]
                     : Array.Empty<MenuBarItem>()),
+                new(Item("menu_debug.transparent_walls", "TRANSPARENT WALLS"), () => _wallsTransparentToggled = !_wallsTransparentToggled, () => _wallsTransparentToggled),
                 new(Item("menu_debug.limit_camera", "LIMIT CAMERA"), () => _limitCamera = !_limitCamera, () => _limitCamera),
                 new(Item("menu_debug.disable_salary_raise", "DISABLE SALARY RAISE"), () => _session?.Submit(new CheatCommand(CheatKind.ToggleSalaryRaise)),
                     () => Simulation is { } shown && _session is { } own && own.Player < shown.Hospitals.Count && Cheats.SalaryRaiseDisabled(shown, shown.Hospitals[own.Player])),
@@ -3880,9 +3895,10 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
                     new(Item("menu_debug_overlay.heat", "HEAT"), () => _overlay = MapOverlay.Temperature, () => _overlay == MapOverlay.Temperature),
                     new(Item("menu_debug_overlay.parcel", "PARCEL"), () => _overlay = MapOverlay.Parcels, () => _overlay == MapOverlay.Parcels)]),
                 Do("openwards.menu.save_replay", "Save replay", "savereplay"),
-                Do("openwards.menu.watch_replay", "Watch replay", "replays")]),
-        ];
-        if (_cheatsMenuUnlocked)
+                Do("openwards.menu.watch_replay", "Watch replay", "replays")]));
+        }
+
+        if (_cheatsMenuUnlocked || _debugStatus)
         {
             menus.Add(new(Item("menu.cheats_title", "CHEATS"), [Open("menu.cheats", "CHEATS", () => new CheatsWindow())]));
         }
@@ -4570,6 +4586,16 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
         {
             _tutorial.Start(view);
         }
+    }
+
+    /// <summary>
+    /// <c>GameUI:showBriefing</c>: an original level's introduction text, or the welcome to a custom map.
+    /// </summary>
+    private void ShowBriefing()
+    {
+        var text = _campaignMovies == CampaignMovies.Original ? _texts?.IntroductionText(_levelIndex + 1) : null;
+        text ??= UiText.Get("information.custom_game", "Welcome to OpenWards. Have fun with this custom map!");
+        _windows.Open(new InformationWindow([.. text.Split("//", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)]));
     }
 
     /// <summary>
