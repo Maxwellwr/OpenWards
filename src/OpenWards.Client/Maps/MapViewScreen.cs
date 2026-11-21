@@ -3983,6 +3983,10 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
             case "restart":
                 _windows.Open(new ConfirmWindow(Confirmation(7, "Are you sure you want to restart the level?"), () => ((IWindowHost)this).StartLevel(next: false)));
                 break;
+            case "quit" when _session is LocalSession:
+                // GameUI:quit (game_ui.lua): after the confirmation, App:loadMainMenu, not out of the game.
+                _windows.Open(new ConfirmWindow(Confirmation(1, "Are you sure you want to quit?"), ReturnToMainMenu));
+                break;
             case "quit":
                 _windows.Open(new ConfirmWindow(Confirmation(1, "Are you sure you want to quit?"), () => ExitRequested = true));
                 break;
@@ -5038,9 +5042,26 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
     {
         _editorTool = null;
         _editorPath = null;
+        ReturnToMainMenu();
+    }
+
+    /// <summary>
+    /// <c>App:loadMainMenu</c>, from the game's quit (<c>GameUI:quit</c>) or the map editor's: the game is left and the
+    /// main menu shown over the first level, paused, as when the game starts (the main menu lets the mouse go).
+    /// </summary>
+    private void ReturnToMainMenu()
+    {
+        _campaignMovies = CampaignMovies.None;
+        _levelList = false;
+        _roomList = false;
         _overlay = MapOverlay.None;
         _windows.CloseAll();
-        _windows.Open(new BottomPanel(BottomPanelAction));
+        if (_bottomPanel is null)
+        {
+            // Without the original panel's graphics, the text panel stands in, as when the game starts.
+            _windows.Open(new BottomPanel(BottomPanelAction));
+        }
+
         SelectLevel(0);
         OpenMainMenu();
     }
