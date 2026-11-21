@@ -461,10 +461,10 @@ internal sealed class WindowLayer
             {
                 // UIFullscreen:onChangeResolution: on a screen bigger than the dialog, CorsixTH's frame round it, 9 pixels
                 // out; centred, or where the frame dragged it, with the frame kept on the screen where there is room.
-                var at = _fullscreenAt ?? new Point(screen.X + ((screen.Width - size.X) / 2), screen.Y + ((screen.Height - size.Y) / 2));
+                var framedAt = _fullscreenAt ?? new Point(screen.X + ((screen.Width - size.X) / 2), screen.Y + ((screen.Height - size.Y) / 2));
                 var bordered = new Rectangle(
-                    KeepFramed(at.X, screen.X, screen.Width, size.X),
-                    KeepFramed(at.Y, screen.Y, screen.Height, size.Y),
+                    KeepFramed(framedAt.X, screen.X, screen.Width, size.X),
+                    KeepFramed(framedAt.Y, screen.Y, screen.Height, size.Y),
                     size.X,
                     size.Y);
                 open.Position = bordered.Location;
