@@ -1043,20 +1043,26 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
             _menuBackground = null;
         }
 
-        var panelShown = IsWindowHostReady && (!inMainMenu || _menuBackground is null);
-        if (!ShowsStatusBar)
+        // The bottom panel shows the brief line in its info bar; where it is not drawn, the line has a strip of its own.
+        var panelDrawn = false;
+        if (IsWindowHostReady)
         {
-            DrawBriefLine(batch, viewport, building, panelShown);
+            var pointer = InputScript.Mouse();
+            if (!inMainMenu || _menuBackground is null)
+            {
+                panelDrawn = DrawBottomPanel(batch, viewport, new Point(pointer.X, pointer.Y));
+                DrawAdviser(batch, viewport);
+            }
+        }
+
+        if (!ShowsStatusBar && !panelDrawn)
+        {
+            DrawBriefLine(batch, viewport, building);
         }
 
         if (IsWindowHostReady)
         {
             var pointer = InputScript.Mouse();
-            if (panelShown)
-            {
-                DrawBottomPanel(batch, viewport, new Point(pointer.X, pointer.Y));
-                DrawAdviser(batch, viewport);
-            }
 
             DrawSubtitles(batch);
             _windows.Draw(batch, _text, _pixel, new Point(pointer.X, pointer.Y));
@@ -5926,11 +5932,12 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
         _ => false,
     };
 
-    private void DrawBottomPanel(SpriteBatch batch, Viewport viewport, Point mouse)
+    /// <returns>Whether the panel was drawn.</returns>
+    private bool DrawBottomPanel(SpriteBatch batch, Viewport viewport, Point mouse)
     {
         if (_bottomPanel is null || Simulation is not { } simulation || _session is null || _session.Player >= simulation.Hospitals.Count)
         {
-            return;
+            return false;
         }
 
         var hospital = simulation.Hospitals[_session.Player];
@@ -5944,43 +5951,37 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
             PanelFaxes(),
             PanelDialogOpen,
             Tutorial.Lit,
-            [.. FaxWindow.Pending(simulation, _session.Player, ((IWindowHost)this).IsWinLetterPending), .. RaiseRequests().Select(staff => string.Create(CultureInfo.InvariantCulture, $"strike:{staff.Id}"))]);
+            [.. FaxWindow.Pending(simulation, _session.Player, ((IWindowHost)this).IsWinLetterPending), .. RaiseRequests().Select(staff => string.Create(CultureInfo.InvariantCulture, $"strike:{staff.Id}"))],
+            ShowsStatusBar ? null : BriefLine());
         _bottomPanel.Draw(batch, viewport, state, mouse, InputScript.Mouse());
+        return true;
     }
 
     /// <summary>
-    /// Without the status bar, what still has to be read: an error, the build tool's line, or a notice such as "Quick
-    /// saved", on a strip as wide as its text (blue while building) just above the bottom panel, where the buttons are,
-    /// rather than at the top of the screen. It rises above the fax icons and the adviser's balloon so as not to hide
-    /// them, and is drawn before the panel so that the panel's faxes and the adviser stay on top.
+    /// Without the status bar, what still has to be read: an error, the build tool's line while building, or a notice
+    /// such as "Quick saved".
     /// </summary>
-    private void DrawBriefLine(SpriteBatch batch, Viewport viewport, bool building, bool panelShown)
+    private string? BriefLine() =>
+        _error
+        ?? (_buildTool.IsActive || _furnishTool.IsActive ? TileLine() : null)
+        ?? (_notice is not null && Environment.TickCount64 < _noticeUntil ? _notice : null);
+
+    /// <summary>
+    /// The brief line where the bottom panel does not show it in its info bar (the main menu, or no original
+    /// graphics): at the bottom middle of the screen on a strip as wide as its text, blue while building.
+    /// </summary>
+    private void DrawBriefLine(SpriteBatch batch, Viewport viewport, bool building)
     {
-        var line = _error
-            ?? (building ? TileLine() : null)
-            ?? (_notice is not null && Environment.TickCount64 < _noticeUntil ? _notice : null);
-        if (line is null)
+        if (BriefLine() is not { } line)
         {
             return;
         }
 
         var maxWidth = Math.Max(1, viewport.Width - (2 * BriefLinePadding));
         var lines = _text.Measure(line).Width <= maxWidth ? [line] : WrapToWidth(line, maxWidth, text => _text.Measure(text).Width);
-        var textWidth = lines.Max(text => _text.Measure(text).Width);
         var lineHeight = _text.LineHeight + 2;
-        var size = new Point(textWidth + (2 * BriefLinePadding), (lines.Count * lineHeight) + 6);
-        var hasPanel = panelShown && _bottomPanel is not null;
-        var obstacles = new List<Rectangle>();
-        if (hasPanel)
-        {
-            obstacles.Add(OriginalBottomPanel.FaxStrip(viewport, PanelFaxes().Count));
-            if (_adviserFigure.Speech is { } speech)
-            {
-                obstacles.Add(AdviserBalloonBounds(AdviserOrigin(viewport), AdviserFigure.BalloonWidth(speech)));
-            }
-        }
-
-        var box = BriefLineBox(new Point(viewport.Width, viewport.Height), hasPanel ? OriginalBottomPanel.Bounds(viewport) : null, obstacles, size);
+        var size = new Point(lines.Max(text => _text.Measure(text).Width) + (2 * BriefLinePadding), (lines.Count * lineHeight) + 6);
+        var box = BriefLineBox(new Point(viewport.Width, viewport.Height), size);
         batch.Draw(_pixel, box, building ? BuildModeColor : Color.Black * 0.75f);
         for (var i = 0; i < lines.Count; i++)
         {
@@ -5991,40 +5992,9 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
     /// <summary>The room left and right of the brief line's text.</summary>
     private const int BriefLinePadding = 8;
 
-    /// <summary>
-    /// Where the brief line goes: centred on the bottom panel just above it (or at the bottom of the screen without
-    /// the panel, above the build frame), raised above whichever of <paramref name="obstacles"/> it would cover, and
-    /// kept on the screen.
-    /// </summary>
-    internal static Rectangle BriefLineBox(Point screen, Rectangle? panel, IReadOnlyList<Rectangle> obstacles, Point size)
-    {
-        const int gap = 2;
-        var centre = panel?.Center.X ?? (screen.X / 2);
-        var bottom = panel is { } bounds ? bounds.Y - gap : screen.Y - BuildFrameWidth - gap;
-        var box = new Rectangle(Math.Clamp(centre - (size.X / 2), 0, Math.Max(0, screen.X - size.X)), bottom - size.Y, size.X, size.Y);
-        for (var moved = true; moved;)
-        {
-            moved = false;
-            foreach (var obstacle in obstacles)
-            {
-                if (!obstacle.IsEmpty && box.Intersects(obstacle))
-                {
-                    box.Y = obstacle.Top - gap - size.Y;
-                    moved = true;
-                }
-            }
-        }
-
-        box.Y = Math.Max(0, box.Y);
-        return box;
-    }
-
-    /// <summary>The adviser's balloon, as <see cref="DrawAdviser"/> lays it out: from its left end to its tail, 40 pixels above him.</summary>
-    private static Rectangle AdviserBalloonBounds(Point origin, int width)
-    {
-        var left = BalloonLeft(origin, width) - 16;
-        return new Rectangle(left, origin.Y - 40, origin.X + 155 + 16 - left, 40);
-    }
+    /// <summary>Where the brief line goes without the bottom panel: centred at the bottom of the screen, above the build frame.</summary>
+    internal static Rectangle BriefLineBox(Point screen, Point size) =>
+        new(Math.Max(0, (screen.X - size.X) / 2), Math.Max(0, screen.Y - BuildFrameWidth - 2 - size.Y), size.X, size.Y);
 
     /// <summary>
     /// --debug-status: the debug lines (the level, money, people, overlay, zoom, the tile under the cursor and the keys)
