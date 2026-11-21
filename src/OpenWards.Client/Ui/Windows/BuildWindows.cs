@@ -18,15 +18,15 @@ internal enum BuildButton
 }
 
 /// <summary>
-/// The room edit panel while furnishing (CorsixTH's <c>dialogs/place_objects.lua</c> under <c>edit_room.lua</c>): the
-/// objects the room still needs, the extra objects it allows with their prices to buy, and the confirm, pick up and
+/// The room edit panel while building a room (CorsixTH's <c>dialogs/place_objects.lua</c> under <c>edit_room.lua</c>):
+/// from the blueprint on, what to do at each step with confirm and cancel; while furnishing, the objects the room still needs, the extra objects it allows with their prices to buy, and the confirm, pick up and
 /// take down buttons (Enter, P and Esc).
 /// </summary>
 internal sealed class RoomEditWindow(BuildRoomTool tool, Action<BuildButton> press) : UiWindow
 {
     public override string Title => tool.RoomType is { } room ? UiText.Room(room) : UiText.Get("openwards.build.room", "Room");
 
-    public override bool IsDone(IWindowHost host) => !tool.IsFurnishing;
+    public override bool IsDone(IWindowHost host) => !tool.HasEditPanel;
 
     private readonly RoomEditScreen _screen = new(tool, press);
     private int _lines;
@@ -59,6 +59,17 @@ internal sealed class RoomEditWindow(BuildRoomTool tool, Action<BuildButton> pre
         var simulation = host.Simulation;
         if (tool.RoomType is not { } room)
         {
+            yield break;
+        }
+
+        if (!tool.IsFurnishing)
+        {
+            // The walls, door and windows: what to do, confirm and cancel (UIEditRoom before _enterObjectsPhase).
+            yield return WindowCell.Line(RoomEditScreen.StepText(host, tool, 0));
+            yield return WindowRow.Gap;
+            yield return WindowRow.Of(
+                WindowCell.Button(UiText.Get("tooltip.place_objects_window.confirm", "Confirm"), () => press(BuildButton.Confirm), tool.CanPressConfirm(simulation), highlight: Tutorial.Lit("confirm")),
+                WindowCell.Button(UiText.Get("tooltip.place_objects_window.cancel", "Cancel"), () => press(BuildButton.Back)));
             yield break;
         }
 

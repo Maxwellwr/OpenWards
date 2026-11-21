@@ -632,10 +632,10 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
             {
                 _pickingRoomToEdit = false;
             }
-            else if (_buildTool.IsFurnishing && _windows.Windows.LastOrDefault(window => !window.IsPinned) is RoomEditWindow)
+            else if (_buildTool.HasEditPanel && _windows.Windows.LastOrDefault(window => !window.IsPinned) is RoomEditWindow)
             {
-                // The edit panel is the furnishing itself (CorsixTH's UIEditRoom): closing it would only reopen it, so Esc
-                // goes to the build tool, which drops an extra object from the cursor or takes the room down.
+                // The edit panel is the building itself (CorsixTH's UIEditRoom): closing it would only reopen it, so Esc goes
+                // to the build tool, which steps back (UIEditRoom:cancel), drops an extra object or takes the room down.
                 _buildBack = true;
             }
             else if (_windows.Any)
@@ -2190,7 +2190,7 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
             return;
         }
 
-        if (_buildTool.IsFurnishing && !_windows.Windows.Any(window => window is RoomEditWindow))
+        if (_buildTool.HasEditPanel && !_windows.Windows.Any(window => window is RoomEditWindow))
         {
             _windows.Open(new RoomEditWindow(_buildTool, button => _buildButton = button));
         }

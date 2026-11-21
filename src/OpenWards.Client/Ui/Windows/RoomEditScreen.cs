@@ -14,8 +14,9 @@ using OpenWards.Sim.Definitions;
 namespace OpenWards.Client.Ui.Windows;
 
 /// <summary>
-/// The room edit panel of Req05V's panels while furnishing, 186 wide and 29 taller for each line: the room's name, what
-/// to do, cancel, buy, pick up and confirm (each greyed out while it cannot be used), and the objects still to place
+/// The room edit panel of Req05V's panels while building a room, 186 wide and 29 taller for each line: the room's name, what
+/// to do at this step (walls, door, windows, objects), cancel, buy, pick up and confirm (each greyed out while it cannot be
+/// used; buy and pick up only while furnishing), and the objects still to place
 /// with how many, the one on the cursor framed in red; a click on one puts it on the cursor, again turns it.
 /// </summary>
 internal sealed class RoomEditScreen(BuildRoomTool tool, Action<BuildButton> press)
@@ -76,10 +77,10 @@ internal sealed class RoomEditScreen(BuildRoomTool tool, Action<BuildButton> pre
 
         Panel(114, 0, 90);
         var lines = Lines(host);
-        var canConfirm = tool.CanConfirm(simulation);
+        var canConfirm = tool.CanPressConfirm(simulation);
         Panel(held && _pressed == "cancel" && Cancel.Contains(local) ? 116 : 115, 0, 100);
-        Panel(held && _pressed == "buy" && Buy.Contains(local) ? 118 : 117, 50, 100);
-        Panel(tool.IsPickingUp || (held && _pressed == "pickup" && PickUp.Contains(local)) ? 120 : 119, 92, 100);
+        Panel(!CanBuy(tool) ? 127 : held && _pressed == "buy" && Buy.Contains(local) ? 118 : 117, 50, 100);
+        Panel(!tool.IsFurnishing ? 128 : tool.IsPickingUp || (held && _pressed == "pickup" && PickUp.Contains(local)) ? 120 : 119, 92, 100);
         Panel(!canConfirm ? 129 : (held && _pressed == "confirm" && Confirm.Contains(local)) || Tutorial.Lit("confirm") ? 122 : 121, 134, 100);
         if (lines.Count > 0)
         {
@@ -94,9 +95,7 @@ internal sealed class RoomEditScreen(BuildRoomTool tool, Action<BuildButton> pre
 
         void Centred(TextRenderer font, string text, int x, int y, int width) => font.Draw(batch, text, new Vector2(origin.X + x + ((width - font.Measure(text).Width) / 2), origin.Y + y));
         Centred(white, tool.RoomType is { } room ? UiText.Room(room) : string.Empty, 17, 21, 153);
-        var what = tool.IsPickingUp ? host.Texts?.String(3, 16) ?? "Pick up an object to move it"
-            : lines.Count > 0 ? host.Texts?.String(3, 14) ?? "Place the objects"
-            : host.Texts?.String(3, 15) ?? "Confirm, or buy more objects";
+        var what = StepText(host, tool, lines.Count);
         var row = 0;
         foreach (var text in MapViewScreen.WrapToWidth(what, 147, t => white.Measure(t).Width))
         {
@@ -153,16 +152,16 @@ internal sealed class RoomEditScreen(BuildRoomTool tool, Action<BuildButton> pre
                 host.PlaySound("no4.wav");
                 press(BuildButton.Back);
                 break;
-            case "buy" when Buy.Contains(local):
+            case "buy" when Buy.Contains(local) && CanBuy(tool):
                 host.PlaySound(WindowLayer.DefaultButtonSound);
                 host.Open(new RoomBuyWindow(tool));
                 break;
-            case "pickup" when PickUp.Contains(local):
+            case "pickup" when PickUp.Contains(local) && tool.IsFurnishing:
                 host.PlaySound(WindowLayer.DefaultButtonSound);
                 press(BuildButton.PickUp);
                 break;
             case "confirm" when Confirm.Contains(local):
-                if (tool.CanConfirm(host.Simulation))
+                if (tool.CanPressConfirm(host.Simulation))
                 {
                     host.PlaySound("YesX.wav");
                     press(BuildButton.Confirm);
@@ -175,6 +174,23 @@ internal sealed class RoomEditScreen(BuildRoomTool tool, Action<BuildButton> pre
                 break;
         }
     }
+
+    /// <summary>
+    /// The panel's <c>desc_text</c> (place_objects_window, the original's strings 3.11 to 3.16): drag out the blueprint,
+    /// place the door, the windows, then the objects, confirm or buy more, or pick one up.
+    /// </summary>
+    public static string StepText(IWindowHost host, BuildRoomTool tool, int lines) => tool.PanelStep switch
+    {
+        EditPanelStep.Walls => host.Texts?.String(3, 11) ?? "Drag out the blueprint, then confirm",
+        EditPanelStep.Door => host.Texts?.String(3, 12) ?? "Place the door",
+        EditPanelStep.Windows => host.Texts?.String(3, 13) ?? "Place windows if you like, then confirm",
+        _ when tool.IsPickingUp => host.Texts?.String(3, 16) ?? "Pick up an object to move it",
+        _ when lines > 0 => host.Texts?.String(3, 14) ?? "Place the objects",
+        _ => host.Texts?.String(3, 15) ?? "Confirm, or buy more objects",
+    };
+
+    /// <summary>UIEditRoom:_enterObjectsPhase enables the purchase button only for a room with extra objects.</summary>
+    private static bool CanBuy(BuildRoomTool tool) => tool.IsFurnishing && tool.RoomType?.AdditionalObjects is { Count: > 0 };
 
     public static string? Tooltip(IWindowHost host, Point local)
     {
