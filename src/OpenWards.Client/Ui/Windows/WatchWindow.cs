@@ -23,6 +23,9 @@ internal sealed class WatchWindow : UiWindow
 
     private readonly WatchScreen _screen = new();
 
+    /// <summary>UIWatch's <c>esc_closes = false</c>: only its countdown ending takes it away.</summary>
+    public override bool ClosesWithEsc => false;
+
     /// <summary>The original's look (<see cref="WatchScreen"/>) where its graphics are there; else the table below.</summary>
     public override bool IsFullscreen(IWindowHost host) => WatchScreen.IsAvailable(host);
 

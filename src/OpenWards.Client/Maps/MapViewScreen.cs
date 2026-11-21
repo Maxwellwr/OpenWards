@@ -225,7 +225,6 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
     private EndOutcome _lastOutcome;
 
     /// <summary>Whether a countdown ran when last looked, so that a new one opens the watch.</summary>
-    private bool _watchRan;
 
     /// <summary>The faxes waiting when last looked, so that a new one opens the faxes window.</summary>
     private HashSet<string> _seenFaxes = new(StringComparer.Ordinal);
@@ -3376,8 +3375,10 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
         }
 
         // The watch belongs to a game; behind the main menu there is none to show it for (CorsixTH has no world there).
+        // UIWatch stays up until its countdown ends: it does not close with Esc, and a window that closes the others
+        // (a level's start, the build tool, hiring) takes it away only until the next frame.
         var watch = WatchWindow.IsRunning(Simulation!, _session.Player) && _mainMenu is null;
-        if (watch && !_watchRan)
+        if (watch && !_windows.Windows.OfType<WatchWindow>().Any())
         {
             _windows.Open(new WatchWindow());
         }
@@ -3388,8 +3389,6 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
                 _windows.Close(open);
             }
         }
-
-        _watchRan = watch;
 
         // The network game's land auction: everyone goes to the bidding screen; when the hammer falls, who got the plot.
         if (Simulation!.Auction is not null && !_windows.Windows.Any(w => w is AuctionWindow))
