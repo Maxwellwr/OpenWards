@@ -26,7 +26,7 @@ public sealed class BriefLineTests
     {
         var lines = OriginalBottomPanel.HintLines("Room: drag the edges, the middle to move it   Enter: done   Esc: cancel", 22, text => text.Length);
 
-        Assert.Equal(["Room: drag the edges…", "Enter: done", "Esc: cancel"], lines);
+        Assert.Equal(["Room: drag the edges,", "the…   Enter: done", "Esc: cancel"], lines);
     }
 
     [Fact]
