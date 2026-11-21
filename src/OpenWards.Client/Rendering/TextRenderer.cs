@@ -35,6 +35,12 @@ internal sealed class TextRenderer : IDisposable
         _match = BitmapFontMatch.Find(font.Sheet, palette);
     }
 
+    /// <summary>
+    /// The colour of the face's letters (CorsixTH's <c>ttf_color</c> font option), or null to take it from the bitmap
+    /// font's own letters.
+    /// </summary>
+    public Color? TrueTypeColor { get; init; }
+
     /// <summary>Whether text is drawn with a TrueType face rather than the bitmap font.</summary>
     public bool IsTrueType => _face is not null;
 
@@ -121,12 +127,13 @@ internal sealed class TextRenderer : IDisposable
     }
 
     /// <summary>
-    /// Each glyph at its place on the line, in the bitmap font's colour (<c>ttf_color</c> left to be detected) times the
+    /// Each glyph at its place on the line, in <see cref="TrueTypeColor"/> or else the bitmap font's colour, times the
     /// tint; CorsixTH renders the whole line into one texture, which comes to the same pixels.
     /// </summary>
     private void DrawTrueType(SpriteBatch batch, TrueTypeFace face, string text, Vector2 position, int scale, Color tint)
     {
-        var color = _match is { Color: var c } ? new Color(c.R * tint.R / 255, c.G * tint.G / 255, c.B * tint.B / 255, tint.A) : tint;
+        var color = TrueTypeColor is { } own ? new Color(own.R * tint.R / 255, own.G * tint.G / 255, own.B * tint.B / 255, tint.A)
+            : _match is { Color: var c } ? new Color(c.R * tint.R / 255, c.G * tint.G / 255, c.B * tint.B / 255, tint.A) : tint;
         face.SetPixelSize(_trueTypeSize);
         var line = face.Layout(text);
         foreach (var glyph in line.Glyphs)
