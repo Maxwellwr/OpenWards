@@ -1249,6 +1249,7 @@ internal sealed class BuildRoomTool
             ObjectPlacementProblem.NotOwned => UiText.Get("openwards.build_tool.not_owned", "not your land"),
             ObjectPlacementProblem.Blocked => UiText.Get("openwards.build_tool.blocked", "something is in the way"),
             ObjectPlacementProblem.WouldBlockAccess => UiText.Get("openwards.build_tool.would_block_access", "would block access"),
+            ObjectPlacementProblem.NeedsWall => UiText.Get("openwards.build_tool.needs_wall", "must stand with its head against a wall"),
             _ => null,
         };
         return text is null ? string.Empty : $" ({text})";

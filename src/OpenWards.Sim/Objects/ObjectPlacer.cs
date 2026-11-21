@@ -23,6 +23,9 @@ public enum ObjectPlacementProblem
     NotOwned,
     Blocked,
     WouldBlockAccess,
+
+    /// <summary>The object must stand with its head against a wall (<see cref="ObjectDefinition.HeadAgainstWall"/>).</summary>
+    NeedsWall,
 }
 
 /// <summary>
@@ -115,6 +118,11 @@ public static class ObjectPlacer
             }
         }
 
+        if (definition.HeadAgainstWall && !IsHeadAgainstWall(map, roomId, tile, orientation, layout))
+        {
+            return ObjectPlacementProblem.NeedsWall;
+        }
+
         var side = layout.Footprint.Any(part => part.IsSide);
         if (roomId != 0)
         {
@@ -129,6 +137,38 @@ public static class ObjectPlacer
         }
 
         return ObjectPlacementProblem.None;
+    }
+
+    /// <summary>
+    /// Whether every tile of the object's end toward the side it faces backs onto the room's wall: the ward's beds in the
+    /// original game stand with their heads against a wall (the beds of the original's saves all touch the wall on the
+    /// side they face). CorsixTH lets them stand anywhere.
+    /// </summary>
+    private static bool IsHeadAgainstWall(LevelMap map, int roomId, TilePosition tile, Direction orientation, ObjectOrientation layout)
+    {
+        var (_, dx, dy, _, _) = Sides[(int)orientation];
+        foreach (var part in layout.Footprint)
+        {
+            if (part.IsUsePosition || part.IsSide)
+            {
+                continue;
+            }
+
+            var beyond = (X: part.X + dx, Y: part.Y + dy);
+            if (layout.Footprint.Any(other => !other.IsUsePosition && !other.IsSide && other.X == beyond.X && other.Y == beyond.Y))
+            {
+                continue;
+            }
+
+            var x = tile.X + beyond.X;
+            var y = tile.Y + beyond.Y;
+            if (map.Contains(x, y) && map[x, y].RoomId == roomId)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>

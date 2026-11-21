@@ -315,6 +315,7 @@ strings:
       must_stand_inside: 'має стояти всередині кабінету'
       blocked: 'щось заважає'
       would_block_access: 'загородить прохід'
+      needs_wall: 'узголів''я має бути біля стіни'
     buy_objects:
       caption: 'Купити предмети'
     casebook:

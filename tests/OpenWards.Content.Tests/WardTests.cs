@@ -91,6 +91,28 @@ public class WardTests
         Assert.InRange(healing, 0.5m / DecimalMathLn2, 1.5m / DecimalMathLn2);
     }
 
+    /// <summary>
+    /// As in the original game (its saves' beds all touch the wall on the side they face), and unlike CorsixTH, a bed only
+    /// goes in with its head against the ward's wall.
+    /// </summary>
+    [Theory]
+    [InlineData(8, 13, Direction.North, ObjectPlacementProblem.None)]
+    [InlineData(9, 16, Direction.East, ObjectPlacementProblem.None)]
+    [InlineData(8, 19, Direction.South, ObjectPlacementProblem.None)]
+    [InlineData(3, 16, Direction.West, ObjectPlacementProblem.None)]
+    [InlineData(8, 15, Direction.North, ObjectPlacementProblem.NeedsWall)]
+    [InlineData(5, 16, Direction.East, ObjectPlacementProblem.NeedsWall)]
+    [InlineData(8, 17, Direction.South, ObjectPlacementProblem.NeedsWall)]
+    [InlineData(5, 16, Direction.West, ObjectPlacementProblem.NeedsWall)]
+    [InlineData(9, 13, Direction.West, ObjectPlacementProblem.NeedsWall)]
+    public void BedsStandWithTheirHeadsAgainstAWall(int x, int y, Direction orientation, ObjectPlacementProblem expected)
+    {
+        var simulation = NewStaffedHospital(Rules(), weakDoctor: true);
+        Run(simulation, new BuildRoomCommand(new RoomPlan("ward", Area, new DoorPlacement(new(5, Area.Y), EdgeOrientation.North))));
+
+        Assert.Equal(expected, ObjectPlacer.Check(simulation, "bed", new TilePosition(x, y), orientation, 0));
+    }
+
     private const decimal DecimalMathLn2 = 0.6931471805599453m;
 
     /// <summary>Broken heart the only disease, hard to diagnose, so that the weak GP sends patients on to the ward.</summary>

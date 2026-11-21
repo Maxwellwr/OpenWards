@@ -274,6 +274,7 @@ strings:
       must_stand_inside: должен стоять внутри кабинета
       blocked: что-то мешает
       would_block_access: загородит проход
+      needs_wall: 'изголовье должно быть у стены'
     buy_objects:
       caption: Купить предметы
     casebook:

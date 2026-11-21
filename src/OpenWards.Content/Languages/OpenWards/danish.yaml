@@ -513,6 +513,7 @@ strings:
       must_stand_inside: 'skal stå inde i rummet'
       blocked: 'noget er i vejen'
       would_block_access: 'ville spærre adgangen'
+      needs_wall: 'hovedenden skal stå op ad en væg'
     buy_objects:
       caption: 'Köb genstande'
     casebook:

@@ -281,6 +281,7 @@ strings:
       must_stand_inside: doit être dans la salle
       blocked: quelque chose gêne
       would_block_access: bloquerait le passage
+      needs_wall: 'la tête doit être contre un mur'
     buy_objects:
       caption: Acheter des objets
     casebook:

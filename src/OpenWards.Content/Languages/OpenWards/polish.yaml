@@ -438,6 +438,7 @@ strings:
       must_stand_inside: 'musi stać w pomieszczeniu'
       blocked: 'coś przeszkadza'
       would_block_access: 'zablokowałoby przejście'
+      needs_wall: 'wezgłowie musi stać przy ścianie'
     buy_objects:
       caption: 'Kup przedmioty'
     casebook:

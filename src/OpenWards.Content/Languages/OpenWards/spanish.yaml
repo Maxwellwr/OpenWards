@@ -267,6 +267,7 @@ strings:
       must_stand_inside: 'debe estar dentro de la sala'
       blocked: 'algo estorba'
       would_block_access: 'bloquearía el paso'
+      needs_wall: 'el cabecero debe estar contra una pared'
     buy_objects:
       caption: 'Comprar objetos'
     casebook:

@@ -623,7 +623,10 @@ public static class BaseGameContent
         LevelConfigId: 8,
         AdditionalObjects: ["extinguisher", "radiator", "plant", "bin", "bookcase", "skeleton"]);
 
-    /// <summary>The ward's bed (objects/bed.lua): the patient lies down, stays and gets up.</summary>
+    /// <summary>
+    /// The ward's bed (objects/bed.lua): the patient lies down, stays and gets up. Unlike CorsixTH, and as in the original
+    /// game, its head (the side it faces) must stand against a wall.
+    /// </summary>
     public static readonly ObjectDefinition Bed = new(
         "bed",
         "Bed",
@@ -652,7 +655,8 @@ public static class BaseGameContent
         {
             [HumanoidType.StandardMalePatient] = new(new(4688, 23), [new(4696, 1)], new(4704, 15)),
             [HumanoidType.StandardFemalePatient] = new(new(4712, 23), [new(4720, 1)], new(4728, 15)),
-        });
+        },
+        HeadAgainstWall: true);
 
     /// <summary>
     /// The ward (rooms/ward.lua): a diagnosis and treatment room with beds and desks, as many patients as beds and as many

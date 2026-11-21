@@ -335,6 +335,7 @@ strings:
       must_stand_inside: 'moet in de kamer staan'
       blocked: 'er staat iets in de weg'
       would_block_access: 'zou de doorgang blokkeren'
+      needs_wall: 'moet met het hoofdeinde tegen een muur staan'
     buy_objects:
       caption: 'Voorwerpen kopen'
     casebook:

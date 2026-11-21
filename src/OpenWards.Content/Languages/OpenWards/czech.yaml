@@ -264,6 +264,7 @@ strings:
       must_stand_inside: 'musí stát uvnitř místnosti'
       blocked: 'něco překáží'
       would_block_access: 'zablokovalo by průchod'
+      needs_wall: 'čelo musí stát u zdi'
     buy_objects:
       caption: 'Koupit předměty'
     casebook:

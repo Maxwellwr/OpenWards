@@ -336,6 +336,7 @@ strings:
       must_stand_inside: '必須放在房間裡'
       blocked: '有東西擋著'
       would_block_access: '會擋住通道'
+      needs_wall: '床頭必須靠牆'
     buy_objects:
       caption: '購買物品'
     casebook:

@@ -366,6 +366,7 @@ strings:
       must_stand_inside: 'πρέπει να είναι μέσα στο δωμάτιο'
       blocked: 'κάτι εμποδίζει'
       would_block_access: 'θα έκλεινε το πέρασμα'
+      needs_wall: 'το κεφαλάρι πρέπει να ακουμπά σε τοίχο'
     buy_objects:
       caption: 'Αγορά αντικειμένων'
     casebook:
