@@ -490,6 +490,13 @@ internal sealed class OriginalBottomPanel : IDisposable
         return null;
     }
 
+    /// <summary>Where the fax icons stand above the panel while <paramref name="faxes"/> wait (empty while none do).</summary>
+    public static Rectangle FaxStrip(Viewport viewport, int faxes)
+    {
+        var shown = Math.Clamp(faxes, 0, MaxFaxes);
+        return shown == 0 ? Rectangle.Empty : new Rectangle(FaxArea(viewport, 0).Location, new Point(shown * FaxWidth, FaxHeight));
+    }
+
     /// <summary>The <paramref name="index"/>th fax icon's place: from the panel's left, 30 pixels each, above the panel.</summary>
     private static Rectangle FaxArea(Viewport viewport, int index)
     {
