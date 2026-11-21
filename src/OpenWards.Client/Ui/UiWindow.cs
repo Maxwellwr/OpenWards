@@ -430,6 +430,9 @@ internal abstract class UiWindow
     /// <summary>The size of the window drawn by itself: 640 by 480 for a fullscreen dialog, its own for a smaller one.</summary>
     public virtual Point FullscreenSize => new(640, 480);
 
+    /// <summary>The size of the window drawn by itself on a screen of that area: <see cref="FullscreenSize"/> unless it depends on the screen.</summary>
+    public virtual Point FullscreenSizeOn(Rectangle screen) => FullscreenSize;
+
     /// <summary>Where a window drawn by itself opens from the top left of the screen's free area; null centres it.</summary>
     public virtual Vector2? FullscreenPosition => null;
 

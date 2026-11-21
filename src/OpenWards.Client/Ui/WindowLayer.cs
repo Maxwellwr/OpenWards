@@ -456,7 +456,7 @@ internal sealed class WindowLayer
         {
             // UIFullscreen: 640 by 480, centred on the screen, and kept on it from the top left.
             // A smaller one opens where it says (Window:setDefaultPosition), kept on the screen.
-            var size = open.Window.FullscreenSize;
+            var size = open.Window.FullscreenSizeOn(screen);
             if (open.Window.HasFullscreenBorder && (screen.Width > size.X || screen.Height > size.Y))
             {
                 // UIFullscreen:onChangeResolution: on a screen bigger than the dialog, CorsixTH's frame round it, 9 pixels

@@ -43,6 +43,32 @@ public class ReportWindowTests
         Assert.Contains("The hospital has no machines.", host.Lines(new MachineMenuWindow()));
     }
 
+    [Theory]
+    [InlineData(480, 1, 4)]
+    [InlineData(720, 1, 6)]
+    [InlineData(1080, 1, 9)]
+    [InlineData(540, 2, 9)]
+    [InlineData(270, 4, 6)]
+    public void TheMachinesListHasRowsForAQuarterOfTheScreen(int height, int scale, int rows) =>
+        Assert.Equal(rows, MachineMenuWindow.RowsFor(height, scale));
+
+    [Fact]
+    public void TheMachinesListScrollbarFollowsCorsixTH()
+    {
+        var bar = new Microsoft.Xna.Framework.Rectangle(446, 45, 24, 32 * 4);
+
+        // All machines fit: the slider fills the bar.
+        Assert.Equal((1, new Microsoft.Xna.Framework.Rectangle(447, 46, 22, 126)), MachineMenuWindow.ScrollbarRange(bar, 3, 4, 1));
+
+        // Ten machines, four shown: the slider is 51 high, and the value stops at the last page.
+        var (value, slider) = MachineMenuWindow.ScrollbarRange(bar, 10, 4, 9);
+        Assert.Equal(7, value);
+        Assert.Equal(51, slider.Height);
+        Assert.Equal(46 + 75 - 11, slider.Y);
+        Assert.Equal(1, MachineMenuWindow.ScrollbarValueAt(bar, 10, 4, 0));
+        Assert.Equal(7, MachineMenuWindow.ScrollbarValueAt(bar, 10, 4, 500));
+    }
+
     [Fact]
     public void TheProgressReportSaysWhenALevelHasNoGoals()
     {
