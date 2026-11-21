@@ -85,12 +85,11 @@ internal sealed class RoomEditScreen(BuildRoomTool tool, Action<BuildButton> pre
         if (lines.Count > 0)
         {
             Panel(123, 0, 146);
-            for (var i = 1; i < lines.Count; i++)
+            var pressedLine = held ? LineAt(local, lines.Count) : -1;
+            foreach (var (sprite, at) in LineSprites(lines.Count, pressedLine >= 0 && _pressed == "line" + pressedLine ? pressedLine : -1))
             {
-                Panel(held && _pressed == "line" + (i - 1) && LineArea(i, lines.Count).Contains(local) ? 125 : 124, 0, 121 + (i * 29));
+                Panel(sprite, at.X, at.Y);
             }
-
-            Panel(held && _pressed == "line" + (lines.Count - 1) && LineArea(lines.Count, lines.Count).Contains(local) ? 125 : 156, 0, 117 + (lines.Count * 29));
         }
 
         void Centred(TextRenderer font, string text, int x, int y, int width) => font.Draw(batch, text, new Vector2(origin.X + x + ((width - font.Measure(text).Width) / 2), origin.Y + y));
@@ -200,6 +199,22 @@ internal sealed class RoomEditScreen(BuildRoomTool tool, Action<BuildButton> pre
             : PickUp.Contains(local) ? Tip(134, "Pick up an object to move it")
             : Confirm.Contains(local) ? Tip(135, "Confirm the room")
             : null;
+    }
+
+    /// <summary>
+    /// The list's panels (resize): 124 for each line and 156, 4 lower, for the last; with preservePanel the line's panel stays
+    /// and its pressed button, sprite 125 of only the button's size, is drawn over it where the button is.
+    /// </summary>
+    internal static IEnumerable<(int Sprite, Point At)> LineSprites(int lines, int pressed)
+    {
+        for (var i = 1; i <= lines; i++)
+        {
+            yield return i < lines ? (124, new Point(0, 121 + (i * 29))) : (156, new Point(0, 117 + (i * 29)));
+            if (i - 1 == pressed)
+            {
+                yield return (125, LineArea(i, lines).Location);
+            }
+        }
     }
 
     /// <summary>A line's button: the last line's sits 4 pixels lower in its taller panel.</summary>
