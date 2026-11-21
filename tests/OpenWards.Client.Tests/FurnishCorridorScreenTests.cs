@@ -17,10 +17,12 @@ public sealed class FurnishCorridorScreenTests
     }
 
     [Fact]
-    public void EveryObjectHasAPreview()
+    public void EveryObjectHasAPreviewButTheSurgeonsSink()
     {
+        // objects/op_sink1.lua has no build_preview_animation in CorsixTH either.
         var host = new WindowTestHost();
-        Assert.Empty(host.Simulation.Content.Objects.Select(o => o.Id).Where(id => !FurnishCorridorScreen.Previews.ContainsKey(id)));
+        var missing = host.Simulation.Content.Objects.Select(o => o.Id).Where(id => !FurnishCorridorScreen.Previews.ContainsKey(id));
+        Assert.Equal(["op_sink1"], missing);
     }
 
     [Fact]
