@@ -22,11 +22,27 @@ public sealed class BriefLineTests
     }
 
     [Fact]
-    public void A_hint_longer_than_three_lines_is_cut_off()
+    public void A_long_part_loses_words_so_that_the_keys_stay()
     {
-        var lines = OriginalBottomPanel.HintLines("one two three four five six seven eight", 9, text => text.Length);
+        var lines = OriginalBottomPanel.HintLines("Room: drag the edges, the middle to move it   Enter: done   Esc: cancel", 22, text => text.Length);
 
-        Assert.Equal(["one two", "three", "four five"], lines);
+        Assert.Equal(["Room: drag the edges…", "Enter: done", "Esc: cancel"], lines);
+    }
+
+    [Fact]
+    public void A_remark_in_brackets_at_the_end_of_a_part_stays()
+    {
+        var lines = OriginalBottomPanel.HintLines("Room: drag the edges to resize it (small)   Enter: done   Esc: cancel", 22, text => text.Length);
+
+        Assert.Equal(["Room: drag the edges…", "(small)   Enter: done", "Esc: cancel"], lines);
+    }
+
+    [Fact]
+    public void A_hint_that_cannot_be_shortened_is_cut_off_with_an_ellipsis()
+    {
+        var lines = OriginalBottomPanel.HintLines("aaaa   bbbb   cccc   dddd", 4, text => text.Length);
+
+        Assert.Equal(["aaaa", "bbbb", "cccc…"], lines);
     }
 
     [Fact]

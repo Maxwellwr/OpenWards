@@ -400,7 +400,7 @@ internal sealed class OriginalBottomPanel : IDisposable
         if (state.Hint is { } hint)
         {
             // OpenWards: the hint takes the info bar's three lines, in its white font, where the pause text stands.
-            var hintLines = HintLines(hint, InfoTextWidth, text => _whiteFont.Measure(text).Width);
+            var hintLines = HintLines(hint, HintWidth(width), text => _whiteFont.Measure(text).Width);
             for (var i = 0; i < hintLines.Count; i++)
             {
                 _whiteFont.Draw(batch, hintLines[i], new Vector2(x + 20, y + (10 * (i + 1))));
@@ -480,12 +480,75 @@ internal sealed class OriginalBottomPanel : IDisposable
     /// <summary>How wide a line of the info bar's text may be.</summary>
     private const int InfoTextWidth = 240;
 
+    /// <summary>How wide a hint's line may be: the info bar from its text's left to its right end, less a margin.</summary>
+    private static int HintWidth(int panelWidth) => panelWidth - 364 - InfoTextLeft - InfoTextRight;
+
     /// <summary>
-    /// A hint laid out on the info bar's three lines: its parts (split at three spaces) share a line while they fit, a
-    /// long part is wrapped, and whatever does not fit on three lines is cut off.
+    /// A hint laid out on the info bar's three lines: its parts (split at three spaces) share a line while they fit and
+    /// a long part is wrapped. When that takes more than three lines, the longest part loses words from its end (but
+    /// not a closing remark in brackets, such as why a blueprint cannot be built) and gets an ellipsis instead, so that
+    /// the shorter parts, such as the keys, stay whole.
     /// </summary>
-    internal static IReadOnlyList<string> HintLines(string hint, int width, Func<string, int> measure) =>
-        [.. Maps.MapViewScreen.PackSegments(hint.Split("   ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), width, measure).Take(InfoLinesPerStrip)];
+    internal static IReadOnlyList<string> HintLines(string hint, int width, Func<string, int> measure)
+    {
+        var parts = hint.Split("   ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(HintPart.Of).ToList();
+        while (true)
+        {
+            var lines = Maps.MapViewScreen.PackSegments(parts.Select(part => part.Text), width, measure);
+            if (lines.Count <= InfoLinesPerStrip)
+            {
+                return lines;
+            }
+
+            var longest = parts.Where(part => part.Words.Count > 1).MaxBy(part => measure(part.Text));
+            if (longest is null)
+            {
+                var cut = lines.Take(InfoLinesPerStrip).ToList();
+                cut[^1] = cut[^1].TrimEnd() + "…";
+                return cut;
+            }
+
+            longest.Shorten();
+        }
+    }
+
+    /// <summary>A part of a hint: its words, which may be cut short, and a remark in brackets at its end, which stays.</summary>
+    private sealed class HintPart
+    {
+        private HintPart(List<string> words, string remark)
+        {
+            Words = words;
+            Remark = remark;
+        }
+
+        public List<string> Words { get; }
+
+        private string Remark { get; }
+
+        private bool Shortened { get; set; }
+
+        public string Text => string.Join(' ', Words) + (Shortened ? "…" : string.Empty) + (Remark.Length > 0 ? " " + Remark : string.Empty);
+
+        public static HintPart Of(string text)
+        {
+            var remark = string.Empty;
+            var open = text.LastIndexOf('(');
+            if (text.EndsWith(')') && open > 0)
+            {
+                remark = text[open..];
+                text = text[..open];
+            }
+
+            return new HintPart([.. text.Split(' ', StringSplitOptions.RemoveEmptyEntries)], remark);
+        }
+
+        public void Shorten()
+        {
+            Words.RemoveAt(Words.Count - 1);
+            Words[^1] = Words[^1].TrimEnd(',', ';', ':', '.', '-', '—', '–');
+            Shortened = true;
+        }
+    }
 
     /// <summary>The info bar's text starts 20 pixels in (<c>drawDynamicInfo</c>).</summary>
     private const int InfoTextLeft = 20;

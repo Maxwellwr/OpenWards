@@ -5952,7 +5952,7 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
             PanelDialogOpen,
             Tutorial.Lit,
             [.. FaxWindow.Pending(simulation, _session.Player, ((IWindowHost)this).IsWinLetterPending), .. RaiseRequests().Select(staff => string.Create(CultureInfo.InvariantCulture, $"strike:{staff.Id}"))],
-            ShowsStatusBar ? null : BriefLine());
+            ShowsStatusBar ? null : BriefLine(inPanel: true));
         _bottomPanel.Draw(batch, viewport, state, mouse, InputScript.Mouse());
         return true;
     }
@@ -5961,10 +5961,24 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
     /// Without the status bar, what still has to be read: an error, the build tool's line while building, or a notice
     /// such as "Quick saved".
     /// </summary>
-    private string? BriefLine() =>
+    /// <param name="inPanel">
+    /// Whether the line goes in the bottom panel's info bar, where room is short: the build tool's line goes without
+    /// its "BUILD MODE" heading, which the blue frame round the map already says.
+    /// </param>
+    private string? BriefLine(bool inPanel = false) =>
         _error
-        ?? (_buildTool.IsActive || _furnishTool.IsActive ? TileLine() : null)
+        ?? (_buildTool.IsActive || _furnishTool.IsActive ? (inPanel ? BuildHint() : TileLine()) : null)
         ?? (_notice is not null && Environment.TickCount64 < _noticeUntil ? _notice : null);
+
+    /// <summary>The build tool's line without its heading: the reminder to finish the room first, if it shows, and the tool's status.</summary>
+    private string BuildHint()
+    {
+        var status = _buildTool.IsActive ? _buildTool.Status(Simulation) : _furnishTool.Status(Simulation);
+        var reminder = _buildTool.IsActive && Environment.TickCount64 < _buildReminderUntil
+            ? UiText.Get("openwards.status.finish_room_first", " (finish or cancel the room to use other keys)").Trim()
+            : string.Empty;
+        return reminder.Length > 0 ? reminder + "   " + status : status;
+    }
 
     /// <summary>
     /// The brief line where the bottom panel does not show it in its info bar (the main menu, or no original
