@@ -59,8 +59,9 @@ public sealed class BriefLineTests
     [Fact]
     public void A_line_wider_than_the_panel_stays_on_the_screen()
     {
-        var box = MapViewScreen.BriefLineBox(new Point(700, 600), new Rectangle(30, 552, 640, 48), [], new Point(690, 20));
+        var box = MapViewScreen.BriefLineBox(new Point(700, 600), new Rectangle(0, 552, 640, 48), [], new Point(690, 20));
 
         Assert.Equal(0, box.X);
+        Assert.True(box.Right <= 700);
     }
 }
