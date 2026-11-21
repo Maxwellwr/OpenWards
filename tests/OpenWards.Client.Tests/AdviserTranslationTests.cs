@@ -17,6 +17,9 @@ public partial class AdviserTranslationTests
 {
     private const string EnglishMarker = "ORIGINAL";
 
+    /// <summary>Every original string is "ORIGINAL section.index" (CorsixTH's 1-based numbers), 64 sections of 220.</summary>
+    private static readonly StringTable EnglishStrings = Original();
+
     private static readonly Lazy<CorsixLanguages> Languages =
         new(() => CorsixLanguages.Load(Path.Combine(AppContext.BaseDirectory, "Languages")));
 
@@ -24,9 +27,6 @@ public partial class AdviserTranslationTests
         new(() => new OriginalTexts(EnglishStrings, Languages.Value.Load("Russian", _ => EnglishStrings)));
 
     private static readonly Lazy<LanguageStrings> English = new(() => Languages.Value.Load("English", _ => EnglishStrings));
-
-    /// <summary>Every original string is "ORIGINAL section.index" (CorsixTH's 1-based numbers), 64 sections of 220.</summary>
-    private static readonly StringTable EnglishStrings = Original();
 
     /// <summary>Every advice message the checks give, by its field's name.</summary>
     public static TheoryData<string> AdviceNames()
