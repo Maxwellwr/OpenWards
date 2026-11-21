@@ -91,6 +91,51 @@ public class WardTests
         Assert.InRange(healing, 0.5m / DecimalMathLn2, 1.5m / DecimalMathLn2);
     }
 
+    /// <summary>
+    /// As in the original game (its saves' beds all touch the wall on the side they face), and unlike CorsixTH, a bed only
+    /// goes in with its head against the ward's wall.
+    /// </summary>
+    [Theory]
+    [InlineData(8, 13, Direction.North, ObjectPlacementProblem.None)]
+    [InlineData(9, 16, Direction.East, ObjectPlacementProblem.None)]
+    [InlineData(8, 19, Direction.South, ObjectPlacementProblem.None)]
+    [InlineData(3, 16, Direction.West, ObjectPlacementProblem.None)]
+    [InlineData(8, 15, Direction.North, ObjectPlacementProblem.NeedsWall)]
+    [InlineData(5, 16, Direction.East, ObjectPlacementProblem.NeedsWall)]
+    [InlineData(8, 17, Direction.South, ObjectPlacementProblem.NeedsWall)]
+    [InlineData(5, 16, Direction.West, ObjectPlacementProblem.NeedsWall)]
+    [InlineData(9, 13, Direction.West, ObjectPlacementProblem.NeedsWall)]
+    public void BedsStandWithTheirHeadsAgainstAWall(int x, int y, Direction orientation, ObjectPlacementProblem expected)
+    {
+        var simulation = NewStaffedHospital(Rules(), weakDoctor: true);
+        Run(simulation, new BuildRoomCommand(new RoomPlan("ward", Area, new DoorPlacement(new(5, Area.Y), EdgeOrientation.North))));
+
+        Assert.Equal(expected, ObjectPlacer.Check(simulation, "bed", new TilePosition(x, y), orientation, 0));
+    }
+
+    /// <summary>
+    /// As in the original, the bed on the cursor sticks to the nearest wall, facing it; next to the door, where it does not
+    /// fit, it goes to the next nearest wall.
+    /// </summary>
+    [Theory]
+    [InlineData(6, 17, 6, 19, Direction.South)]
+    [InlineData(8, 14, 9, 14, Direction.East)]
+    [InlineData(3, 16, 3, 16, Direction.West)]
+    [InlineData(5, 13, 3, 13, Direction.West)]
+    [InlineData(2, 19, 3, 19, Direction.South)]
+    [InlineData(9, 19, 9, 18, Direction.East)]
+    public void TheBedSticksToTheNearestWall(int cursorX, int cursorY, int x, int y, Direction orientation)
+    {
+        var simulation = NewStaffedHospital(Rules(), weakDoctor: true);
+        Run(simulation, new BuildRoomCommand(new RoomPlan("ward", Area, new DoorPlacement(new(5, Area.Y), EdgeOrientation.North))));
+        var bed = simulation.Content.FindObject("bed")!;
+
+        var snapped = ObjectPlacer.SnapToWall(simulation, bed, Area, new TilePosition(cursorX, cursorY), 0);
+
+        Assert.Equal((new TilePosition(x, y), orientation), snapped);
+        Assert.Equal(ObjectPlacementProblem.None, ObjectPlacer.Check(simulation, "bed", snapped.Tile, snapped.Orientation, 0));
+    }
+
     private const decimal DecimalMathLn2 = 0.6931471805599453m;
 
     /// <summary>Broken heart the only disease, hard to diagnose, so that the weak GP sends patients on to the ward.</summary>

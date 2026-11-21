@@ -449,6 +449,7 @@ strings:
       must_stand_inside: '방 안에 놓아야 함'
       blocked: '무언가가 가로막음'
       would_block_access: '통로를 막게 됨'
+      needs_wall: '머리 쪽이 벽에 붙어야 함'
     buy_objects:
       caption: '물건 사기'
     casebook:

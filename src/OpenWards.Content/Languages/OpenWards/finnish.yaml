@@ -485,6 +485,7 @@ strings:
       must_stand_inside: 'täytyy olla huoneen sisällä'
       blocked: 'jokin on tiellä'
       would_block_access: 'tukkisi kulun'
+      needs_wall: 'pääpään on oltava seinää vasten'
     buy_objects:
       caption: 'Osta esineitä'
     casebook:

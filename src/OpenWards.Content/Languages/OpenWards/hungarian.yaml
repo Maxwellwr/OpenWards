@@ -501,6 +501,7 @@ strings:
       must_stand_inside: 'a szobán belül kell állnia'
       blocked: 'valami útban van'
       would_block_access: 'elzárná az utat'
+      needs_wall: 'a fejrésznek falnál kell állnia'
     buy_objects:
       caption: 'Tárgyak vásárlása'
     casebook:

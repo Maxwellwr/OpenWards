@@ -328,6 +328,7 @@ strings:
       must_stand_inside: 'deve stare dentro la stanza'
       blocked: 'qualcosa è d''intralcio'
       would_block_access: 'bloccherebbe il passaggio'
+      needs_wall: 'la testiera deve stare contro un muro'
     buy_objects:
       caption: 'Compra oggetti'
     casebook:

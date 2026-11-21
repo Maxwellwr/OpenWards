@@ -1056,7 +1056,7 @@ internal sealed class BuildRoomTool
             return null;
         }
 
-        if (input.RightClicked || input.Rotate)
+        if ((input.RightClicked || input.Rotate) && !_placing.HeadAgainstWall)
         {
             // UIPlaceObjects:tryNextOrientation, on a right click or the rotate object key.
             PlaySound?.Invoke("swoosh.wav");
@@ -1064,6 +1064,12 @@ internal sealed class BuildRoomTool
         }
 
         FollowCursor(room, input.Hovered);
+        if (_placing.HeadAgainstWall && _ghostTile is { } cursor)
+        {
+            // The bed sticks to the nearest wall and turns to face it by itself, as in the original game.
+            (_ghostTile, _orientation) = ObjectPlacer.SnapToWall(simulation, _placing, room.Area, cursor, player);
+        }
+
         _placeProblem = _ghostTile is { } tile
             ? ObjectPlacer.Check(simulation, _placing.Id, tile, _orientation, player)
             : ObjectPlacementProblem.OutsideMap;
@@ -1260,6 +1266,7 @@ internal sealed class BuildRoomTool
             ObjectPlacementProblem.NotOwned => UiText.Get("openwards.build_tool.not_owned", "not your land"),
             ObjectPlacementProblem.Blocked => UiText.Get("openwards.build_tool.blocked", "something is in the way"),
             ObjectPlacementProblem.WouldBlockAccess => UiText.Get("openwards.build_tool.would_block_access", "would block access"),
+            ObjectPlacementProblem.NeedsWall => UiText.Get("openwards.build_tool.needs_wall", "must stand with its head against a wall"),
             _ => null,
         };
         return text is null ? string.Empty : $" ({text})";

@@ -408,6 +408,7 @@ strings:
       must_stand_inside: '部屋の中に置く必要があります'
       blocked: '何かがじゃまです'
       would_block_access: '通路をふさいでしまいます'
+      needs_wall: '頭側を壁につける必要があります'
     buy_objects:
       caption: '物品を買う'
     casebook:

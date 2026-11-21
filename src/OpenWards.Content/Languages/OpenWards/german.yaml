@@ -348,6 +348,7 @@ strings:
       must_stand_inside: muss im Raum stehen
       blocked: etwas ist im Weg
       would_block_access: würde den Zugang versperren
+      needs_wall: 'muss mit dem Kopfende an einer Wand stehen'
     buy_objects:
       caption: Gegenstände kaufen
     casebook:

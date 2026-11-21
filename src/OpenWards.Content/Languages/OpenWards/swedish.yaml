@@ -434,6 +434,7 @@ strings:
       must_stand_inside: 'måste stå inne i rummet'
       blocked: 'något är i vägen'
       would_block_access: 'skulle blockera vägen'
+      needs_wall: 'huvudänden måste stå mot en vägg'
     buy_objects:
       caption: 'Köp föremål'
     casebook:
