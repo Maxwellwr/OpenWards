@@ -391,9 +391,12 @@ internal sealed class Tutorial
     }
 
     /// <summary>The adviser's text for a phase (adviser.tutorial), with English stand-ins.</summary>
-    private string? Text(int chapter, int phase)
-    {
-        (int Index, string Fallback)? entry = (chapter, phase) switch
+    private string? Text(int chapter, int phase) =>
+        Entry(chapter, phase) is { } found ? _texts()?.String(11, found.Index) ?? found.Fallback : null;
+
+    /// <summary>The original's <c>S[11]</c> string a phase shows, and its English stand-in; null for a silent phase.</summary>
+    internal static (int Index, string Fallback)? Entry(int chapter, int phase) =>
+        (chapter, phase) switch
         {
             (1, 1) => (30, "First, your hospital needs a Reception Desk. Select one from the Corridor Equipment menu."),
             (1, 2) => (41, "Click Buy on the Reception Desk's line to get one."),
@@ -426,6 +429,4 @@ internal sealed class Tutorial
             (4, 5) => (60, "You can't put the Doctor there."),
             _ => null,
         };
-        return entry is { } found ? _texts()?.String(11, found.Index) ?? found.Fallback : null;
-    }
 }

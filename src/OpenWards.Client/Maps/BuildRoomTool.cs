@@ -706,7 +706,7 @@ internal sealed class BuildRoomTool
             // UIEditRoom:_enterDoorPhase: back to the walls with wrong2.wav and the adviser's warning.
             _problem = reachability;
             PlaySound?.Invoke("wrong2.wav");
-            Advise?.Invoke(UiText.Get("adviser.research.room_forbidden_non_reachable_parts", "Placing the room in this location would result in parts of the hospital not being reachable."));
+            Advise?.Invoke(UiText.Get("adviser.room_forbidden_non_reachable_parts", "Placing the room in this location would result in parts of the hospital not being reachable."));
         }
         else if (input.Confirm && _area is not null && _problem == RoomPlanProblem.None)
         {
@@ -1233,7 +1233,7 @@ internal sealed class BuildRoomTool
             RoomPlanProblem.DoorBlocked => UiText.Get("openwards.build_tool.door_blocked", "the door would open onto a blocked tile"),
             RoomPlanProblem.NoWindows => UiText.Get("openwards.build_tool.no_windows", "this room has no windows"),
             RoomPlanProblem.TooManyWindows => UiText.Get("openwards.build_tool.too_many_windows", "too many windows"),
-            RoomPlanProblem.BlocksOffParts => UiText.Get("adviser.research.room_forbidden_non_reachable_parts", "Placing the room in this location would result in parts of the hospital not being reachable."),
+            RoomPlanProblem.BlocksOffParts => UiText.Get("adviser.room_forbidden_non_reachable_parts", "Placing the room in this location would result in parts of the hospital not being reachable."),
             RoomPlanProblem.UnknownRoomType => UiText.Get("openwards.build_tool.unknown_room", "unknown room"),
             _ => null,
         };
