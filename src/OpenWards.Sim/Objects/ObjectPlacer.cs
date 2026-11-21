@@ -142,7 +142,7 @@ public static class ObjectPlacer
     /// <summary>
     /// Where an object that stands with its head against a wall (<see cref="ObjectDefinition.HeadAgainstWall"/>) goes
     /// with the cursor over <paramref name="cursor"/> in the room <paramref name="area"/>: as in the original game, the
-    /// bed sticks to the nearest wall, facing it, and cannot be turned. Along the wall it follows the cursor. When the
+    /// bed sticks to the nearest wall, facing it, and cannot be turned. Along the wall it follows the cursor, staying inside the room. When the
     /// nearest wall has no room for it, the next nearest one that does is taken; when none does, the nearest.
     /// </summary>
     public static (TilePosition Tile, Direction Orientation) SnapToWall(
@@ -157,12 +157,16 @@ public static class ObjectPlacer
                 continue;
             }
 
+            // Along the wall the object follows the cursor, but stops at the room's corners rather than sticking out.
+            var along = new TilePosition(
+                Math.Clamp(cursor.X, area.X - layout.Footprint.Min(p => p.X), Math.Max(area.X - layout.Footprint.Min(p => p.X), area.Right - 1 - layout.Footprint.Max(p => p.X))),
+                Math.Clamp(cursor.Y, area.Y - layout.Footprint.Min(p => p.Y), Math.Max(area.Y - layout.Footprint.Min(p => p.Y), area.Bottom - 1 - layout.Footprint.Max(p => p.Y))));
             candidates.Add(orientation switch
             {
-                Direction.North => (cursor.Y - area.Y, cursor with { Y = area.Y - solid.Min(p => p.Y) }, orientation),
-                Direction.South => (area.Bottom - 1 - cursor.Y, cursor with { Y = area.Bottom - 1 - solid.Max(p => p.Y) }, orientation),
-                Direction.West => (cursor.X - area.X, cursor with { X = area.X - solid.Min(p => p.X) }, orientation),
-                _ => (area.Right - 1 - cursor.X, cursor with { X = area.Right - 1 - solid.Max(p => p.X) }, orientation),
+                Direction.North => (cursor.Y - area.Y, along with { Y = area.Y - solid.Min(p => p.Y) }, orientation),
+                Direction.South => (area.Bottom - 1 - cursor.Y, along with { Y = area.Bottom - 1 - solid.Max(p => p.Y) }, orientation),
+                Direction.West => (cursor.X - area.X, along with { X = area.X - solid.Min(p => p.X) }, orientation),
+                _ => (area.Right - 1 - cursor.X, along with { X = area.Right - 1 - solid.Max(p => p.X) }, orientation),
             });
         }
 

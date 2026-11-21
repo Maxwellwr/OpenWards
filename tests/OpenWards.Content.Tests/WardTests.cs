@@ -122,6 +122,8 @@ public class WardTests
     [InlineData(8, 14, 9, 14, Direction.East)]
     [InlineData(3, 16, 3, 16, Direction.West)]
     [InlineData(5, 13, 3, 13, Direction.West)]
+    [InlineData(2, 19, 3, 19, Direction.South)]
+    [InlineData(9, 19, 9, 18, Direction.East)]
     public void TheBedSticksToTheNearestWall(int cursorX, int cursorY, int x, int y, Direction orientation)
     {
         var simulation = NewStaffedHospital(Rules(), weakDoctor: true);
