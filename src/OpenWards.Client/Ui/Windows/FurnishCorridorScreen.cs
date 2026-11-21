@@ -25,16 +25,59 @@ internal sealed class FurnishCorridorScreen(Func<IWindowHost, List<ObjectDefinit
     /// <summary>The corridor's objects in CorsixTH's order (corridor_object).</summary>
     public static readonly string[] Order = ["reception_desk", "bench", "drinks_machine", "extinguisher", "radiator", "bin", "plant"];
 
-    /// <summary>The objects' preview animations (build_preview_animation).</summary>
+    /// <summary>
+    /// Every object's preview animation (each objects/*.lua's build_preview_animation), shown for the hovered object
+    /// here and in a room's extras.
+    /// </summary>
     public static readonly IReadOnlyDictionary<string, int> Previews = new Dictionary<string, int>
     {
-        ["reception_desk"] = 5060,
+        ["analyser"] = 5092,
+        ["autopsy"] = 5102,
+        ["bed"] = 910,
         ["bench"] = 902,
-        ["drinks_machine"] = 906,
-        ["extinguisher"] = 912,
-        ["radiator"] = 914,
         ["bin"] = 5096,
+        ["blood_machine"] = 5094,
+        ["bookcase"] = 5104,
+        ["cabinet"] = 5054,
+        ["cardio"] = 918,
+        ["cast_remover"] = 5072,
+        ["chair"] = 5056,
+        ["comfortable_chair"] = 5110,
+        ["computer"] = 5090,
+        ["console"] = 922,
+        ["couch"] = 5064,
+        ["crash_trolley"] = 916,
+        ["desk"] = 900,
+        ["dna_fixer"] = 5070,
+        ["drinks_machine"] = 906,
+        ["electrolyser"] = 930,
+        ["extinguisher"] = 912,
+        ["hair_restorer"] = 5074,
+        ["inflator"] = 908,
+        ["jelly_moulder"] = 928,
+        ["lecture_chair"] = 5084,
+        ["loo"] = 5098,
+        ["operating_table"] = 5080,
+        ["pharmacy_cabinet"] = 5088,
         ["plant"] = 934,
+        ["pool_table"] = 5058,
+        ["projector"] = 5086,
+        ["radiation_shield"] = 922,
+        ["radiator"] = 914,
+        ["reception_desk"] = 5060,
+        ["scanner"] = 920,
+        ["screen"] = 926,
+        ["shower"] = 5100,
+        ["sink"] = 5082,
+        ["skeleton"] = 5108,
+        ["slicer"] = 932,
+        ["sofa"] = 5066,
+        ["surgeon_screen"] = 926,
+        ["tv"] = 5052,
+        ["ultrascanner"] = 5068,
+        ["video_game"] = 5106,
+        ["x_ray"] = 5076,
+        ["x_ray_viewer"] = 5078,
     };
 
     private static readonly Rectangle Cancel = new(9, 237, 129, 28);

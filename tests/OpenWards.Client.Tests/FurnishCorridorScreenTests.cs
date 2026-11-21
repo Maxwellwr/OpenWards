@@ -17,6 +17,13 @@ public sealed class FurnishCorridorScreenTests
     }
 
     [Fact]
+    public void EveryObjectHasAPreview()
+    {
+        var host = new WindowTestHost();
+        Assert.Empty(host.Simulation.Content.Objects.Select(o => o.Id).Where(id => !FurnishCorridorScreen.Previews.ContainsKey(id)));
+    }
+
+    [Fact]
     public void ConfirmedObjectsGoOnTheCursorOneAfterTheOther()
     {
         var host = new WindowTestHost();
