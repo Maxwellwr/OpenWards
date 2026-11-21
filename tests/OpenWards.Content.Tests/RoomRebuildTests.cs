@@ -87,6 +87,39 @@ public class RoomRebuildTests
         Assert.Null(hospital.Rebuild);
     }
 
+    [Fact]
+    public void TheExtraObjectsOfARoomTakenBackToItsBlueprintGoBackOnTheListToPlace()
+    {
+        var simulation = NewStaffedHospital(InflationTests.Rules());
+        var room = InflationTests.BuildInflation(simulation);
+        var hospital = simulation.Hospitals[0];
+        var area = room.Area;
+        EmptyForEditing(simulation, room);
+        Place(simulation, room, "plant");
+        Place(simulation, room, "plant");
+        Place(simulation, room, "bin");
+        Assert.Equal(4, simulation.Entities.OfType<RoomObject>().Count(o => o.RoomId == room.Id));
+
+        // edit_room.lua's removeRoom and objects_backup: the extras are sold, and remembered to be placed again.
+        Run(simulation, new ReturnToBlueprintCommand(room.Id));
+        Assert.Equal(["bin", "plant", "plant"], hospital.Rebuild!.ExtraObjects);
+        simulation = SaveAndLoad(simulation);
+        hospital = simulation.Hospitals[0];
+        Assert.Equal(["bin", "plant", "plant"], hospital.Rebuild!.ExtraObjects);
+
+        // Built again: each extra placed is bought again and comes off the list.
+        Run(simulation, new BuildRoomCommand(new RoomPlan("inflation", area, new DoorPlacement(new(area.X + 1, area.Y), EdgeOrientation.North))));
+        var rebuilt = Assert.Single(simulation.Entities.OfType<Room>(), r => r.RoomType == "inflation");
+        var balance = hospital.Balance;
+        Place(simulation, rebuilt, "plant");
+        Assert.Equal(balance - hospital.Research.ObjectCost(simulation.Rules, "plant"), hospital.Balance);
+        Assert.Equal(["bin", "plant"], hospital.Rebuild!.ExtraObjects);
+
+        // Taken back to the blueprint once more before the rest is placed: the extras not placed yet are kept too.
+        Run(simulation, new ReturnToBlueprintCommand(rebuilt.Id));
+        Assert.Equal(["bin", "plant", "plant"], hospital.Rebuild!.ExtraObjects.Order(StringComparer.Ordinal));
+    }
+
     private static void EmptyForEditing(Simulation simulation, Room room)
     {
         Run(simulation, new EditRoomCommand(room.Id));
@@ -98,7 +131,9 @@ public class RoomRebuildTests
         Assert.False(room.IsActive || room.IsClosing);
     }
 
-    private static void PlaceInflator(Simulation simulation, Room room)
+    private static void PlaceInflator(Simulation simulation, Room room) => Place(simulation, room, "inflator");
+
+    private static void Place(Simulation simulation, Room room, string type)
     {
         for (var y = room.Area.Bottom - 1; y >= room.Area.Y; y--)
         {
@@ -106,16 +141,16 @@ public class RoomRebuildTests
             {
                 foreach (var orientation in new[] { Direction.North, Direction.East })
                 {
-                    if (ObjectPlacer.Check(simulation, "inflator", new(x, y), orientation, 0) == ObjectPlacementProblem.None)
+                    if (ObjectPlacer.Check(simulation, type, new(x, y), orientation, 0) == ObjectPlacementProblem.None)
                     {
-                        Run(simulation, new PlaceObjectCommand("inflator", new(x, y), orientation));
+                        Run(simulation, new PlaceObjectCommand(type, new(x, y), orientation));
                         return;
                     }
                 }
             }
         }
 
-        Assert.Fail("Found no place for the inflator.");
+        Assert.Fail($"Found no place for {type}.");
     }
 
     private static Simulation SaveAndLoad(Simulation simulation)

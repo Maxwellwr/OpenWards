@@ -18,14 +18,17 @@ namespace OpenWards.Sim.Rooms;
 /// wear is kept for the machines placed again (the objects' saved <c>state</c>).
 /// </summary>
 /// <remarks>
-/// CorsixTH puts every object back on the list to place, buying them all again; here the room's needed objects are
-/// bought again when it is built, as for a new room, and extra objects are bought again from the edit panel.
+/// CorsixTH puts every object back on the list to place (<c>objects_backup</c>), buying them all again; here the room's
+/// needed objects are bought again when it is built, as for a new room, and the extra objects it had are remembered
+/// (<see cref="ExtraObjects"/>) and go back on the list to place, each bought again as it is placed.
 /// </remarks>
 public sealed class RoomRebuild
 {
     private const int MaxMachines = 1 << 10;
+    private const int MaxExtras = 1 << 12;
 
     private readonly List<(string ObjectType, int Strength, int TimesUsed, int TotalUsage)> _machines = [];
+    private readonly List<string> _extras = [];
 
     internal RoomRebuild(string roomType, TileRect area)
     {
@@ -38,6 +41,12 @@ public sealed class RoomRebuild
 
     /// <summary>Where the room stood.</summary>
     public TileRect Area { get; }
+
+    /// <summary>
+    /// The objects the room had beyond those it needs (bought from the edit panel), one entry per object, not placed again
+    /// yet: CorsixTH's <c>objects_backup</c> puts them back on the list to place when the room is built again.
+    /// </summary>
+    public IReadOnlyList<string> ExtraObjects => _extras;
 
     /// <summary>The room built again, still being furnished, or 0 while it is a blueprint.</summary>
     public int RoomId { get; internal set; }
@@ -61,14 +70,28 @@ public sealed class RoomRebuild
         {
             // Machines not placed again since the last time keep their wear.
             rebuild._machines.AddRange(earlier._machines);
+
+            // As are extra objects still on the list to place (removeRoom adds the placed ones to that list).
+            rebuild._extras.AddRange(earlier._extras);
         }
 
+        var counts = new SortedDictionary<string, int>(StringComparer.Ordinal);
         foreach (var placed in simulation.Entities.OfType<RoomObject>().Where(o => o.RoomId == room.Id && !o.IsDestroyed).ToList())
         {
+            counts[placed.ObjectType] = counts.GetValueOrDefault(placed.ObjectType) + 1;
             hospital.Receive(simulation.Hours, hospital.Research.ObjectCost(simulation.Rules, placed.ObjectType), TransactionKind.SellObject, placed.ObjectType);
             if (placed.Machine is { } machine)
             {
                 rebuild._machines.Add((placed.ObjectType, machine.Strength, machine.TimesUsed, machine.TotalUsage));
+            }
+        }
+
+        var needed = simulation.Content.FindRoom(room.RoomType)?.NeededObjects;
+        foreach (var (objectType, count) in counts)
+        {
+            for (var i = needed?.GetValueOrDefault(objectType) ?? 0; i < count; i++)
+            {
+                rebuild._extras.Add(objectType);
             }
         }
 
@@ -105,6 +128,16 @@ public sealed class RoomRebuild
             machine.Strength = saved.Strength;
             machine.TimesUsed = saved.TimesUsed;
             machine.TotalUsage = saved.TotalUsage;
+        }
+    }
+
+    /// <summary>An extra object placed in the room built again is one fewer of those it had to place again.</summary>
+    internal static void OnExtraPlaced(Simulation simulation, int roomId, string objectType, int player)
+    {
+        if (roomId != 0 && player >= 0 && player < simulation.Hospitals.Count
+            && simulation.Hospitals[player].Rebuild is { } rebuild && rebuild.RoomId == roomId)
+        {
+            rebuild._extras.Remove(objectType);
         }
     }
 
@@ -152,6 +185,12 @@ public sealed class RoomRebuild
             writer.WriteInt32(used);
             writer.WriteInt32(total);
         }
+
+        writer.WriteInt32(_extras.Count);
+        foreach (var type in _extras)
+        {
+            writer.WriteString(type);
+        }
     }
 
     internal static RoomRebuild Read(SimReader reader)
@@ -163,6 +202,13 @@ public sealed class RoomRebuild
         for (var i = 0; i < count; i++)
         {
             rebuild._machines.Add((reader.ReadString(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32()));
+        }
+
+        // Version 102 remembers the room's extra objects.
+        var extras = reader.Version is 0 or >= 102 ? reader.ReadCount(MaxExtras) : 0;
+        for (var i = 0; i < extras; i++)
+        {
+            rebuild._extras.Add(reader.ReadString());
         }
 
         return rebuild;

@@ -47,6 +47,62 @@ public class BuildRoomToolTests
     }
 
     [Fact]
+    public void ExtraObjectsComeBackWhenARoomTakenBackToItsWallsIsBuiltAgain()
+    {
+        // edit_room.lua: removeRoom keeps the objects (objects_backup) and _enterObjectsPhase adds them back to place.
+        var host = new WindowTestHost();
+        var simulation = host.Simulation;
+        var definition = simulation.Content.FindRoom("gp")!;
+        var area = new TileRect(4, 4, 5, 5);
+        host.Submit(new BuildRoomCommand(new RoomPlan("gp", area, new DoorPlacement(new(5, 4), EdgeOrientation.North))));
+        var room = Assert.Single(simulation.Entities.OfType<Room>());
+        foreach (var type in new[] { "desk", "cabinet", "plant", "plant" })
+        {
+            host.Submit(new PlaceObjectCommand(type, FreeSpot(simulation, room, type), Direction.North));
+        }
+
+        room.IsPaid = true;
+        Assert.Equal(2, simulation.Entities.OfType<RoomObject>().Count(o => o.RoomId == room.Id && o.ObjectType == "plant"));
+
+        // Esc to the door, Esc again to the walls, then the walls and door go up again.
+        var tool = new BuildRoomTool();
+        tool.StartEditing(definition, room.Id, simulation.Tick);
+        host.Submit(Assert.IsType<ReturnToBlueprintCommand>(tool.Update(simulation, 0, Back())));
+        host.Submit(Assert.IsType<UnmarkBlueprintCommand>(tool.Update(simulation, 0, Back())));
+        Assert.Equal(["plant", "plant"], simulation.Hospitals[0].Rebuild!.ExtraObjects);
+        var confirm = new BuildInput(new(6, 6), 128, 128, false, false, false, false, true, false, false);
+        for (var i = 0; i < 20 && tool.Ghost is null; i++)
+        {
+            var input = i == 0 ? confirm : Mouse(new(6, 4), pressed: true) with { FractionY = 0, Confirm = true };
+            if (tool.Update(simulation, 0, input) is { } command)
+            {
+                host.Submit(command);
+            }
+        }
+
+        var rebuilt = Assert.Single(simulation.Entities.OfType<Room>());
+        Assert.True(rebuilt.IsPaid);
+        Assert.Equal(2, tool.ExtrasToPlace("plant"));
+
+        // Each goes on the cursor in turn and is bought again as it is placed.
+        var placed = new List<string>();
+        for (var i = 0; i < 10 && tool.ExtrasToPlace("plant") > 0; i++)
+        {
+            tool.Update(simulation, 0, Mouse(new(6, 6)));
+            var ghost = tool.Ghost!.Value.ObjectType;
+            var spot = FreeSpot(simulation, rebuilt, ghost);
+            tool.Update(simulation, 0, Mouse(spot));
+            var command = Assert.IsType<PlaceObjectCommand>(tool.Update(simulation, 0, Mouse(spot, down: true, pressed: true)));
+            host.Submit(command);
+            placed.Add(command.ObjectType);
+        }
+
+        Assert.Equal(["plant", "plant"], placed);
+        Assert.Equal(2, simulation.Entities.OfType<RoomObject>().Count(o => o.RoomId == rebuilt.Id && o.ObjectType == "plant"));
+        Assert.Empty(simulation.Hospitals[0].Rebuild!.ExtraObjects);
+    }
+
+    [Fact]
     public void ARoomPickedForEditingWaitsWhileItEmpties()
     {
         var host = new WindowTestHost();

@@ -339,6 +339,27 @@ internal sealed class BuildRoomTool
         }
     }
 
+    /// <summary>
+    /// A room built again from its blueprint gets back the extra objects it had (CorsixTH's <c>_enterObjectsPhase</c>
+    /// adding <c>objects_backup</c>): they go on the list to place, and each is bought again as it is placed.
+    /// </summary>
+    private void AddRebuildExtras(Simulation simulation, int player, Room room)
+    {
+        if (player < 0 || player >= simulation.Hospitals.Count || simulation.Hospitals[player].Rebuild is not { } rebuild
+            || rebuild.RoomId != room.Id)
+        {
+            return;
+        }
+
+        foreach (var id in rebuild.ExtraObjects)
+        {
+            if (simulation.Content.FindObject(id) is { Orientations.Count: > 0 } definition && _room!.Allows(id))
+            {
+                _extras.Add(definition);
+            }
+        }
+    }
+
     /// <summary>The object on the cursor, or null.</summary>
     public string? PlacingId => _placing?.Id;
 
@@ -860,6 +881,11 @@ internal sealed class BuildRoomTool
             if (AverageContents && !_editing && _copyObjects.Count == 0)
             {
                 AddAverageExtras(simulation, player);
+            }
+
+            if (_editing)
+            {
+                AddRebuildExtras(simulation, player, room);
             }
 
             return null;
