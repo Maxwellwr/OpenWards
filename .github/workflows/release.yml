@@ -1,0 +1,58 @@
+name: Release
+
+# A tag v<version> builds the Windows package and opens a draft GitHub release with it, to be checked and published
+# by hand. Run by hand (workflow_dispatch), it only builds the package and keeps it as the run's artifact, for testing.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          $version = dotnet msbuild src/OpenWards.Client/OpenWards.Client.csproj -getProperty:VersionPrefix
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match VersionPrefix $version in Directory.Build.props."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - run: dotnet test --configuration Release -p:OpenWardsRelease=true
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          $name = "OpenWards-${{ steps.version.outputs.version }}-win-x64"
+          dotnet publish src/OpenWards.Client/OpenWards.Client.csproj --configuration Release --runtime win-x64 `
+            --self-contained -p:OpenWardsRelease=true -p:DebugType=none --output "out/$name"
+          Copy-Item README.md, LICENSE, THIRD-PARTY-NOTICES.md, CHANGELOG.md "out/$name"
+          Compress-Archive -Path "out/$name/*" -DestinationPath "out/$name.zip"
+          "PACKAGE=$name" >> $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE }}
+          path: out/${{ env.PACKAGE }}.zip
+
+      - name: Draft release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME "out/$env:PACKAGE.zip" --draft `
+            --title "OpenWards ${{ steps.version.outputs.version }}" --notes-file docs/release-notes.md
