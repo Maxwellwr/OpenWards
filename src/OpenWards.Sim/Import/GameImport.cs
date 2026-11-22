@@ -49,6 +49,12 @@ public sealed record ImportedPatient(string DiseaseId, TilePosition Tile, decima
 /// <param name="MoneyEarned">Money it brought in.</param>
 public sealed record ImportedCase(string DiseaseId, bool Discovered, int Effectiveness, int Recoveries, int Fatalities, int TurnedAway, long MoneyEarned);
 
+/// <summary>A computer opponent of an imported save.</summary>
+/// <param name="Name">Its name, which picks the level's opponent of that name.</param>
+/// <param name="Reputation">Its reputation.</param>
+/// <param name="Visitors">Its patients so far.</param>
+public sealed record ImportedCompetitor(string Name, int Reputation, int Visitors);
+
 /// <summary>
 /// The state of a hospital taken from a save of another game (the original Theme Hospital), to be rebuilt on a
 /// simulation started on the same level.
@@ -107,6 +113,9 @@ public sealed record ImportedGame
 
     /// <summary>Research shares in percent, by area; missing areas are left as they are.</summary>
     public IReadOnlyList<(Research.ResearchCategory Category, int Share)> ResearchShares { get; init; } = [];
+
+    /// <summary>The computer opponents, matched to the level's by name, else in order.</summary>
+    public IReadOnlyList<ImportedCompetitor> Competitors { get; init; } = [];
 
     /// <summary>Radiator heat in tenths, or null to keep the level's.</summary>
     public int? RadiatorHeat { get; init; }
@@ -261,7 +270,32 @@ public static class GameImport
             simulation.Arrivals.CatchUp(simulation);
         }
 
+        ImportCompetitors(simulation, game.Competitors);
         return new ImportReport(problems);
+    }
+
+    /// <summary>The save's opponents' reputations and patients for the level's opponents: by name, the rest in order.</summary>
+    private static void ImportCompetitors(Simulation simulation, IReadOnlyList<ImportedCompetitor> imported)
+    {
+        var left = simulation.Competitors.ToList();
+        var unmatched = new List<ImportedCompetitor>();
+        foreach (var competitor in imported)
+        {
+            var match = left.FirstOrDefault(c => string.Equals(c.Name, competitor.Name, StringComparison.OrdinalIgnoreCase));
+            if (match is null)
+            {
+                unmatched.Add(competitor);
+                continue;
+            }
+
+            match.Import(competitor.Reputation, competitor.Visitors);
+            left.Remove(match);
+        }
+
+        for (var i = 0; i < unmatched.Count && i < left.Count; i++)
+        {
+            left[i].Import(unmatched[i].Reputation, unmatched[i].Visitors);
+        }
     }
 
     /// <summary>Tiles an object takes up, so that small objects against the walls go before big ones in the middle.</summary>

@@ -399,9 +399,11 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   disease × `AllocIndRep`, times `Hospital:getDiseaseReputationPriceFactor`, 0.5 to 1.5). A patient sent to a
   hospital not yet open is lost. The level's computer opponents (`computer[n].Playing`, CorsixTH's
   `AIHospital`) are `Simulation.Competitors`: not on the map, they count the patients sent to them as
-  visitors (`CompetitorHospital`). Unlike CorsixTH's they have a reputation, a model since nothing describes
-  the original's: from `StartRep` it moves each month a sixth of the way to a standing drawn at the start
-  (−100 to +250 from `StartRep`, ±50 for easy/hard), ±20 at random; they charge the standard price. Each `Hospital` runs CorsixTH's opening
+  visitors (`CompetitorHospital`). Unlike CorsixTH's they have a reputation, a model fitted to the computer
+  hospitals of the original's saves since nothing describes it: from `StartRep` it moves each month half way
+  to StartRep + 250 in the first three months, then to a standing drawn at the start (0 to +275 from
+  `StartRep`, ±50 for easy/hard), ±10 at random; they charge the standard price. Importing a save of the
+  original takes their reputations and patients from its computer players' blocks (by name, else in order). Each `Hospital` runs CorsixTH's opening
   watch (`UIWatch` "initial_opening"), 13 segments of 385 hours, and opens an hour after it has run
   down, 5006 hours (about 100 days) into the game. `OpenHospitalCommand` opens it early, as the watch's button does; the client's O
   key stands in for that button and the date box shows the days left. `--demo` opens at once.

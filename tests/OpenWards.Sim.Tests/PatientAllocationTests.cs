@@ -174,14 +174,18 @@ public class PatientAllocationTests
             Assert.InRange(rival.Standing, 400 + CompetitorHospital.LowestStanding + CompetitorHospital.DifficultyStanding, 400 + CompetitorHospital.HighestStanding + CompetitorHospital.DifficultyStanding);
         }
 
+        // As in the original's saves of level 4: from 500 in January to about 700 in mid-March, then to its standing.
         var random = new SimRandom(7);
-        var opponent = new CompetitorHospital(1, "ORAC", reputation: 300, standing: 800);
-        for (var month = 0; month < 36; month++)
+        var opponent = new CompetitorHospital(1, "ORAC", reputation: 500, standing: 520);
+        opponent.OnEndMonth(1, random);
+        opponent.OnEndMonth(2, random);
+        Assert.InRange(opponent.Reputation, 650, 720);
+        for (var month = 3; month < 36; month++)
         {
-            opponent.OnEndMonth(random);
+            opponent.OnEndMonth(month, random);
         }
 
-        Assert.InRange(opponent.Reputation, 800 - (CompetitorHospital.MonthlyApproach * CompetitorHospital.MonthlyWobble), 800 + (CompetitorHospital.MonthlyApproach * CompetitorHospital.MonthlyWobble));
+        Assert.InRange(opponent.Reputation, 520 - (CompetitorHospital.MonthlyApproach * CompetitorHospital.MonthlyWobble), 520 + (CompetitorHospital.MonthlyApproach * CompetitorHospital.MonthlyWobble));
 
         // The month's end moves it in the game too, and a save keeps both.
         while (simulation.Date.MonthOfGame == 1)
@@ -193,9 +197,26 @@ public class PatientAllocationTests
         simulation.Save(stream);
         stream.Position = 0;
         var restored = Simulation.Load(stream);
-        Assert.Equal(simulation.Competitors.Select(c => (c.Reputation, c.Standing)), restored.Competitors.Select(c => (c.Reputation, c.Standing)));
+        Assert.Equal(simulation.Competitors.Select(c => (c.Reputation, c.Standing, c.StartReputation)), restored.Competitors.Select(c => (c.Reputation, c.Standing, c.StartReputation)));
         Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
         Assert.Equal(rules.Allocation, restored.Rules.Allocation);
+    }
+
+    [Fact]
+    public void AnImportedGameTakesTheOpponentsReputationsByName()
+    {
+        var rules = new LevelRules(0, [], [], competitors: [new PlannedCompetitor(4, "MULTIVAC"), new PlannedCompetitor(5, "HOLLY"), new PlannedCompetitor(6, "DEEP THOUGHT")]);
+        var simulation = NewSimulation(players: 1, rules);
+
+        // MAXWELL.H7, level 4 in September; the third has a name the level does not know, so takes the one left.
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 9,
+            Day = 25,
+            Competitors = [new ImportedCompetitor("HOLLY", 644, 151), new ImportedCompetitor("MULTIVAC", 516, 137), new ImportedCompetitor("ORAC", 742, 145)],
+        });
+
+        Assert.Equal([(516, 516, 137), (644, 644, 151), (742, 742, 145)], simulation.Competitors.Select(c => (c.Reputation, c.Standing, c.Visitors)));
     }
 
     /// <summary>One opponent, and patients by reputation from the start.</summary>

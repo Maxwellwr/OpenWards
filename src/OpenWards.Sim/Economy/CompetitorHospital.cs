@@ -22,31 +22,40 @@ public readonly record struct PlannedCompetitor(int Number, string Name);
 /// </summary>
 /// <remarks>
 /// How the original's computer players' reputations develop is not described anywhere, and their level settings are only
-/// whether they play and their names. So the reputation is a model: it starts at the level's <c>StartRep</c> like the
-/// players', and each month moves a sixth of the way towards a standing the opponent is drawn at the start, a little up
-/// or down at random. The standing is from 100 below to 250 above the start (the opponents build up their hospitals as
-/// the player does), 50 lower on easy and 50 higher on hard. They charge the standard price for everything, so their
-/// reputation for each disease is their reputation.
+/// whether they play and their names. So the reputation is a model, fitted to the computer hospitals of saves of the
+/// original (levels 2 and 4 on medium): all start at the level's <c>StartRep</c> like the player, and climb together by
+/// about 200 in the first two and a half months (693, 701 and 704 in mid-March on level 4); from then on each settles at a
+/// standing of its own, from the start's reputation to 275 above it (516 to 763 in September and December on level 4,
+/// 629 to 726 in July on level 2), and stays near it. Each month the reputation moves half of the way towards where it
+/// tends (250 above the start in the first three months, then the standing), a little up or down at random. The standing is 50 lower on easy and 50 higher on hard, where the saves do not
+/// tell. They charge the standard price for everything, so their reputation for each disease is their reputation.
+/// </remarks>
 /// </remarks>
 public sealed class CompetitorHospital
 {
     /// <summary>The longest name read back from a save.</summary>
     private const int MaxNameBytes = 64;
 
-    /// <summary>The lowest standing above or below the start's reputation.</summary>
-    public const int LowestStanding = -100;
+    /// <summary>The lowest standing above the start's reputation.</summary>
+    public const int LowestStanding = 0;
 
     /// <summary>The highest standing above the start's reputation.</summary>
-    public const int HighestStanding = 250;
+    public const int HighestStanding = 275;
+
+    /// <summary>Where the reputations tend in the first months, above the start's.</summary>
+    public const int EarlyStanding = 250;
+
+    /// <summary>The months of the game in which the reputations tend to <see cref="EarlyStanding"/>.</summary>
+    public const int EarlyMonths = 3;
 
     /// <summary>How much lower (easy) or higher (hard) the standing is than on medium.</summary>
     public const int DifficultyStanding = 50;
 
     /// <summary>The reputation moves this part of the way towards the standing each month.</summary>
-    public const int MonthlyApproach = 6;
+    public const int MonthlyApproach = 2;
 
     /// <summary>The most the reputation moves up or down at random each month.</summary>
-    public const int MonthlyWobble = 20;
+    public const int MonthlyWobble = 10;
 
     /// <param name="number">CorsixTH's competitor number (the level files' index plus one).</param>
     /// <param name="name">Its name.</param>
@@ -69,8 +78,11 @@ public sealed class CompetitorHospital
     /// <summary>Its reputation, from 0 to 1000; also its reputation for every disease.</summary>
     public int Reputation { get; internal set; }
 
-    /// <summary>The reputation it tends to, drawn at the start.</summary>
+    /// <summary>The reputation it tends to after the first months, drawn at the start.</summary>
     public int Standing { get; private set; }
+
+    /// <summary>The level's starting reputation, from which the reputations climb in the first months.</summary>
+    public int StartReputation { get; private set; } = Hospital.AverageReputation;
 
     /// <summary>Patients sent to it so far, whether they came or not (CorsixTH's <c>spawn_attempts</c>).</summary>
     public long SpawnAttempts { get; internal set; }
@@ -98,14 +110,31 @@ public sealed class CompetitorHospital
             Difficulty.Hard => DifficultyStanding,
             _ => 0,
         };
-        return new CompetitorHospital(planned.Number, planned.Name, rules.StartReputation, standing);
+        return new CompetitorHospital(planned.Number, planned.Name, rules.StartReputation, standing) { StartReputation = rules.StartReputation };
     }
 
-    /// <summary>At the end of each month the reputation moves towards the standing, and a little at random.</summary>
-    internal void OnEndMonth(SimRandom random)
+    /// <summary>
+    /// At the end of each month of the game (from 1) the reputation moves towards where it tends: in the first months to
+    /// <see cref="EarlyStanding"/> above the start, later to its standing; and a little at random.
+    /// </summary>
+    internal void OnEndMonth(int monthOfGame, SimRandom random)
     {
-        var change = ((Standing - Reputation) / MonthlyApproach) + random.NextInclusive(-MonthlyWobble, MonthlyWobble);
+        var target = monthOfGame <= EarlyMonths ? Math.Min(StartReputation + EarlyStanding, Hospital.MaxReputation) : Standing;
+        var change = ((target - Reputation) / MonthlyApproach) + random.NextInclusive(-MonthlyWobble, MonthlyWobble);
         Reputation = Math.Clamp(Reputation + change, Hospital.MinReputation, Hospital.MaxReputation);
+    }
+
+    /// <summary>
+    /// An opponent of an imported save of the original: its reputation and patients, the reputation also its standing
+    /// from now on.
+    /// </summary>
+    internal void Import(int reputation, int visitors)
+    {
+        Reputation = Math.Clamp(reputation, Hospital.MinReputation, Hospital.MaxReputation);
+        Standing = Reputation;
+        Visitors = Math.Max(0, visitors);
+        VisitorsThisYear = Visitors;
+        SpawnAttempts = Visitors;
     }
 
     /// <summary>The part of <c>Hospital:onEndYear</c> that concerns it.</summary>
@@ -120,6 +149,7 @@ public sealed class CompetitorHospital
         writer.WriteInt32(VisitorsThisYear);
         writer.WriteInt32(Reputation);
         writer.WriteInt32(Standing);
+        writer.WriteInt32(StartReputation);
     }
 
     /// <param name="reader">The save.</param>
@@ -136,8 +166,10 @@ public sealed class CompetitorHospital
         var withReputation = reader.Version is 0 or >= 103;
         var reputation = withReputation ? reader.ReadInt32() : startReputation;
         var standing = withReputation ? reader.ReadInt32() : startReputation;
+        var start = withReputation ? reader.ReadInt32() : startReputation;
         return new CompetitorHospital(number, name, reputation, standing)
         {
+            StartReputation = start,
             SpawnAttempts = spawnAttempts,
             Visitors = visitors,
             VisitorsThisYear = visitorsThisYear,

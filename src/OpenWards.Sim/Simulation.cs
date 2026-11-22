@@ -927,7 +927,7 @@ public sealed class Simulation
 
         foreach (var competitor in _competitors)
         {
-            competitor.OnEndMonth(Random);
+            competitor.OnEndMonth(date.MonthOfGame, Random);
             if (date.IsLastDayOfYear)
             {
                 competitor.OnEndYear();

@@ -55,6 +55,10 @@ public sealed class OriginalSaveImporterTests(ITestOutputHelper output)
             var saved = save.Hospitals[0];
             Assert.Equal(saved.Reputation, hospital.Reputation);
             Assert.Equal(saved.PeopleCured, hospital.Cured);
+
+            // The computer players' reputations go to the level's opponents.
+            var rivals = save.Hospitals.Where(h => h.Kind == 2).Select(h => h.Reputation).Order();
+            Assert.Equal(rivals.Take(simulation.Competitors.Count), simulation.Competitors.Select(c => c.Reputation).Order().Take(rivals.Count()));
             output.WriteLine($"   statement {hospital.Transactions.Count}, months {hospital.Statistics.Count}, discovered {hospital.Casebook.Values.Count(c => c.Discovered)}");
             if (hospital.Transactions.Count > 0)
             {
