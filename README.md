@@ -5,7 +5,21 @@ A reimplementation of Theme Hospital in C# / .NET, modelled on
 multiplayer and mod support as design goals. It needs the data files from an
 original copy of the game (CD, GOG or EA).
 
-Early development: see [ARCHITECTURE.md](ARCHITECTURE.md) for the design and roadmap.
+## Playing
+
+1. Download the newest `OpenWards-<version>-win-x64.zip` from
+   [Releases](https://github.com/Maxwellwr/OpenWards/releases) and unpack it into any folder.
+2. Run `OpenWards.exe`. It needs nothing else installed.
+3. OpenWards needs the data files of the original Theme Hospital, from GOG, the EA app or the CD. It looks for
+   them in the usual install folders; if it cannot find them it asks you to choose the folder that contains
+   `DATA`, `LEVELS` and `QDATA`, and remembers it. The game folder can also be passed as an argument, set in
+   `theme_hospital_install` in the settings, or given in the `OPENWARDS_TH_PATH` environment variable.
+
+Settings (`config.yaml`), saves and, if the game ever stops on an error, `crash.log` are in `%AppData%\OpenWards`.
+Known issues are listed in the [release notes](docs/release-notes.md); please report problems in
+[Issues](https://github.com/Maxwellwr/OpenWards/issues).
+
+The rest of this file is for developers. See [ARCHITECTURE.md](ARCHITECTURE.md) for the design.
 
 ## Building
 
@@ -25,8 +39,8 @@ checks common install folders. Set `OPENWARDS_TH_PATH` to point at a copy explic
 dotnet run --project src/OpenWards.Client
 ```
 
-Optionally pass the game folder as an argument. The client opens the map view on the
-first original level:
+Optionally pass the game folder as an argument. The keys below include development ones; with
+`--level` the client opens straight on a level:
 
 | Key | Action |
 |---|---|
@@ -129,3 +143,12 @@ number, and any desync the server detects.
 [MIT](LICENSE). Parts are ported from CorsixTH; see
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Theme Hospital is a trademark of Electronic Arts; OpenWards is not
 affiliated with or endorsed by EA or Bullfrog. Original game data is not included.
+
+## Making a release
+
+1. Set `VersionPrefix` in `Directory.Build.props` and update `CHANGELOG.md` and `docs/release-notes.md`.
+2. Push a tag `v<version>`. The Release workflow tests, builds the self-contained Windows package and opens a draft
+   GitHub release with it. Check the draft and publish it.
+
+Local builds are development builds (`<version>-dev`) and never look for updates. Running the Release workflow by
+hand builds the package as a run artifact without a release, for testing.

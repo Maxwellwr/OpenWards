@@ -4781,12 +4781,13 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
     private Task<UpdateInfo?>? _updateCheck;
 
     /// <summary>
-    /// Starts looking for a newer version on launch (<c>check_for_updates</c>), unless a script plays the game or the
-    /// project has no releases yet (<see cref="UpdateCheck.ReleasesPublished"/>); the update window opens once it is found.
+    /// Starts looking for a newer version on launch (<c>check_for_updates</c>), unless a script plays the game; a
+    /// development build (a "-dev" version) does not look (<see cref="UpdateCheck.FindAsync"/>). The update window opens
+    /// once it is found.
     /// </summary>
     private void StartUpdateCheck()
     {
-        if (UpdateCheck.ReleasesPublished && _config.CheckForUpdates && InputScript.Current is null && _updateCheck is null)
+        if (_config.CheckForUpdates && InputScript.Current is null && _updateCheck is null)
         {
             _updateCheck = UpdateCheck.FindAsync(UpdateCheck.CurrentVersion());
         }

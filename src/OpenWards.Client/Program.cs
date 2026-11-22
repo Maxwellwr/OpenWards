@@ -62,10 +62,20 @@ else if (!ThemeHospitalInstall.TryOpen(options.GamePath, out install, out var er
     return 1;
 }
 
+if (install is null && options.GamePath is null)
+{
+    // CorsixTH asks for the game's folder when it cannot find it (app.lua, UIDirectoryBrowser); before the game data
+    // is there the game has no fonts of its own, so the system's folder picker asks instead, and the choice is kept.
+    install = FirstRun.AskForInstall(config, configPath ?? GameConfig.DefaultPath());
+}
+
 if (install is null)
 {
-    Console.Error.WriteLine(
-        $"Theme Hospital data was not found. Pass the game folder as an argument or set {ThemeHospitalInstall.PathEnvironmentVariable}.");
+    NativeDialogs.ShowError(
+        "OpenWards",
+        "Theme Hospital data was not found.\n\nOpenWards needs the files of the original game (GOG, EA app or CD). "
+        + "Start OpenWards again and choose the folder that contains DATA, LEVELS and QDATA, pass that folder as an argument, "
+        + $"or set {ThemeHospitalInstall.PathEnvironmentVariable}.");
     return 1;
 }
 
@@ -191,8 +201,18 @@ if (options.ScriptPath is not null)
 }
 
 OpenWards.Client.Rendering.ScreenCanvas.Requested = config.UiScale;
-using var game = new OpenWardsGame($"OpenWards - {install.RootPath}", createScreen, config.Width, config.Height, config.Fullscreen);
-game.Run();
+CrashReport.Install();
+try
+{
+    using var game = new OpenWardsGame($"OpenWards - {install.RootPath}", createScreen, config.Width, config.Height, config.Fullscreen);
+    game.Run();
+}
+catch (Exception e) when (!System.Diagnostics.Debugger.IsAttached)
+{
+    CrashReport.Report(e);
+    return 1;
+}
+
 return 0;
 
 static (string Host, int Port) ParseAddress(string address, int defaultPort)
