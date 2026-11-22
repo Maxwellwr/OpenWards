@@ -258,6 +258,7 @@ public static class GameImport
         if (game.Month > 1 || game.Day > 1)
         {
             simulation.SkipToLastHour(new GameDate(1, game.Month, game.Day, 0));
+            simulation.Arrivals.CatchUp(simulation);
         }
 
         return new ImportReport(problems);

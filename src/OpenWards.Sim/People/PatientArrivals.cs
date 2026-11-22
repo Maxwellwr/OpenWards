@@ -192,7 +192,32 @@ public sealed class PatientArrivals
     /// <summary><c>World:onEndMonth</c>: the spawn rate changes by the level's setting for the month that ends.</summary>
     internal void OnEndMonth(Simulation simulation)
     {
-        var month = simulation.Date.MonthOfGame;
+        ChangeSpawnRate(simulation, simulation.Date.MonthOfGame);
+        PrepareSpawnDates(simulation, firstMonth: false);
+    }
+
+    /// <summary>
+    /// After the calendar jumped ahead of a level that has not run (a game imported from a save of the original), the
+    /// spawn rate becomes what the months skipped would have made it, and the current month's patients are spread
+    /// over its days. Otherwise the level would carry on with its first month's few patients a month.
+    /// </summary>
+    internal void CatchUp(Simulation simulation)
+    {
+        var population = simulation.Rules.Population;
+        SpawnRate = population.Count > 0 ? population[0].Change : 0;
+        MonthlyIncrease = SpawnRate;
+        var current = simulation.Date.MonthOfGame;
+        for (var month = 1; month < current; month++)
+        {
+            ChangeSpawnRate(simulation, month);
+        }
+
+        PrepareSpawnDates(simulation, firstMonth: true);
+    }
+
+    /// <summary>The spawn rate's change at the end of the given month of the game, as <c>World:onEndMonth</c>.</summary>
+    private void ChangeSpawnRate(Simulation simulation, int month)
+    {
         foreach (var entry in simulation.Rules.Population)
         {
             if (entry.Month == month - 1)
@@ -203,7 +228,6 @@ public sealed class PatientArrivals
         }
 
         SpawnRate += MonthlyIncrease;
-        PrepareSpawnDates(simulation, firstMonth: false);
     }
 
     /// <summary>Cheats:roujinOff: the month's patients still to come are called off.</summary>
