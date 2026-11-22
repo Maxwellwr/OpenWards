@@ -609,10 +609,17 @@ public sealed class Simulation
     /// <paramref name="next"/>, so that this tick ends the month or year. An emergency planned in the hours skipped is
     /// replanned (<c>World:wasEmergencySkipped</c>).
     /// </summary>
-    internal void SkipToLastHour(GameDate next)
+    internal void SkipToLastHour(GameDate next) => SkipToHour(next.ToHours() - 1);
+
+    /// <summary>
+    /// The calendar jumps to the first hour of <paramref name="date"/> without ending the day before it, for an imported
+    /// game: a save made on 1 January was made after its year end, which must not come again.
+    /// </summary>
+    internal void SkipTo(GameDate date) => SkipToHour(date.ToHours());
+
+    private void SkipToHour(long target)
     {
         var previous = Hours;
-        var target = next.ToHours() - 1;
         if (target <= previous)
         {
             return;
@@ -902,7 +909,6 @@ public sealed class Simulation
             hospital.PayHeating(Hours);
             hospital.PayInterest(Hours);
             hospital.PayResearch(Hours);
-            hospital.RaiseSalary(Rules.ScoreMaxIncrease);
             hospital.PayInsurance(Hours);
 
             // Hospital:onEndMonth: equipment the level brings this month.
@@ -911,6 +917,7 @@ public sealed class Simulation
             if (date.IsLastDayOfYear)
             {
                 hospital.OnEndYear(Hours, Random, Rules.Awards);
+                hospital.RaiseSalary(Random);
 
                 // Hospital:onEndYear: at the end of the third year of level 3 the salary rises a lot, as in the original.
                 if (date.Year == 3 && Rules.LevelNumber == 3)
@@ -927,7 +934,7 @@ public sealed class Simulation
 
         foreach (var competitor in _competitors)
         {
-            competitor.OnEndMonth(date.MonthOfGame, Random, Rules.ScoreMaxIncrease);
+            competitor.OnEndMonth(date.MonthOfGame, Random);
             if (date.IsLastDayOfYear)
             {
                 competitor.OnEndYear(Random);

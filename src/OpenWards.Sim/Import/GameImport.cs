@@ -78,7 +78,13 @@ public sealed record ImportedCompetitor(
 /// </summary>
 public sealed record ImportedGame
 {
-    /// <summary>Month of the game, from 1.</summary>
+    /// <summary>The player's own salary, or null to keep the level's.</summary>
+    public long? PlayerSalary { get; init; }
+
+    /// <summary>Year of the level, from 1.</summary>
+    public int Year { get; init; } = 1;
+
+    /// <summary>Month of the year, from 1.</summary>
     public int Month { get; init; } = 1;
 
     /// <summary>Day of the month, from 1.</summary>
@@ -112,6 +118,21 @@ public sealed record ImportedGame
     public int Cured { get; init; }
 
     public int Deaths { get; init; }
+
+    /// <summary>Patients this year, for the year's awards; null for all of them.</summary>
+    public int? VisitorsThisYear { get; init; }
+
+    /// <summary>Patients cured this year, for the year's awards; null for all of them.</summary>
+    public int? CuredThisYear { get; init; }
+
+    /// <summary>Patients who died this year, for the year's awards; null for all of them.</summary>
+    public int? DeathsThisYear { get; init; }
+
+    /// <summary>Patients who left uncured this year, for the year's awards; null for none.</summary>
+    public int? NotCuredThisYear { get; init; }
+
+    /// <summary>The lowest reputation this year, for the year's awards; null for today's.</summary>
+    public int? LowestReputationThisYear { get; init; }
 
     /// <summary>Reputation, or null to keep the level's.</summary>
     public int? Reputation { get; init; }
@@ -288,9 +309,20 @@ public static class GameImport
 
         hospital.ImportFinances(game.Balance, game.Loan);
         hospital.ImportRecords(game.Visitors, game.Cured, game.Deaths, game.Reputation ?? hospital.Reputation, game.Value ?? hospital.Value, game.Months, game.Statement);
-        if (game.Month > 1 || game.Day > 1)
+        hospital.ImportYear(
+            game.VisitorsThisYear ?? game.Visitors,
+            game.CuredThisYear ?? game.Cured,
+            game.DeathsThisYear ?? game.Deaths,
+            game.NotCuredThisYear ?? 0,
+            game.LowestReputationThisYear ?? hospital.Reputation);
+        if (game.PlayerSalary is > 0 and var salary)
         {
-            simulation.SkipToLastHour(new GameDate(1, game.Month, game.Day, 0));
+            hospital.PlayerSalary = salary;
+        }
+
+        if (game.Year > 1 || game.Month > 1 || game.Day > 1)
+        {
+            simulation.SkipTo(new GameDate(Math.Max(1, game.Year), game.Month, game.Day, 0));
             simulation.Arrivals.CatchUp(simulation);
         }
 

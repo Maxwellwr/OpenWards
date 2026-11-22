@@ -165,14 +165,34 @@ public static class OriginalSaveImporter
             shares.Add(((ResearchCategory)i, Math.Max(0, distribution[i])));
         }
 
+        // The graphs keep the last 12 month ends, the newest last: the one of last December is 11 - month from the start.
+        var yearStart = 11 - Math.Clamp(save.Month, 0, 11);
+        var curesAtYearStart = save.Chart(OriginalSaveChart.Cures)[yearStart];
+        var deathsAtYearStart = save.Chart(OriginalSaveChart.Deaths)[yearStart];
+        var visitorsThisYear = Math.Clamp(hospital.Visitors - hospital.VisitorsAtYearStart, 0, hospital.Visitors);
+        var curedThisYear = Math.Clamp(hospital.PeopleCured - curesAtYearStart, 0, hospital.PeopleCured);
+        var deathsThisYear = Math.Clamp(hospital.Deaths - deathsAtYearStart, 0, hospital.Deaths);
+
+        // The save does not count who left uncured: this year's patients neither cured, dead nor still in the hospital.
+        var notCuredThisYear = Math.Max(0, visitorsThisYear - curedThisYear - deathsThisYear - patients.Count);
+
+        // The lowest of the reputations at this year's month ends and today's.
+        var lowestReputation = save.Chart(OriginalSaveChart.Reputation).Skip(yearStart + 1).Where(r => r > 0).Append(hospital.Reputation).Min();
+
         return new ImportedGame
         {
             PlayerName = hospital.Name,
+            PlayerSalary = hospital.PlayerSalary,
             Staff = staff,
             Patients = patients,
             Visitors = hospital.Visitors,
             Cured = hospital.PeopleCured,
             Deaths = hospital.Deaths,
+            VisitorsThisYear = visitorsThisYear,
+            CuredThisYear = curedThisYear,
+            DeathsThisYear = deathsThisYear,
+            NotCuredThisYear = notCuredThisYear,
+            LowestReputationThisYear = lowestReputation,
             Reputation = hospital.Reputation,
             Value = hospital.Value,
 
@@ -195,6 +215,7 @@ public static class OriginalSaveImporter
             Statement = Statement(save, hospital.Money),
             Casebook = casebook,
             ResearchShares = shares,
+            Year = save.Year + 1,
             Month = save.Month + 1,
             Day = Math.Max(1, save.Day),
             Balance = hospital.Money,

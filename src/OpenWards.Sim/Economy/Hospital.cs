@@ -319,8 +319,13 @@ public sealed class Hospital
     private const int MaxCases = 256;
 
     /// <summary>The player's salary at the start of a level (<c>Hospital:Hospital</c>).</summary>
-    /// <summary>The player's salary at the start of a level.</summary>
     public const long StartPlayerSalary = 10_000;
+
+    /// <summary>The least a salary rises in percent at the end of a year.</summary>
+    public const int LowestRaisePercent = 4;
+
+    /// <summary>The most a salary rises in percent at the end of a year.</summary>
+    public const int HighestRaisePercent = 9;
 
     /// <summary>The longest name read back from a save.</summary>
     private const int MaxNameLength = 64;
@@ -606,7 +611,10 @@ public sealed class Hospital
     /// <summary>The fax code cheats switched on for the hospital (CorsixTH's <c>hosp_cheats.active_cheats</c>).</summary>
     public ToggleCheats ActiveCheats { get; internal set; }
 
-    /// <summary>The player's own salary, which rises month by month (CorsixTH's <c>player_salary</c>); it starts at 10,000.</summary>
+    /// <summary>
+    /// The player's own salary (CorsixTH's <c>player_salary</c>), the "Salary" of the year's charts and the score of the
+    /// Hall of Fame; it starts at 10,000 and rises at the end of each year (<see cref="RaiseSalary"/>).
+    /// </summary>
     public long PlayerSalary { get; internal set; } = StartPlayerSalary;
 
     /// <summary>
@@ -1297,23 +1305,31 @@ public sealed class Hospital
     }
 
     /// <summary>
-    /// <c>Hospital:onEndMonth</c>'s score: the player's salary rises each month by a tenth of <c>gbv.ScoreMaxInc</c> plus
-    /// the reputation above 500 per death (plus one), at least a sixth and at most all of <c>ScoreMaxInc</c>, rounded up.
+    /// The year end's raise, as in the original rather than CorsixTH (whose <c>Hospital:onEndMonth</c> raises the salary
+    /// each month by up to <c>gbv.ScoreMaxInc</c>): the salary stays the same all year and rises on 1 January by a whole
+    /// percentage, rounded down. Saves of the original show it: 69,935 from September to December and 74,131 (6 % more)
+    /// from 1 January to May; the computer players' 11,236 and 11,130 are 10,000 raised twice by 6 % and by 5 % and 6 %,
+    /// and became 12,247 (9 %), 11,910 (6 %) and 11,797 or 11,909 (6 % or 7 %). How the percentage is chosen is not known;
+    /// it is drawn from <see cref="LowestRaisePercent"/> to <see cref="HighestRaisePercent"/>, the range of CorsixTH's
+    /// bonus on winning a level.
     /// </summary>
-    internal void RaiseSalary(int scoreMaxIncrease)
-    {
-        var increase = (scoreMaxIncrease / 10m) + ((Reputation - 500) / (decimal)(Deaths + 1));
-        var minimum = scoreMaxIncrease / 6m;
-        if (increase < minimum)
-        {
-            increase = minimum;
-        }
-        else if (increase > scoreMaxIncrease)
-        {
-            increase = scoreMaxIncrease;
-        }
+    internal static long RaisedSalary(long salary, SimRandom random) =>
+        RaisedSalary(salary, random.NextInclusive(LowestRaisePercent, HighestRaisePercent));
 
-        PlayerSalary += (long)decimal.Ceiling(increase);
+    /// <summary>A salary raised by a whole percentage, rounded down.</summary>
+    internal static long RaisedSalary(long salary, int percent) => salary * (100 + percent) / 100;
+
+    /// <summary>The year end's raise of the player's salary (<see cref="RaisedSalary"/>).</summary>
+    internal void RaiseSalary(SimRandom random) => PlayerSalary = RaisedSalary(PlayerSalary, random);
+
+    /// <summary>The year's this-year counts of an imported game, which the year's awards go by.</summary>
+    internal void ImportYear(int visitors, int cured, int deaths, int notCured, int lowestReputation)
+    {
+        VisitorsThisYear = Math.Max(0, visitors);
+        CuredThisYear = Math.Max(0, cured);
+        DeathsThisYear = Math.Max(0, deaths);
+        NotCuredThisYear = Math.Max(0, notCured);
+        LowestReputationThisYear = Math.Clamp(lowestReputation, MinReputation, Reputation);
     }
 
     /// <summary>Lua's <c>math.round</c>, <c>floor(x + 0.5)</c>, of a part in percent.</summary>

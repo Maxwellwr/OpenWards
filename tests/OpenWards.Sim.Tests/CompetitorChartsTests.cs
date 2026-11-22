@@ -29,7 +29,7 @@ public class CompetitorChartsTests
     }
 
     [Fact]
-    public void AMonthPaysAnOpponentForItsCuresAndRaisesItsOwnersSalary()
+    public void AMonthPaysAnOpponentForItsCures()
     {
         var opponent = new CompetitorHospital(1, "HOLLY", reputation: 1000, standing: 700, balance: 50_000, tiles: 520);
         Assert.Equal(0, opponent.Value);
@@ -39,17 +39,16 @@ public class CompetitorChartsTests
             opponent.CountNewPatient();
         }
 
-        opponent.OnEndMonth(1, new SimRandom(3), scoreMaxIncrease: 300);
+        opponent.OnEndMonth(1, new SimRandom(3));
 
         Assert.Equal(50_000 + (20 * CompetitorHospital.CureIncome) - CompetitorHospital.MonthlyCosts, opponent.Balance);
-        Assert.Equal(Hospital.StartPlayerSalary + (20 * CompetitorHospital.SalaryPerCure), opponent.PlayerSalary);
         Assert.Equal((520 * CompetitorHospital.ValuePerTile) + (200 * CompetitorHospital.ValuePerStanding), opponent.Value);
         Assert.Equal(0, opponent.CuredThisMonth);
 
-        // A month without cures still raises the salary by a sixth of gbv.ScoreMaxInc, and costs its running costs.
-        opponent.OnEndMonth(2, new SimRandom(3), scoreMaxIncrease: 300);
-        Assert.Equal(Hospital.StartPlayerSalary + (20 * CompetitorHospital.SalaryPerCure) + 50, opponent.PlayerSalary);
+        // A month without cures costs its running costs. The salary stays the same all year.
+        opponent.OnEndMonth(2, new SimRandom(3));
         Assert.Equal(50_000 + (20 * CompetitorHospital.CureIncome) - (2 * CompetitorHospital.MonthlyCosts), opponent.Balance);
+        Assert.Equal(Hospital.StartPlayerSalary, opponent.PlayerSalary);
     }
 
     [Fact]
@@ -61,7 +60,7 @@ public class CompetitorChartsTests
         opponent.OnEndYear(new SimRandom(5));
 
         Assert.Equal(51_660 + CompetitorHospital.YearEndValueRise, opponent.Value);
-        Assert.InRange(opponent.PlayerSalary, 11_236 + (11_236 * CompetitorHospital.YearEndRaiseLowest / 100), 11_236 + (11_236 * CompetitorHospital.YearEndRaiseHighest / 100));
+        Assert.Contains(opponent.PlayerSalary, Enumerable.Range(Hospital.LowestRaisePercent, Hospital.HighestRaisePercent - Hospital.LowestRaisePercent + 1).Select(p => 11_236L * (100 + p) / 100));
         Assert.Equal(0, opponent.VisitorsThisYear);
     }
 
@@ -122,6 +121,37 @@ public class CompetitorChartsTests
 
         var opponent = simulation.Competitors[0];
         Assert.Equal((50_852L, 51_660L, 91, 5, 11_236L, 520, 169, 90), (opponent.Balance, opponent.Value, opponent.Cured, opponent.Deaths, opponent.PlayerSalary, opponent.Tiles, opponent.Visitors, opponent.VisitorsThisYear));
+    }
+
+    [Fact]
+    public void AnImportedGameTakesThePlayersNameSalaryYearAndThisYearsCounts()
+    {
+        var simulation = NewSimulation(new LevelRules(0, [], []));
+
+        // MAXWELL.H3: 25 December of the third year, 81 cured of whom 33 this year, 189 patients of whom 75 this year.
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            PlayerName = "MAXWELL",
+            PlayerSalary = 69_935,
+            Year = 3,
+            Month = 12,
+            Day = 25,
+            Visitors = 189,
+            Cured = 81,
+            VisitorsThisYear = 75,
+            CuredThisYear = 33,
+            DeathsThisYear = 0,
+        });
+
+        var hospital = simulation.Hospitals[0];
+        Assert.Equal((3, 12), (simulation.Date.Year, simulation.Date.Month));
+        Assert.Equal(("MAXWELL", 69_935L), (hospital.Name, hospital.PlayerSalary));
+        Assert.Equal((75, 33, 0), (hospital.VisitorsThisYear, hospital.CuredThisYear, hospital.DeathsThisYear));
+
+        using var stream = new MemoryStream();
+        simulation.Save(stream);
+        stream.Position = 0;
+        Assert.Equal("MAXWELL", Simulation.Load(stream).Hospitals[0].Name);
     }
 
     private static Simulation NewSimulation(LevelRules rules)
