@@ -1,5 +1,6 @@
 // Ported from CorsixTH CorsixTH/Lua/world.lua (calculateSpawnTiles, spawnPatient, _findClosestSpawnToDesk,
-// onEndMonth, _prepareSpawnDates, _prepareSpawnHours) and
+// onEndMonth, _prepareSpawnDates, _prepareSpawnHours, and chooseHospitalForPatient with the reputation-based choice it
+// has commented out), CorsixTH/Lua/hospital.lua (Hospital:getDiseaseReputationPriceFactor) and
 // CorsixTH/Lua/app.lua (math.p_random).
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
@@ -19,10 +20,11 @@ namespace OpenWards.Sim.People;
 /// to a hospital with a staffed reception desk, and enters the map at one of its spawn points.
 /// </summary>
 /// <remarks>
-/// As in CorsixTH, patients come once the first hospital has opened (the countdown at the start of a level), and go
-/// to the hospitals in turn (<c>World:chooseHospitalForPatient</c>): the players' hospitals, then the computer
-/// opponents' (<see cref="Simulation.Competitors"/>), which only count theirs. Unlike CorsixTH, whose other hospitals
-/// are computer players, a player's hospital that has not opened yet gets none: its turn passes as if it had no desk.
+/// As in CorsixTH, patients come once the first hospital has opened (the countdown at the start of a level). They are
+/// shared between the players' hospitals and the computer opponents' (<see cref="Simulation.Competitors"/>), which only
+/// count theirs, as the original game shares them (<see cref="ChooseHospital"/>): first in turn, then by reputation and
+/// price. Unlike CorsixTH, whose other hospitals are computer players, a player's hospital that has not opened yet gets
+/// none: a patient sent to it is lost as if it had no desk.
 /// </remarks>
 public sealed class PatientArrivals
 {
@@ -90,36 +92,138 @@ public sealed class PatientArrivals
         var count = _spawnHours[GameDate.FromHours(simulation.Hours + 1).Hour];
         for (var i = 0; i < count; i++)
         {
-            SpawnPatient(simulation, ChooseHospital(simulation));
+            if (simulation.Rules.Allocation.InTurnIn(simulation.Date.MonthOfGame))
+            {
+                SpawnPatient(simulation, ChooseHospital(simulation));
+            }
+            else
+            {
+                // As World:spawnPatient, the disease first, by the local player's hospital, then the hospital for it.
+                var disease = PatientCare.NewPatientDisease(simulation, simulation.Hospitals[0]);
+                SpawnPatient(simulation, ChooseHospital(simulation, disease), disease);
+            }
         }
     }
 
     /// <summary>
-    /// <c>World:chooseHospitalForPatient</c>, which CorsixTH has round-robin only: the hospitals take turns, by the
-    /// patients each was sent so far, whether they came or not.
+    /// <c>World:chooseHospitalForPatient</c> as the original game shares patients, which CorsixTH has commented out for want of
+    /// opponents' reputations: in the first months of the level (<see cref="PatientAllocationRules.Delay"/>) the hospitals take
+    /// turns, by the patients each was sent so far, whether they came or not. Then one patient in
+    /// <see cref="PatientAllocationRules.RandomChance"/> goes to a hospital at random, and the others to a hospital drawn
+    /// by how much it appeals (<see cref="Appeal"/>).
     /// </summary>
+    /// <param name="simulation">The game.</param>
+    /// <param name="disease">The new patient's disease, if any; for the hospitals' reputations for it and their prices.</param>
     /// <returns>A player's hospital, or past the players' a computer opponent's, counting from the first opponent.</returns>
-    internal static int ChooseHospital(Simulation simulation)
+    internal static int ChooseHospital(Simulation simulation, DiseaseDefinition? disease = null)
     {
-        long attempts = 0;
-        foreach (var hospital in simulation.Hospitals)
+        var hospitals = simulation.Hospitals.Count + simulation.Competitors.Count;
+        var allocation = simulation.Rules.Allocation;
+        if (allocation.InTurnIn(simulation.Date.MonthOfGame))
         {
-            attempts += hospital.SpawnAttempts;
+            long attempts = 0;
+            foreach (var hospital in simulation.Hospitals)
+            {
+                attempts += hospital.SpawnAttempts;
+            }
+
+            foreach (var competitor in simulation.Competitors)
+            {
+                attempts += competitor.SpawnAttempts;
+            }
+
+            return (int)(attempts % hospitals);
         }
 
-        foreach (var competitor in simulation.Competitors)
+        if (allocation.RandomChance > 0 && simulation.Random.Next(allocation.RandomChance) == 0)
         {
-            attempts += competitor.SpawnAttempts;
+            return simulation.Random.Next(hospitals);
         }
 
-        return (int)(attempts % (simulation.Hospitals.Count + simulation.Competitors.Count));
+        var appeals = new long[hospitals];
+        long total = 0;
+        for (var i = 0; i < hospitals; i++)
+        {
+            appeals[i] = Appeal(simulation, i, disease);
+            total += appeals[i];
+        }
+
+        if (total <= 0)
+        {
+            return simulation.Random.Next(hospitals);
+        }
+
+        // A number from 0 to the sum of the appeals, against each hospital's share of it in turn.
+        var threshold = NextLong(simulation.Random, total);
+        for (var i = 0; i < hospitals; i++)
+        {
+            threshold -= appeals[i];
+            if (threshold < 0)
+            {
+                return i;
+            }
+        }
+
+        return hospitals - 1;
+    }
+
+    /// <summary>
+    /// How much a hospital appeals to a new patient with the disease: its reputation times <c>gbv.AllocTotalRep</c> plus its
+    /// reputation for the disease times <c>gbv.AllocIndRep</c>, times what its price is worth for that reputation
+    /// (<c>Hospital:getDiseaseReputationPriceFactor</c>: the reputation for the disease / 500 / the price's share of the
+    /// standard price, from 0.5 to 1.5). A computer opponent charges the standard price, and its reputation is also its
+    /// reputation for every disease.
+    /// </summary>
+    /// <param name="simulation">The game.</param>
+    /// <param name="index">A player's hospital, or past the players' a computer opponent's.</param>
+    /// <param name="disease">The patient's disease, if any.</param>
+    public static long Appeal(Simulation simulation, int index, DiseaseDefinition? disease)
+    {
+        int reputation;
+        int diseaseReputation;
+        var pricePercent = DiseaseCase.StandardPrice;
+        if (index < simulation.Hospitals.Count)
+        {
+            var hospital = simulation.Hospitals[index];
+            reputation = hospital.Reputation;
+            diseaseReputation = reputation;
+            if (disease is not null)
+            {
+                // Peeking, so that choosing a hospital does not add to the casebook.
+                var entry = hospital.PeekCase(disease, simulation.Rules.Diseases);
+                diseaseReputation = entry.Reputation ?? reputation;
+                pricePercent = entry.PricePercent;
+            }
+        }
+        else
+        {
+            reputation = simulation.Competitors[index - simulation.Hospitals.Count].Reputation;
+            diseaseReputation = reputation;
+        }
+
+        var allocation = simulation.Rules.Allocation;
+        var priceFactor = Math.Clamp(diseaseReputation * (decimal)DiseaseCase.StandardPrice / (Hospital.AverageReputation * pricePercent), 0.5m, 1.5m);
+        return (long)(((long)allocation.TotalReputation * reputation + ((long)allocation.DiseaseReputation * diseaseReputation)) * priceFactor);
+    }
+
+    /// <summary>A number from 0 to below <paramref name="maxExclusive"/>, which may be beyond what an int holds.</summary>
+    private static long NextLong(SimRandom random, long maxExclusive)
+    {
+        return maxExclusive <= int.MaxValue
+            ? random.Next((int)maxExclusive)
+            : (long)((ulong)(((long)random.Next(int.MaxValue) << 31) | (uint)random.Next(int.MaxValue)) % (ulong)maxExclusive);
     }
 
     /// <summary>
     /// <c>World:spawnPatient</c>: a patient for the hospital, if it has a staffed reception desk, at a random
     /// spawn point, or for the hospital's first patient the one with the shortest way to a desk.
     /// </summary>
-    internal Humanoid? SpawnPatient(Simulation simulation, int player)
+    internal Humanoid? SpawnPatient(Simulation simulation, int player) => SpawnPatient(simulation, player, chosen: false, disease: null);
+
+    /// <summary><see cref="SpawnPatient(Simulation, int)"/> for a patient whose disease was chosen first.</summary>
+    internal Humanoid? SpawnPatient(Simulation simulation, int player, DiseaseDefinition? disease) => SpawnPatient(simulation, player, chosen: true, disease);
+
+    private Humanoid? SpawnPatient(Simulation simulation, int player, bool chosen, DiseaseDefinition? disease)
     {
         SpawnPointsOf(simulation.Map);
         if (player >= simulation.Hospitals.Count + simulation.Competitors.Count || _spawnPoints!.Count == 0)
@@ -131,14 +235,22 @@ public sealed class PatientArrivals
         {
             // An AIHospital has no reception desk, so World:spawnPatient only counts the patient. The disease is still
             // chosen first, by the local player's hospital as World:getNewPatientDisease does.
-            _ = PatientCare.NewPatientDisease(simulation, simulation.Hospitals[0]);
+            if (!chosen)
+            {
+                _ = PatientCare.NewPatientDisease(simulation, simulation.Hospitals[0]);
+            }
+
             simulation.Competitors[player - simulation.Hospitals.Count].CountNewPatient();
             return null;
         }
 
         // The disease is chosen first, even when no patient comes after all.
         var hospital = simulation.Hospitals[player];
-        var disease = PatientCare.NewPatientDisease(simulation, hospital);
+        if (!chosen)
+        {
+            disease = PatientCare.NewPatientDisease(simulation, hospital);
+        }
+
 
         // Counted even when no patient comes, as CorsixTH's spawn_attempts.
         hospital.SpawnAttempts++;

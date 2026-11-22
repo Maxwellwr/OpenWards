@@ -499,6 +499,17 @@ public class LevelRulesLoaderTests
     }
 
     [Fact]
+    public void ReadsHowPatientsAreShared()
+    {
+        var config = LevelConfig.Parse(Encoding.ASCII.GetBytes("#gbv.AllocDelay 5\n#gbv.AllocTotalRep 3\n#gbv.AllocIndRep 0\n#gbv.AllocRand 10\n"));
+
+        Assert.Equal(new PatientAllocationRules(5, 3, 0, 10), LevelRulesLoader.FromConfig(config, null, BaseGameContent.Create()).Allocation);
+
+        // base_config.lua: in turn for 3 months, then reputation 1, reputation for the disease 2, and one in 4 at random.
+        Assert.Equal(new PatientAllocationRules(3, 1, 2, 4), LevelRulesLoader.AllocationFromConfig(LevelConfig.Parse([])));
+    }
+
+    [Fact]
     public void ReadsTheSalaryScoreAndKeepsTheLevelNumber()
     {
         var config = LevelConfig.Parse(Encoding.ASCII.GetBytes("#gbv.ScoreMaxInc 250\n"));

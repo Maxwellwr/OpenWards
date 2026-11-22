@@ -70,10 +70,158 @@ public class PatientAllocationTests
             simulation.Step();
         }
 
-        // Once the hospital opened, the year's patients went to it and the opponents in turn.
+        // Once the hospital opened, the year's patients went to it and the opponents, first in turn, then by reputation.
         Assert.Equal([0, 0], simulation.Competitors.Select(c => c.VisitorsThisYear));
         Assert.All(simulation.Competitors, c => Assert.True(c.Visitors > 2));
     }
+
+    [Fact]
+    public void AfterTheFirstMonthsTheBetterReputationDrawsMorePatients()
+    {
+        var simulation = NewSimulation(players: 1, ByReputation(randomChance: 0));
+        var rival = simulation.Competitors[0];
+        rival.Reputation = Hospital.MaxReputation;
+
+        // 500 + 2 × 500 for the player; (1000 + 2 × 1000) × 1.5 for the opponent, whose reputation is worth its price.
+        Assert.Equal(1500, PatientArrivals.Appeal(simulation, 0, disease: null));
+        Assert.Equal(4500, PatientArrivals.Appeal(simulation, 1, disease: null));
+
+        var toPlayer = Enumerable.Range(0, 4000).Count(_ => PatientArrivals.ChooseHospital(simulation) == 0);
+        Assert.InRange(toPlayer, 900, 1100);
+
+        // The same reputations share them evenly.
+        rival.Reputation = simulation.Hospitals[0].Reputation;
+        toPlayer = Enumerable.Range(0, 4000).Count(_ => PatientArrivals.ChooseHospital(simulation) == 0);
+        Assert.InRange(toPlayer, 1900, 2100);
+    }
+
+    [Fact]
+    public void ADearTreatmentPutsPatientsOffAndACheapOneDrawsThem()
+    {
+        var simulation = NewSimulation(players: 1, ByReputation(randomChance: 0));
+        var hospital = simulation.Hospitals[0];
+        var rules = simulation.Rules.Diseases;
+        var disease = rules.AvailableDiseases().First(d => hospital.PeekCase(d, rules).Reputation is not null);
+
+        Assert.Equal(1500, PatientArrivals.Appeal(simulation, 0, disease));
+
+        // Hospital:getDiseaseReputationPriceFactor: reputation 500 at twice the price is worth half...
+        hospital.CaseOf(disease, rules).PricePercent = 200;
+        Assert.Equal(750, PatientArrivals.Appeal(simulation, 0, disease));
+
+        // ...and at a price of 50% as much as half again, no more.
+        hospital.CaseOf(disease, rules).PricePercent = 50;
+        Assert.Equal(2250, PatientArrivals.Appeal(simulation, 0, disease));
+
+        // Choosing a hospital only peeks at the casebook.
+        var other = rules.AvailableDiseases().First(d => !hospital.Casebook.ContainsKey(d.Id));
+        _ = PatientArrivals.Appeal(simulation, 0, other);
+        Assert.False(hospital.Casebook.ContainsKey(other.Id));
+    }
+
+    [Fact]
+    public void NowAndThenAPatientGoesToAHospitalAtRandom()
+    {
+        var simulation = NewSimulation(players: 1, ByReputation(randomChance: 0));
+        simulation.Hospitals[0].UnconditionalChangeReputation(-Hospital.MaxReputation);
+        Assert.Equal(0, simulation.Hospitals[0].Reputation);
+        Assert.DoesNotContain(0, Enumerable.Range(0, 200).Select(_ => PatientArrivals.ChooseHospital(simulation)));
+
+        // gbv.AllocRand 4: a quarter go at random, half of those to the player of two hospitals.
+        simulation = NewSimulation(players: 1, ByReputation(randomChance: 4));
+        simulation.Hospitals[0].UnconditionalChangeReputation(-Hospital.MaxReputation);
+        var toPlayer = Enumerable.Range(0, 4000).Count(_ => PatientArrivals.ChooseHospital(simulation) == 0);
+        Assert.InRange(toPlayer, 400, 600);
+    }
+
+    [Fact]
+    public void PatientsComeByReputationOnceTheDelayIsOver()
+    {
+        var rules = new LevelRules(0, [], [], competitors: [new PlannedCompetitor(13, "CORSIX")], allocation: new PatientAllocationRules(Delay: 1, 1, 2, 4));
+        var simulation = NewSimulation(players: 1, rules);
+        Assert.True(rules.Allocation.InTurnIn(simulation.Date.MonthOfGame));
+        Assert.False(rules.Allocation.InTurnIn(simulation.Date.MonthOfGame + 1));
+
+        // In the first month the hospitals take turns; then a much better opponent takes nearly all.
+        Assert.Equal([0, 1, 0], Enumerable.Range(0, 3).Select(_ => Send(simulation)));
+        while (simulation.Date.MonthOfGame == 1)
+        {
+            simulation.Step();
+        }
+
+        simulation.Hospitals[0].UnconditionalChangeReputation(-Hospital.MaxReputation);
+        var before = simulation.Competitors[0].Visitors;
+        var toPlayer = Enumerable.Range(0, 400).Count(_ => Send(simulation) == 0);
+        Assert.InRange(toPlayer, 20, 80);
+        Assert.Equal(400 - toPlayer, simulation.Competitors[0].Visitors - before);
+
+        int Send(Simulation game)
+        {
+            var hospital = PatientArrivals.ChooseHospital(game);
+            game.Arrivals.SpawnPatient(game, hospital);
+            return hospital;
+        }
+    }
+
+    [Fact]
+    public void AnOpponentsReputationMovesTowardsItsStandingAndIsSaved()
+    {
+        var rules = new LevelRules(0, [], [], startReputation: 400, competitors: [new PlannedCompetitor(13, "CORSIX"), new PlannedCompetitor(14, "ROUJIN")], difficulty: Difficulty.Hard);
+        var simulation = NewSimulation(players: 1, rules);
+        foreach (var rival in simulation.Competitors)
+        {
+            Assert.Equal(400, rival.Reputation);
+            Assert.InRange(rival.Standing, 400 + CompetitorHospital.LowestStanding + CompetitorHospital.DifficultyStanding, 400 + CompetitorHospital.HighestStanding + CompetitorHospital.DifficultyStanding);
+        }
+
+        // As in the original's saves of level 4: from 500 in January to about 700 in mid-March, then to its standing.
+        var random = new SimRandom(7);
+        var opponent = new CompetitorHospital(1, "ORAC", reputation: 500, standing: 520);
+        opponent.OnEndMonth(1, random);
+        opponent.OnEndMonth(2, random);
+        Assert.InRange(opponent.Reputation, 650, 720);
+        for (var month = 3; month < 36; month++)
+        {
+            opponent.OnEndMonth(month, random);
+        }
+
+        Assert.InRange(opponent.Reputation, 520 - (CompetitorHospital.MonthlyApproach * CompetitorHospital.MonthlyWobble), 520 + (CompetitorHospital.MonthlyApproach * CompetitorHospital.MonthlyWobble));
+
+        // The month's end moves it in the game too, and a save keeps both.
+        while (simulation.Date.MonthOfGame == 1)
+        {
+            simulation.Step();
+        }
+
+        using var stream = new MemoryStream();
+        simulation.Save(stream);
+        stream.Position = 0;
+        var restored = Simulation.Load(stream);
+        Assert.Equal(simulation.Competitors.Select(c => (c.Reputation, c.Standing, c.StartReputation)), restored.Competitors.Select(c => (c.Reputation, c.Standing, c.StartReputation)));
+        Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
+        Assert.Equal(rules.Allocation, restored.Rules.Allocation);
+    }
+
+    [Fact]
+    public void AnImportedGameTakesTheOpponentsReputationsByName()
+    {
+        var rules = new LevelRules(0, [], [], competitors: [new PlannedCompetitor(4, "MULTIVAC"), new PlannedCompetitor(5, "HOLLY"), new PlannedCompetitor(6, "DEEP THOUGHT")]);
+        var simulation = NewSimulation(players: 1, rules);
+
+        // MAXWELL.H7, level 4 in September; the third has a name the level does not know, so takes the one left.
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 9,
+            Day = 25,
+            Competitors = [new ImportedCompetitor("HOLLY", 644, 151), new ImportedCompetitor("MULTIVAC", 516, 137), new ImportedCompetitor("ORAC", 742, 145)],
+        });
+
+        Assert.Equal([(516, 516, 137), (644, 644, 151), (742, 742, 145)], simulation.Competitors.Select(c => (c.Reputation, c.Standing, c.Visitors)));
+    }
+
+    /// <summary>One opponent, and patients by reputation from the start.</summary>
+    private static LevelRules ByReputation(int randomChance) =>
+        new(0, [], [], competitors: [new PlannedCompetitor(13, "CORSIX")], allocation: new PatientAllocationRules(Delay: 0, 1, 2, randomChance));
 
     [Theory]
     [InlineData(9, 15)]
