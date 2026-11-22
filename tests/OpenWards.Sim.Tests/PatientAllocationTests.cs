@@ -1,4 +1,6 @@
+using OpenWards.Sim.Calendar;
 using OpenWards.Sim.Economy;
+using OpenWards.Sim.Import;
 using OpenWards.Sim.Maps;
 using OpenWards.Sim.People;
 
@@ -199,6 +201,30 @@ public class PatientAllocationTests
     /// <summary>One opponent, and patients by reputation from the start.</summary>
     private static LevelRules ByReputation(int randomChance) =>
         new(0, [], [], competitors: [new PlannedCompetitor(13, "CORSIX")], allocation: new PatientAllocationRules(Delay: 0, 1, 2, randomChance));
+
+    [Theory]
+    [InlineData(9, 15)]
+    [InlineData(9, 1)]
+    [InlineData(3, 10)]
+    public void ImportedGameGetsTheSpawnRateOfTheMonthsSkipped(int month, int day)
+    {
+        // Played from the start: the calendar runs up to the last hour before the imported date.
+        var played = NewSimulation(players: 1);
+        var target = new GameDate(1, month, day, 0).ToHours() - 1;
+        while (played.Hours < target)
+        {
+            played.Step();
+        }
+
+        var imported = NewSimulation(players: 1);
+        GameImport.Apply(imported, new ImportedGame { Month = month, Day = day });
+
+        Assert.Equal(played.Date, imported.Date);
+        Assert.Equal((played.Arrivals.SpawnRate, played.Arrivals.MonthlyIncrease), (imported.Arrivals.SpawnRate, imported.Arrivals.MonthlyIncrease));
+
+        // The month's patients are spread over its days, not left to the level's first month.
+        Assert.True(imported.Arrivals.SpawnDates.Sum() > played.Rules.Population[0].Change);
+    }
 
     private static Simulation NewSimulation(int players, LevelRules? rules = null)
     {
