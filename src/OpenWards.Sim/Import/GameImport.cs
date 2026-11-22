@@ -249,7 +249,12 @@ public static class GameImport
             {
                 var book = hospital.CaseOf(disease, simulation.Rules.Diseases);
                 book.Discovered |= entry.Discovered;
-                book.CureEffectiveness = Math.Clamp(entry.Effectiveness, 0, DiseaseCase.FullEffectiveness);
+                if (Research.ResearchDepartment.IsDrugDisease(disease))
+                {
+                    // The original keeps 0 here for diseases not cured by drugs, which are always fully effective.
+                    book.CureEffectiveness = Math.Clamp(entry.Effectiveness, 0, DiseaseCase.FullEffectiveness);
+                }
+
                 book.Recoveries = entry.Recoveries;
                 book.Fatalities = entry.Fatalities;
                 book.TurnedAway = entry.TurnedAway;
