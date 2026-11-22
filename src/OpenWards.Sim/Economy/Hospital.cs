@@ -319,7 +319,8 @@ public sealed class Hospital
     private const int MaxCases = 256;
 
     /// <summary>The player's salary at the start of a level (<c>Hospital:Hospital</c>).</summary>
-    private const long StartPlayerSalary = 10_000;
+    /// <summary>The player's salary at the start of a level.</summary>
+    public const long StartPlayerSalary = 10_000;
 
     /// <summary>The most rat holes read back from a save.</summary>
     private const int MaxRatholes = 1 << 16;

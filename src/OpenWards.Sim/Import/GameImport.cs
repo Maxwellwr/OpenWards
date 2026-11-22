@@ -53,7 +53,24 @@ public sealed record ImportedCase(string DiseaseId, bool Discovered, int Effecti
 /// <param name="Name">Its name, which picks the level's opponent of that name.</param>
 /// <param name="Reputation">Its reputation.</param>
 /// <param name="Visitors">Its patients so far.</param>
-public sealed record ImportedCompetitor(string Name, int Reputation, int Visitors);
+/// <param name="VisitorsThisYear">Its patients this year, if known; else all of them.</param>
+/// <param name="Money">Its money less its loan, if known.</param>
+/// <param name="Value">Its value, if known.</param>
+/// <param name="Cured">Its patients cured so far, if known.</param>
+/// <param name="Deaths">Its patients who died so far, if known.</param>
+/// <param name="Salary">Its owner's salary, if known.</param>
+/// <param name="Tiles">The tiles of its plot, if known.</param>
+public sealed record ImportedCompetitor(
+    string Name,
+    int Reputation,
+    int Visitors,
+    int? VisitorsThisYear = null,
+    long? Money = null,
+    long? Value = null,
+    int? Cured = null,
+    int? Deaths = null,
+    long? Salary = null,
+    int? Tiles = null);
 
 /// <summary>
 /// The state of a hospital taken from a save of another game (the original Theme Hospital), to be rebuilt on a
@@ -274,7 +291,7 @@ public static class GameImport
         return new ImportReport(problems);
     }
 
-    /// <summary>The save's opponents' reputations and patients for the level's opponents: by name, the rest in order.</summary>
+    /// <summary>The save's opponents (reputations, patients and the year's charts) for the level's opponents: by name, the rest in order.</summary>
     private static void ImportCompetitors(Simulation simulation, IReadOnlyList<ImportedCompetitor> imported)
     {
         var left = simulation.Competitors.ToList();
@@ -288,13 +305,13 @@ public static class GameImport
                 continue;
             }
 
-            match.Import(competitor.Reputation, competitor.Visitors);
+            match.Import(competitor);
             left.Remove(match);
         }
 
         for (var i = 0; i < unmatched.Count && i < left.Count; i++)
         {
-            left[i].Import(unmatched[i].Reputation, unmatched[i].Visitors);
+            left[i].Import(unmatched[i]);
         }
     }
 

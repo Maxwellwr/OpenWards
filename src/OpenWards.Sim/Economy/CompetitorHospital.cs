@@ -2,6 +2,7 @@
 // (World:World, World:spawnPatient) and CorsixTH/Lua/hospital.lua (Hospital:countNewPatient) that concern it.
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
+using OpenWards.Sim.Import;
 using OpenWards.Sim.Serialization;
 
 namespace OpenWards.Sim.Economy;
@@ -29,7 +30,17 @@ public readonly record struct PlannedCompetitor(int Number, string Name);
 /// 629 to 726 in July on level 2), and stays near it. Each month the reputation moves half of the way towards where it
 /// tends (250 above the start in the first three months, then the standing), a little up or down at random. The standing is 50 lower on easy and 50 higher on hard, where the saves do not
 /// tell. They charge the standard price for everything, so their reputation for each disease is their reputation.
-/// </remarks>
+/// <para>
+/// The year's charts (the annual report) rank them with the players by money, salary, cures, deaths, visitors and value,
+/// which the same saves hold for them too; how those develop is a model as well. Of the patients sent to an opponent a
+/// share is cured and a share dies at once, by its reputation: 54 % cured and 3 % dead at 532, 74 % and none at 763 on
+/// level 4, 75 % to 79 % on level 2. Its money starts at the level's and each month earns $400 per patient cured less
+/// $4,000 of running costs (from $50,000 to $72,000 to $126,000 by mid-March and $24,000 to $51,000 by December on
+/// level 4). Its value is $100 per tile of the plot the players start on (all the opponents have one that size) plus $10
+/// per point of its standing above the start: $51,660 to $55,660 on level 4 with 520 tiles. Its owner's salary starts
+/// at $10,000 like the player's and each month rises by $12 per patient cured, between a sixth and all of
+/// <c>gbv.ScoreMaxInc</c>: $11,130 to $11,236 by December on level 4.
+/// </para>
 /// </remarks>
 public sealed class CompetitorHospital
 {
@@ -57,16 +68,61 @@ public sealed class CompetitorHospital
     /// <summary>The most the reputation moves up or down at random each month.</summary>
     public const int MonthlyWobble = 10;
 
+    /// <summary>Patients cured in a thousand, beside <see cref="CurePerReputation"/> per point of reputation.</summary>
+    public const int CureBase = 100;
+
+    /// <summary>Patients cured in a thousand per point of reputation, over <see cref="CureDivisor"/>.</summary>
+    public const int CurePerReputation = 4;
+
+    /// <summary>The divisor of <see cref="CurePerReputation"/>.</summary>
+    public const int CureDivisor = 5;
+
+    /// <summary>At this reputation and above no patient dies.</summary>
+    public const int DeathlessReputation = 750;
+
+    /// <summary>Patients dying in a thousand: the reputation below <see cref="DeathlessReputation"/> over this.</summary>
+    public const int DeathDivisor = 6;
+
+    /// <summary>What a patient cured earns.</summary>
+    public const int CureIncome = 400;
+
+    /// <summary>The running costs of a month.</summary>
+    public const int MonthlyCosts = 4000;
+
+    /// <summary>The value of a tile of its plot.</summary>
+    public const int ValuePerTile = 100;
+
+    /// <summary>The value of a point of standing above the start's reputation.</summary>
+    public const int ValuePerStanding = 10;
+
+    /// <summary>The value moves this part of the way towards where it tends each month.</summary>
+    public const int MonthlyValueApproach = 12;
+
+    /// <summary>How much the owner's salary rises in a month per patient cured.</summary>
+    public const int SalaryPerCure = 12;
+
+    /// <summary>The owner's salary at the start, as the player's.</summary>
+    public const long StartSalary = Hospital.StartPlayerSalary;
+
+    /// <summary>The share of a patient cured or dead carried over to the next, in thousandths.</summary>
+    private int _cureCredit;
+
+    private int _deathCredit;
+
     /// <param name="number">CorsixTH's competitor number (the level files' index plus one).</param>
     /// <param name="name">Its name.</param>
     /// <param name="reputation">Its reputation at the start.</param>
     /// <param name="standing">The reputation it tends to.</param>
-    public CompetitorHospital(int number, string name, int reputation = Hospital.AverageReputation, int standing = Hospital.AverageReputation)
+    /// <param name="balance">Its money at the start.</param>
+    /// <param name="tiles">The tiles of its plot, as big as the one the players start on.</param>
+    public CompetitorHospital(int number, string name, int reputation = Hospital.AverageReputation, int standing = Hospital.AverageReputation, long balance = 0, int tiles = 0)
     {
         Number = number;
         Name = name;
         Reputation = Math.Clamp(reputation, Hospital.MinReputation, Hospital.MaxReputation);
         Standing = Math.Clamp(standing, Hospital.MinReputation, Hospital.MaxReputation);
+        Balance = balance;
+        Tiles = Math.Max(0, tiles);
     }
 
     /// <summary>CorsixTH's competitor number (the level files' index plus one).</summary>
@@ -93,16 +149,67 @@ public sealed class CompetitorHospital
     /// <summary>Patients this year (<c>num_visitors_ty</c>), reset at the end of each year.</summary>
     public int VisitorsThisYear { get; internal set; }
 
-    /// <summary><c>Hospital:countNewPatient</c>: a patient sent to it, counted as a visitor.</summary>
+    /// <summary>Its money; it never borrows.</summary>
+    public long Balance { get; private set; }
+
+    /// <summary>Its value, 0 until the end of the first month as in the original's saves.</summary>
+    public long Value { get; private set; }
+
+    /// <summary>Patients cured so far.</summary>
+    public int Cured { get; private set; }
+
+    /// <summary>Patients who died so far.</summary>
+    public int Deaths { get; private set; }
+
+    /// <summary>Patients cured this month, for its money and its owner's salary.</summary>
+    public int CuredThisMonth { get; private set; }
+
+    /// <summary>Its owner's salary, the "Salary" of the year's charts.</summary>
+    public long PlayerSalary { get; private set; } = StartSalary;
+
+    /// <summary>The tiles of its plot.</summary>
+    public int Tiles { get; private set; }
+
+    /// <summary>Patients cured in a thousand at its reputation.</summary>
+    public int CurePermille => Math.Clamp(CureBase + (Reputation * CurePerReputation / CureDivisor), 0, 1000);
+
+    /// <summary>Patients dying in a thousand at its reputation.</summary>
+    public int DeathPermille => Math.Clamp((DeathlessReputation - Reputation) / DeathDivisor, 0, 1000 - CurePermille);
+
+    /// <summary>The value it tends to.</summary>
+    public long TargetValue => ((long)Tiles * ValuePerTile) + ((long)Math.Max(0, Standing - StartReputation) * ValuePerStanding);
+
+    /// <summary>
+    /// <c>Hospital:countNewPatient</c>: a patient sent to it, counted as a visitor; and cured, dead or sent home at once,
+    /// so that over the patients the shares are those of its reputation (no random draw, so the game's run of random
+    /// numbers stays as it was).
+    /// </summary>
     internal void CountNewPatient()
     {
         SpawnAttempts++;
         Visitors++;
         VisitorsThisYear++;
+        _cureCredit += CurePermille;
+        _deathCredit += DeathPermille;
+        if (_cureCredit >= 1000)
+        {
+            _cureCredit -= 1000;
+            Cured++;
+            CuredThisMonth++;
+        }
+        else if (_deathCredit >= 1000)
+        {
+            _deathCredit -= 1000;
+            Deaths++;
+        }
     }
 
     /// <summary>A new opponent with the level's starting reputation and a standing drawn for it.</summary>
-    internal static CompetitorHospital Create(PlannedCompetitor planned, LevelRules rules, SimRandom random)
+    /// <param name="planned">The level's opponent.</param>
+    /// <param name="rules">The level's settings.</param>
+    /// <param name="random">The game's random numbers.</param>
+    /// <param name="tiles">The tiles of the plot the players start on.</param>
+    internal static CompetitorHospital Create(PlannedCompetitor planned, LevelRules rules, SimRandom random, int tiles)
     {
         var standing = rules.StartReputation + random.NextInclusive(LowestStanding, HighestStanding) + rules.Difficulty switch
         {
@@ -110,31 +217,51 @@ public sealed class CompetitorHospital
             Difficulty.Hard => DifficultyStanding,
             _ => 0,
         };
-        return new CompetitorHospital(planned.Number, planned.Name, rules.StartReputation, standing) { StartReputation = rules.StartReputation };
+        return new CompetitorHospital(planned.Number, planned.Name, rules.StartReputation, standing, rules.StartCash, tiles) { StartReputation = rules.StartReputation };
     }
 
     /// <summary>
     /// At the end of each month of the game (from 1) the reputation moves towards where it tends: in the first months to
-    /// <see cref="EarlyStanding"/> above the start, later to its standing; and a little at random.
+    /// <see cref="EarlyStanding"/> above the start, later to its standing; and a little at random. It is paid for the
+    /// month's cures and pays its running costs, its value is set (or moves towards where it tends) and its owner's
+    /// salary rises.
     /// </summary>
-    internal void OnEndMonth(int monthOfGame, SimRandom random)
+    /// <param name="monthOfGame">The month that ends, from 1.</param>
+    /// <param name="random">The game's random numbers.</param>
+    /// <param name="scoreMaxIncrease">The most a salary rises in a month (<c>gbv.ScoreMaxInc</c>).</param>
+    internal void OnEndMonth(int monthOfGame, SimRandom random, int scoreMaxIncrease = LevelRules.DefaultScoreMaxIncrease)
     {
         var target = monthOfGame <= EarlyMonths ? Math.Min(StartReputation + EarlyStanding, Hospital.MaxReputation) : Standing;
         var change = ((target - Reputation) / MonthlyApproach) + random.NextInclusive(-MonthlyWobble, MonthlyWobble);
         Reputation = Math.Clamp(Reputation + change, Hospital.MinReputation, Hospital.MaxReputation);
+
+        Balance += ((long)CuredThisMonth * CureIncome) - MonthlyCosts;
+        Value = Value == 0 ? TargetValue : Value + ((TargetValue - Value) / MonthlyValueApproach);
+        var minimum = (scoreMaxIncrease + 5) / 6;
+        PlayerSalary += Math.Clamp((long)CuredThisMonth * SalaryPerCure, minimum, Math.Max(minimum, scoreMaxIncrease));
+        CuredThisMonth = 0;
     }
 
     /// <summary>
     /// An opponent of an imported save of the original: its reputation and patients, the reputation also its standing
-    /// from now on.
+    /// from now on, and what the year's charts show of it.
     /// </summary>
-    internal void Import(int reputation, int visitors)
+    internal void Import(ImportedCompetitor state)
     {
-        Reputation = Math.Clamp(reputation, Hospital.MinReputation, Hospital.MaxReputation);
+        Reputation = Math.Clamp(state.Reputation, Hospital.MinReputation, Hospital.MaxReputation);
         Standing = Reputation;
-        Visitors = Math.Max(0, visitors);
-        VisitorsThisYear = Visitors;
+        Visitors = Math.Max(0, state.Visitors);
+        VisitorsThisYear = state.VisitorsThisYear is { } thisYear ? Math.Clamp(thisYear, 0, Visitors) : Visitors;
         SpawnAttempts = Visitors;
+        Balance = state.Money ?? Balance;
+        Value = Math.Max(0, state.Value ?? Value);
+        Cured = Math.Max(0, state.Cured ?? Cured);
+        Deaths = Math.Max(0, state.Deaths ?? Deaths);
+        PlayerSalary = state.Salary is > 0 and var salary ? salary : PlayerSalary;
+        if (state.Tiles is > 0 and var tiles)
+        {
+            Tiles = tiles;
+        }
     }
 
     /// <summary>The part of <c>Hospital:onEndYear</c> that concerns it.</summary>
@@ -150,11 +277,22 @@ public sealed class CompetitorHospital
         writer.WriteInt32(Reputation);
         writer.WriteInt32(Standing);
         writer.WriteInt32(StartReputation);
+        writer.WriteInt64(Balance);
+        writer.WriteInt64(Value);
+        writer.WriteInt32(Cured);
+        writer.WriteInt32(Deaths);
+        writer.WriteInt32(CuredThisMonth);
+        writer.WriteInt64(PlayerSalary);
+        writer.WriteInt32(Tiles);
+        writer.WriteInt32(_cureCredit);
+        writer.WriteInt32(_deathCredit);
     }
 
     /// <param name="reader">The save.</param>
     /// <param name="startReputation">The level's starting reputation, for a game saved before opponents had one.</param>
-    internal static CompetitorHospital Read(SimReader reader, int startReputation)
+    /// <param name="startCash">The level's starting money, for a game saved before opponents had any.</param>
+    /// <param name="tiles">The tiles of the plot the players start on, for a game saved before opponents had a plot.</param>
+    internal static CompetitorHospital Read(SimReader reader, int startReputation, long startCash, int tiles)
     {
         var number = reader.ReadInt32();
         var name = reader.ReadString(MaxNameBytes);
@@ -167,12 +305,28 @@ public sealed class CompetitorHospital
         var reputation = withReputation ? reader.ReadInt32() : startReputation;
         var standing = withReputation ? reader.ReadInt32() : startReputation;
         var start = withReputation ? reader.ReadInt32() : startReputation;
-        return new CompetitorHospital(number, name, reputation, standing)
+        var competitor = new CompetitorHospital(number, name, reputation, standing, startCash, tiles)
         {
             StartReputation = start,
             SpawnAttempts = spawnAttempts,
             Visitors = visitors,
             VisitorsThisYear = visitorsThisYear,
         };
+
+        // Version 104 gives them what the year's charts show.
+        if (reader.Version is 0 or >= 104)
+        {
+            competitor.Balance = reader.ReadInt64();
+            competitor.Value = reader.ReadInt64();
+            competitor.Cured = reader.ReadInt32();
+            competitor.Deaths = reader.ReadInt32();
+            competitor.CuredThisMonth = reader.ReadInt32();
+            competitor.PlayerSalary = reader.ReadInt64();
+            competitor.Tiles = Math.Max(0, reader.ReadInt32());
+            competitor._cureCredit = Math.Clamp(reader.ReadInt32(), 0, 999);
+            competitor._deathCredit = Math.Clamp(reader.ReadInt32(), 0, 999);
+        }
+
+        return competitor;
     }
 }

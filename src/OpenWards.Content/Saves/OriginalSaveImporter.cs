@@ -175,8 +175,21 @@ public static class OriginalSaveImporter
             Reputation = hospital.Reputation,
             Value = hospital.Value,
 
-            // The computer players' blocks (kind 2), for the opponents' reputations.
-            Competitors = [.. save.Hospitals.Where(h => h.Kind == 2).Select(h => new ImportedCompetitor(h.Name, h.Reputation, h.Visitors))],
+            // The computer players' blocks (kind 2), for the opponents' reputations and the year's charts.
+            Competitors =
+            [
+                .. save.Hospitals.Where(h => h.Kind == 2).Select(h => new ImportedCompetitor(
+                    h.Name,
+                    h.Reputation,
+                    h.Visitors,
+                    VisitorsThisYear: h.Visitors - h.VisitorsAtYearStart,
+                    Money: (long)h.Money - h.Loan,
+                    Value: h.Value,
+                    Cured: h.PeopleCured,
+                    Deaths: h.Deaths,
+                    Salary: h.PlayerSalary,
+                    Tiles: h.Size)),
+            ],
             Months = Months(save),
             Statement = Statement(save, hospital.Money),
             Casebook = casebook,
