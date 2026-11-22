@@ -229,9 +229,9 @@ public class PatientAllocationTests
     [InlineData(3, 10)]
     public void ImportedGameGetsTheSpawnRateOfTheMonthsSkipped(int month, int day)
     {
-        // Played from the start: the calendar runs up to the last hour before the imported date.
+        // Played from the start: the calendar runs up to the first hour of the imported date, where the import puts it.
         var played = NewSimulation(players: 1);
-        var target = new GameDate(1, month, day, 0).ToHours() - 1;
+        var target = new GameDate(1, month, day, 0).ToHours();
         while (played.Hours < target)
         {
             played.Step();

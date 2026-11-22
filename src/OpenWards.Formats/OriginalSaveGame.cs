@@ -481,6 +481,9 @@ public sealed class OriginalSaveGame
     /// <summary>Offset of the day of the month (1-based); the month follows.</summary>
     public const int DateOffset = 399030;
 
+    /// <summary>Offset of the year of the level (0-based).</summary>
+    public const int YearOffset = DateOffset - 7;
+
     /// <summary>Offset of the first hospital block.</summary>
     public const int HospitalOffset = 399968;
 
@@ -515,8 +518,14 @@ public sealed class OriginalSaveGame
     /// <summary>Day of the month, starting at 1.</summary>
     public int Day => Data.Span[DateOffset];
 
-    /// <summary>Month of the game, starting at 0.</summary>
+    /// <summary>Month of the year, starting at 0.</summary>
     public int Month => Data.Span[DateOffset + 1];
+
+    /// <summary>
+    /// Year of the level, starting at 0: 2 in December of the third year (the charts then say 2002), 3 from the next
+    /// 1 January (MAXWELL.H3 and MAXWELL.H4).
+    /// </summary>
+    public int Year => Data.Span[YearOffset];
 
     /// <summary>
     /// Owner of a land parcel (numbered as in the level's <c>LEVEL.L*</c> map): 0 for sale, 1 bought by the

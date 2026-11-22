@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 103;
+    private const int FormatVersion = 104;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -103,7 +103,7 @@ public sealed class Simulation
         // World:World adds the computer opponents after the players' hospitals.
         foreach (var competitor in Rules.Competitors)
         {
-            _competitors.Add(CompetitorHospital.Create(competitor, Rules, Random));
+            _competitors.Add(CompetitorHospital.Create(competitor, Rules, Random, map.ParcelTileCount(1)));
         }
 
         // Then Hospital:initStaff, before the first candidates for hire.
@@ -534,7 +534,7 @@ public sealed class Simulation
         var competitorCount = reader.ReadCount(rules.Competitors.Count);
         for (var i = 0; i < competitorCount; i++)
         {
-            simulation._competitors.Add(CompetitorHospital.Read(reader, rules.StartReputation));
+            simulation._competitors.Add(CompetitorHospital.Read(reader, rules.StartReputation, rules.StartCash, map.ParcelTileCount(1)));
         }
 
         simulation.Temperatures = TileTemperatures.Read(reader, map.Width, map.Height);
@@ -609,10 +609,17 @@ public sealed class Simulation
     /// <paramref name="next"/>, so that this tick ends the month or year. An emergency planned in the hours skipped is
     /// replanned (<c>World:wasEmergencySkipped</c>).
     /// </summary>
-    internal void SkipToLastHour(GameDate next)
+    internal void SkipToLastHour(GameDate next) => SkipToHour(next.ToHours() - 1);
+
+    /// <summary>
+    /// The calendar jumps to the first hour of <paramref name="date"/> without ending the day before it, for an imported
+    /// game: a save made on 1 January was made after its year end, which must not come again.
+    /// </summary>
+    internal void SkipTo(GameDate date) => SkipToHour(date.ToHours());
+
+    private void SkipToHour(long target)
     {
         var previous = Hours;
-        var target = next.ToHours() - 1;
         if (target <= previous)
         {
             return;
@@ -902,7 +909,6 @@ public sealed class Simulation
             hospital.PayHeating(Hours);
             hospital.PayInterest(Hours);
             hospital.PayResearch(Hours);
-            hospital.RaiseSalary(Rules.ScoreMaxIncrease);
             hospital.PayInsurance(Hours);
 
             // Hospital:onEndMonth: equipment the level brings this month.
@@ -911,6 +917,7 @@ public sealed class Simulation
             if (date.IsLastDayOfYear)
             {
                 hospital.OnEndYear(Hours, Random, Rules.Awards);
+                hospital.RaiseSalary(Random);
 
                 // Hospital:onEndYear: at the end of the third year of level 3 the salary rises a lot, as in the original.
                 if (date.Year == 3 && Rules.LevelNumber == 3)
@@ -930,7 +937,7 @@ public sealed class Simulation
             competitor.OnEndMonth(date.MonthOfGame, Random);
             if (date.IsLastDayOfYear)
             {
-                competitor.OnEndYear();
+                competitor.OnEndYear(Random);
             }
         }
 

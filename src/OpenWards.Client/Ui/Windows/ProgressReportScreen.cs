@@ -230,9 +230,13 @@ internal sealed class ProgressReportScreen
         return total > 0 ? own * 100 / total : 100 / Math.Max(1, simulation.Hospitals.Count);
     }
 
-    /// <summary>The hospital's name: the player's name for theirs, the original's competitor names (S[5]) for the others.</summary>
+    /// <summary>
+    /// The hospital's name: for theirs the name the game knows (from an imported save of the original) or the player's
+    /// name, the original's competitor names (S[5]) for the others.
+    /// </summary>
     internal static string HospitalName(IWindowHost host, int index) =>
-        index == host.Player ? host.PlayerName
+        index == host.Player
+            ? (index < host.Simulation.Hospitals.Count && host.Simulation.Hospitals[index].Name is { Length: > 0 } name ? name : host.PlayerName)
         : host.Texts?.String(5, index switch { 1 => 1, 2 => 3, 3 => 2, _ => 4 }) ?? UiText.Format("openwards.hospital_number", "Hospital %1%", index + 1);
 
     private static bool InHospital(LevelMap map, int player, TilePosition tile) =>

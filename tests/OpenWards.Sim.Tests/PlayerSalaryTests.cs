@@ -9,19 +9,23 @@ namespace OpenWards.Sim.Tests;
 public class PlayerSalaryTests
 {
     [Fact]
-    public void TheSalaryRisesEachMonthByAtLeastASixthOfTheMaximum()
+    public void TheSalaryStaysTheSameAllYearAndRisesByAFewPercentOnTheFirstOfJanuary()
     {
         var simulation = NewSimulation(new LevelRules(10_000, [], [], scoreMaxIncrease: 300));
         var hospital = simulation.Hospitals[0];
         Assert.Equal(10_000, hospital.PlayerSalary);
-
-        // Reputation 500 and no deaths: 30 + 0 is below the least, 50.
         StepToNextMonth(simulation);
-        Assert.Equal(10_050, hospital.PlayerSalary);
+        Assert.Equal(10_000, hospital.PlayerSalary);
 
-        // Raised by hand: 30 + 200 / 1.
-        hospital.RaiseSalary(300);
-        Assert.Equal(10_100, hospital.PlayerSalary);
+        while (simulation.Date.Year == 1)
+        {
+            simulation.Step();
+        }
+
+        Assert.Contains(hospital.PlayerSalary, Enumerable.Range(Hospital.LowestRaisePercent, Hospital.HighestRaisePercent - Hospital.LowestRaisePercent + 1).Select(p => 10_000L + (p * 100L)));
+
+        // Rounded down: MAXWELL.H3's 69,935 became 74,131 (6 %) in MAXWELL.H4.
+        Assert.Equal(74_131, Hospital.RaisedSalary(69_935, 6));
     }
 
     [Fact]
@@ -54,7 +58,8 @@ public class PlayerSalaryTests
 
         var before = hospital.PlayerSalary;
         StepToNextMonth(simulation);
-        Assert.InRange(hospital.PlayerSalary - before, 8000 + 50, 20_000 + 300);
+        var raised = Hospital.RaisedSalary(before, Hospital.HighestRaisePercent);
+        Assert.InRange(hospital.PlayerSalary - before, 8000 + Hospital.RaisedSalary(before, Hospital.LowestRaisePercent) - before, 20_000 + raised - before);
 
         using var stream = new MemoryStream();
         simulation.Save(stream);

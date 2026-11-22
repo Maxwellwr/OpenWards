@@ -53,7 +53,24 @@ public sealed record ImportedCase(string DiseaseId, bool Discovered, int Effecti
 /// <param name="Name">Its name, which picks the level's opponent of that name.</param>
 /// <param name="Reputation">Its reputation.</param>
 /// <param name="Visitors">Its patients so far.</param>
-public sealed record ImportedCompetitor(string Name, int Reputation, int Visitors);
+/// <param name="VisitorsThisYear">Its patients this year, if known; else all of them.</param>
+/// <param name="Money">Its money less its loan, if known.</param>
+/// <param name="Value">Its value, if known.</param>
+/// <param name="Cured">Its patients cured so far, if known.</param>
+/// <param name="Deaths">Its patients who died so far, if known.</param>
+/// <param name="Salary">Its owner's salary, if known.</param>
+/// <param name="Tiles">The tiles of its plot, if known.</param>
+public sealed record ImportedCompetitor(
+    string Name,
+    int Reputation,
+    int Visitors,
+    int? VisitorsThisYear = null,
+    long? Money = null,
+    long? Value = null,
+    int? Cured = null,
+    int? Deaths = null,
+    long? Salary = null,
+    int? Tiles = null);
 
 /// <summary>
 /// The state of a hospital taken from a save of another game (the original Theme Hospital), to be rebuilt on a
@@ -61,11 +78,20 @@ public sealed record ImportedCompetitor(string Name, int Reputation, int Visitor
 /// </summary>
 public sealed record ImportedGame
 {
-    /// <summary>Month of the game, from 1.</summary>
+    /// <summary>The player's own salary, or null to keep the level's.</summary>
+    public long? PlayerSalary { get; init; }
+
+    /// <summary>Year of the level, from 1.</summary>
+    public int Year { get; init; } = 1;
+
+    /// <summary>Month of the year, from 1.</summary>
     public int Month { get; init; } = 1;
 
     /// <summary>Day of the month, from 1.</summary>
     public int Day { get; init; } = 1;
+
+    /// <summary>The player's name, which the hospital goes by, if known.</summary>
+    public string? PlayerName { get; init; }
 
     public long Balance { get; init; }
 
@@ -92,6 +118,21 @@ public sealed record ImportedGame
     public int Cured { get; init; }
 
     public int Deaths { get; init; }
+
+    /// <summary>Patients this year, for the year's awards; null for all of them.</summary>
+    public int? VisitorsThisYear { get; init; }
+
+    /// <summary>Patients cured this year, for the year's awards; null for all of them.</summary>
+    public int? CuredThisYear { get; init; }
+
+    /// <summary>Patients who died this year, for the year's awards; null for all of them.</summary>
+    public int? DeathsThisYear { get; init; }
+
+    /// <summary>Patients who left uncured this year, for the year's awards; null for none.</summary>
+    public int? NotCuredThisYear { get; init; }
+
+    /// <summary>The lowest reputation this year, for the year's awards; null for today's.</summary>
+    public int? LowestReputationThisYear { get; init; }
 
     /// <summary>Reputation, or null to keep the level's.</summary>
     public int? Reputation { get; init; }
@@ -140,6 +181,10 @@ public static class GameImport
         const int player = 0;
         var problems = new List<string>();
         var hospital = simulation.Hospitals[player];
+        if (game.PlayerName is { Length: > 0 } name)
+        {
+            hospital.Name = name;
+        }
 
         // Enough money to build everything again; the save's own balance is set at the end.
         hospital.ImportFinances(long.MaxValue / 4, 0);
@@ -269,9 +314,20 @@ public static class GameImport
 
         hospital.ImportFinances(game.Balance, game.Loan);
         hospital.ImportRecords(game.Visitors, game.Cured, game.Deaths, game.Reputation ?? hospital.Reputation, game.Value ?? hospital.Value, game.Months, game.Statement);
-        if (game.Month > 1 || game.Day > 1)
+        hospital.ImportYear(
+            game.VisitorsThisYear ?? game.Visitors,
+            game.CuredThisYear ?? game.Cured,
+            game.DeathsThisYear ?? game.Deaths,
+            game.NotCuredThisYear ?? 0,
+            game.LowestReputationThisYear ?? hospital.Reputation);
+        if (game.PlayerSalary is > 0 and var salary)
         {
-            simulation.SkipToLastHour(new GameDate(1, game.Month, game.Day, 0));
+            hospital.PlayerSalary = salary;
+        }
+
+        if (game.Year > 1 || game.Month > 1 || game.Day > 1)
+        {
+            simulation.SkipTo(new GameDate(Math.Max(1, game.Year), game.Month, game.Day, 0));
             simulation.Arrivals.CatchUp(simulation);
         }
 
@@ -279,7 +335,7 @@ public static class GameImport
         return new ImportReport(problems);
     }
 
-    /// <summary>The save's opponents' reputations and patients for the level's opponents: by name, the rest in order.</summary>
+    /// <summary>The save's opponents (reputations, patients and the year's charts) for the level's opponents: by name, the rest in order.</summary>
     private static void ImportCompetitors(Simulation simulation, IReadOnlyList<ImportedCompetitor> imported)
     {
         var left = simulation.Competitors.ToList();
@@ -293,13 +349,13 @@ public static class GameImport
                 continue;
             }
 
-            match.Import(competitor.Reputation, competitor.Visitors);
+            match.Import(competitor);
             left.Remove(match);
         }
 
         for (var i = 0; i < unmatched.Count && i < left.Count; i++)
         {
-            left[i].Import(unmatched[i].Reputation, unmatched[i].Visitors);
+            left[i].Import(unmatched[i]);
         }
     }
 

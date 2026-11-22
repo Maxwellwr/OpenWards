@@ -14,6 +14,7 @@ public class OriginalSaveGameTests
         Encoding.ASCII.GetBytes("FULL").CopyTo(data, 3);
         data[OriginalSaveGame.DateOffset] = 17;
         data[OriginalSaveGame.DateOffset + 1] = 2;
+        data[OriginalSaveGame.YearOffset] = 3;
 
         var tile = OriginalSaveGame.TileOffset + (((5 * OriginalSaveGame.MapSize) + 7) * 8);
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(tile), 9);
@@ -49,6 +50,7 @@ public class OriginalSaveGameTests
         Assert.Equal("FULL", save.Difficulty);
         Assert.Equal(17, save.Day);
         Assert.Equal(2, save.Month);
+        Assert.Equal(3, save.Year);
         Assert.Equal(new OriginalSaveTile(9, 0x10, 0x20, 0x21, 0, 0x31, 2), save[7, 5]);
 
         var parsed = Assert.Single(save.Entities);
@@ -345,6 +347,7 @@ public class OriginalSaveGameTests
             Assert.Contains(save.Difficulty, new[] { "EASY", "FULL", "HARD" });
             Assert.InRange(save.Day, 1, 31);
             Assert.InRange(save.Month, 0, 11);
+            Assert.InRange(save.Year, 0, 20);
 
             var local = save.Hospitals[0];
             Assert.Equal(1, local.Kind);

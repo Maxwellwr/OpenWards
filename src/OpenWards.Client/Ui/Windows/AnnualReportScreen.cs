@@ -13,8 +13,8 @@ using OpenWards.Sim.Economy;
 namespace OpenWards.Client.Ui.Windows;
 
 /// <summary>
-/// The fullscreen annual report: first the year's statistics over Award02V (the hospitals ranked by money, salary,
-/// cures, deaths, visitors and value), then over Award01V the trophies and the framed awards or penalties of the year
+/// The fullscreen annual report: first the year's statistics over Award02V (the players' and the computer opponents'
+/// hospitals ranked by money, salary, cures, deaths, visitors and value), then over Award01V the trophies and the framed awards or penalties of the year
 /// that ended; a click on one shows its plaque or scroll with what it was for and what it brought.
 /// </summary>
 internal sealed class AnnualReportScreen
@@ -267,7 +267,10 @@ internal sealed class AnnualReportScreen
         font.Draw(batch, amount, new Vector2(origin.X + 220 + ((200 - font.Measure(amount).Width) / 2), origin.Y + kindY + 25));
     }
 
-    /// <summary>drawStatisticsScreen: the six rankings, each hospital in its place, the values right-aligned.</summary>
+    /// <summary>
+    /// drawStatisticsScreen: the six rankings, each hospital in its place, the values right-aligned. As in the original
+    /// the computer opponents are ranked with the players (CorsixTH's <c>world.hospitals</c> holds its AI hospitals too).
+    /// </summary>
     private static void DrawStatistics(SpriteBatch batch, IWindowHost host, TextRenderer font, Point origin)
     {
         void Centred(string text, int x, int y, int width) =>
@@ -275,32 +278,52 @@ internal sealed class AnnualReportScreen
 
         var simulation = host.Simulation;
         Centred(UiText.Format("openwards.annual_report.charts", "Charts %1%", simulation.Date.Year + 1998), 210, 30, 200);
-        (int Index, string Fallback, int X, int Y, bool Ascending, Func<Hospital, long> Value)[] rankings =
+        var entries = Entries(host);
+        (int Index, string Fallback, int X, int Y, bool Ascending, Func<ChartEntry, long> Value)[] rankings =
         [
-            (1, "Money", 140, 98, false, h => h.Balance - h.Loan),
-            (2, "Salary", 328, 98, false, h => h.PlayerSalary),
-            (4, "Cures", 140, 205, false, h => h.Cured),
-            (5, "Deaths", 328, 205, true, h => h.Deaths),
-            (10, "Visitors", 140, 310, false, h => h.Visitors),
-            (11, "Total value", 328, 310, false, h => h.Value),
+            (1, "Money", 140, 98, false, e => e.Money),
+            (2, "Salary", 328, 98, false, e => e.Salary),
+            (4, "Cures", 140, 205, false, e => e.Cured),
+            (5, "Deaths", 328, 205, true, e => e.Deaths),
+            (10, "Visitors", 140, 310, false, e => e.Visitors),
+            (11, "Total value", 328, 310, false, e => e.Value),
         ];
         foreach (var (index, fallback, x, y, ascending, value) in rankings)
         {
             Centred(host.Texts?.String(26, index) ?? fallback, x, y, 170);
-            var order = simulation.Hospitals.Select((hospital, i) => (Hospital: hospital, Index: i));
-            order = ascending
-                ? order.OrderBy(entry => value(entry.Hospital)).ThenBy(entry => entry.Index)
-                : order.OrderByDescending(entry => value(entry.Hospital)).ThenBy(entry => entry.Index);
             var row = 0;
-            foreach (var (hospital, i) in order)
+            foreach (var entry in Ranked(entries, value, ascending))
             {
                 var rowY = y + 30 + (row * 15);
-                var name = ProgressReportScreen.HospitalName(host, i).ToUpperInvariant();
-                font.Draw(batch, name, new Vector2(origin.X + x, origin.Y + rowY));
-                var number = value(hospital).ToString(CultureInfo.InvariantCulture);
+                font.Draw(batch, entry.Name.ToUpperInvariant(), new Vector2(origin.X + x, origin.Y + rowY));
+                var number = value(entry).ToString(CultureInfo.InvariantCulture);
                 font.Draw(batch, number, new Vector2(origin.X + x + 100 + 70 - font.Measure(number).Width, origin.Y + rowY));
                 row++;
             }
         }
+    }
+
+    /// <summary>A hospital on the year's charts: a player's or a computer opponent's.</summary>
+    internal readonly record struct ChartEntry(string Name, long Money, long Salary, long Cured, long Deaths, long Visitors, long Value);
+
+    /// <summary>The hospitals on the charts: the players' first, then the opponents', which is also how ties go.</summary>
+    internal static List<ChartEntry> Entries(IWindowHost host)
+    {
+        var simulation = host.Simulation;
+        var entries = simulation.Hospitals
+            .Select((h, i) => new ChartEntry(ProgressReportScreen.HospitalName(host, i), h.Balance - h.Loan, h.PlayerSalary, h.Cured, h.Deaths, h.Visitors, h.Value))
+            .ToList();
+        entries.AddRange(simulation.Competitors.Select(c => new ChartEntry(c.Name, c.Balance, c.PlayerSalary, c.Cured, c.Deaths, c.Visitors, c.Value)));
+        return entries;
+    }
+
+    /// <summary>One ranking: best first (fewest first for deaths), ties in the order of <paramref name="entries"/>.</summary>
+    internal static IEnumerable<ChartEntry> Ranked(IReadOnlyList<ChartEntry> entries, Func<ChartEntry, long> value, bool ascending)
+    {
+        var order = entries.Select((entry, i) => (Entry: entry, Index: i));
+        order = ascending
+            ? order.OrderBy(e => value(e.Entry)).ThenBy(e => e.Index)
+            : order.OrderByDescending(e => value(e.Entry)).ThenBy(e => e.Index);
+        return order.Select(e => e.Entry);
     }
 }
