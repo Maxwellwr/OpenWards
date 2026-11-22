@@ -87,6 +87,7 @@ public sealed class LevelRules
     /// <param name="difficulty">The campaign's difficulty; medium for every other level.</param>
     /// <param name="sodaPrice">What a can from the drinks machine costs (<c>gbv.SodaPrice</c>).</param>
     /// <param name="research">What research goes by; by default nothing to research.</param>
+    /// <param name="allocation">How patients are shared between the hospitals; by default base_config.lua's <c>gbv.Alloc…</c>.</param>
     public LevelRules(
         int startCash,
         IEnumerable<KeyValuePair<string, int>> roomCosts,
@@ -113,8 +114,10 @@ public sealed class LevelRules
         RandomEmergencies? randomEmergencies = null,
         Difficulty difficulty = Difficulty.Medium,
         int sodaPrice = DefaultSodaPrice,
-        Research.ResearchRules? research = null)
+        Research.ResearchRules? research = null,
+        PatientAllocationRules? allocation = null)
     {
+        Allocation = allocation ?? PatientAllocationRules.Default;
         Research = research ?? Sim.Research.ResearchRules.Default;
         SodaPrice = sodaPrice;
         Difficulty = Enum.IsDefined(difficulty) ? difficulty : throw new ArgumentOutOfRangeException(nameof(difficulty));
@@ -217,6 +220,9 @@ public sealed class LevelRules
 
     /// <summary>What research goes by.</summary>
     public Research.ResearchRules Research { get; }
+
+    /// <summary>How the town's patients are shared between the hospitals (<c>gbv.Alloc…</c>).</summary>
+    public PatientAllocationRules Allocation { get; }
 
     /// <summary>The campaign level's number (CorsixTH's <c>map.level_number</c>), or null for another map.</summary>
     public int? LevelNumber { get; }
@@ -364,6 +370,7 @@ public sealed class LevelRules
         writer.WriteByte((byte)Difficulty);
         writer.WriteInt32(SodaPrice);
         Research.Write(writer);
+        Allocation.Write(writer);
         writer.WriteBool(FreeBuild);
     }
 
@@ -405,7 +412,10 @@ public sealed class LevelRules
             reader.ReadBool() ? new RandomEmergencies(reader.ReadInt32(), reader.ReadInt32()) : null,
             reader.ReadByte() is var difficulty && Enum.IsDefined((Difficulty)difficulty) ? (Difficulty)difficulty : throw new InvalidDataException($"Unknown difficulty {difficulty}."),
             reader.ReadInt32(),
-            Sim.Research.ResearchRules.Read(reader));
+            Sim.Research.ResearchRules.Read(reader),
+
+            // Version 103 shares patients by reputation; a game saved before went on taking turns.
+            reader.Version is 0 or >= 103 ? PatientAllocationRules.Read(reader) : PatientAllocationRules.InTurn);
         return reader.ReadBool() ? rules.WithFreeBuild() : rules;
     }
 

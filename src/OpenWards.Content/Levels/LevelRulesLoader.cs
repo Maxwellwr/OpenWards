@@ -224,7 +224,21 @@ public static partial class LevelRulesLoader
             RandomEmergenciesFromConfig(config),
             difficulty,
             config.GetInt("gbv.SodaPrice") ?? LevelRules.DefaultSodaPrice,
-            ResearchFromConfig(config));
+            ResearchFromConfig(config),
+            AllocationFromConfig(config));
+    }
+
+    /// <summary>
+    /// How patients are shared between the hospitals: <c>gbv.AllocDelay</c>, <c>AllocTotalRep</c>, <c>AllocIndRep</c> and
+    /// <c>AllocRand</c>, by default base_config.lua's.
+    /// </summary>
+    public static PatientAllocationRules AllocationFromConfig(LevelConfig config)
+    {
+        return new PatientAllocationRules(
+            Math.Max(0, config.GetInt("gbv.AllocDelay") ?? PatientAllocationRules.DefaultDelay),
+            Math.Max(0, config.GetInt("gbv.AllocTotalRep") ?? PatientAllocationRules.DefaultTotalReputation),
+            Math.Max(0, config.GetInt("gbv.AllocIndRep") ?? PatientAllocationRules.DefaultDiseaseReputation),
+            Math.Max(0, config.GetInt("gbv.AllocRand") ?? PatientAllocationRules.DefaultRandomChance));
     }
 
     /// <summary>

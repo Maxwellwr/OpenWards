@@ -391,12 +391,17 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   done with `decimal` here to stay deterministic); at the end of each day the next day's patients get
   random hours. A patient only arrives at a hospital with a staffed reception desk, at one of up to 8
   spawn points per map edge from which the hospital can be reached; the first one by the shortest way
-  to a desk. As in CorsixTH (`World:chooseHospitalForPatient`) the hospitals take turns by
-  `Hospital.SpawnAttempts`, a hospital not yet open passing its turn, and patients come only once the first
-  hospital has opened. The level's computer opponents (`computer[n].Playing`, CorsixTH's `AIHospital`) are
-  `Simulation.Competitors`: not on the map and only names so far, they take their turns after the players'
-  hospitals and count the patients sent to them as visitors (`CompetitorHospital`), so that with three of
-  them a player gets a quarter of the patients, as in CorsixTH. Each `Hospital` runs CorsixTH's opening
+  to a desk. Patients come only once the first hospital has opened, and are shared as in the original game
+  (`World:chooseHospitalForPatient` with the part CorsixTH comments out, settings in `LevelRules.Allocation`
+  from `gbv.AllocDelay`, `AllocTotalRep`, `AllocIndRep`, `AllocRand`): for the first `AllocDelay` months the
+  hospitals take turns by `SpawnAttempts`; then one patient in `AllocRand` goes to a hospital at random and
+  the others to one drawn by `PatientArrivals.Appeal` (reputation × `AllocTotalRep` + reputation for the
+  disease × `AllocIndRep`, times `Hospital:getDiseaseReputationPriceFactor`, 0.5 to 1.5). A patient sent to a
+  hospital not yet open is lost. The level's computer opponents (`computer[n].Playing`, CorsixTH's
+  `AIHospital`) are `Simulation.Competitors`: not on the map, they count the patients sent to them as
+  visitors (`CompetitorHospital`). Unlike CorsixTH's they have a reputation, a model since nothing describes
+  the original's: from `StartRep` it moves each month a sixth of the way to a standing drawn at the start
+  (−100 to +250 from `StartRep`, ±50 for easy/hard), ±20 at random; they charge the standard price. Each `Hospital` runs CorsixTH's opening
   watch (`UIWatch` "initial_opening"), 13 segments of 385 hours, and opens an hour after it has run
   down, 5006 hours (about 100 days) into the game. `OpenHospitalCommand` opens it early, as the watch's button does; the client's O
   key stands in for that button and the date box shows the days left. `--demo` opens at once.
