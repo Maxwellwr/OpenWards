@@ -1793,7 +1793,7 @@ public sealed class Hospital
             var reputation = reader.ReadInt32();
             entry.Reputation = hasReputation ? reputation : null;
             entry.TurnedAway = reader.ReadInt32();
-            if (DiseaseCatalog.Find(id) is { } disease && !Research.ResearchDepartment.IsDrugDisease(disease))
+            if (DiseaseCatalog.Find(id) is { } disease && !OpenWards.Sim.Research.ResearchDepartment.IsDrugDisease(disease))
             {
                 // Games imported before the fix took the original's 0 for these, and their patients all died.
                 entry.CureEffectiveness = DiseaseCase.FullEffectiveness;
