@@ -322,6 +322,9 @@ public sealed class Hospital
     /// <summary>The player's salary at the start of a level.</summary>
     public const long StartPlayerSalary = 10_000;
 
+    /// <summary>The longest name read back from a save.</summary>
+    private const int MaxNameLength = 64;
+
     /// <summary>The most rat holes read back from a save.</summary>
     private const int MaxRatholes = 1 << 16;
 
@@ -605,6 +608,12 @@ public sealed class Hospital
 
     /// <summary>The player's own salary, which rises month by month (CorsixTH's <c>player_salary</c>); it starts at 10,000.</summary>
     public long PlayerSalary { get; internal set; } = StartPlayerSalary;
+
+    /// <summary>
+    /// The name the hospital goes by when the game itself knows it (a save of the original brings its player's name),
+    /// else empty, and the player's name from the settings is shown.
+    /// </summary>
+    public string Name { get; internal set; } = string.Empty;
 
     /// <summary>The salary offered for the next level on winning (<c>salary_offer</c>), 0 until then.</summary>
     public long SalaryOffer { get; private set; }
@@ -1671,6 +1680,8 @@ public sealed class Hospital
             writer.WriteBool(carried.Plant is not null);
             carried.Plant?.Write(writer);
         }
+
+        writer.WriteString(Name);
     }
 
     internal static Hospital Read(SimReader reader, int player)
@@ -1862,6 +1873,12 @@ public sealed class Hospital
                 tile,
                 facing <= (byte)Direction.West ? (Direction)facing : throw new InvalidDataException($"Unknown direction {facing}."),
                 reader.ReadBool() ? Objects.PlantState.Read(reader) : null);
+        }
+
+        // Version 104 keeps the name the hospital goes by.
+        if (reader.Version is 0 or >= 104)
+        {
+            hospital.Name = reader.ReadString(MaxNameLength);
         }
 
         return hospital;

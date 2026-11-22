@@ -84,6 +84,9 @@ public sealed record ImportedGame
     /// <summary>Day of the month, from 1.</summary>
     public int Day { get; init; } = 1;
 
+    /// <summary>The player's name, which the hospital goes by, if known.</summary>
+    public string? PlayerName { get; init; }
+
     public long Balance { get; init; }
 
     public long Loan { get; init; }
@@ -157,6 +160,10 @@ public static class GameImport
         const int player = 0;
         var problems = new List<string>();
         var hospital = simulation.Hospitals[player];
+        if (game.PlayerName is { Length: > 0 } name)
+        {
+            hospital.Name = name;
+        }
 
         // Enough money to build everything again; the save's own balance is set at the end.
         hospital.ImportFinances(long.MaxValue / 4, 0);

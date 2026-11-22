@@ -3789,7 +3789,8 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
         return Path.GetFileNameWithoutExtension(fileName) is { Length: > 0 } name ? name.ToUpper(CultureInfo.CurrentCulture) : null;
     }
 
-    string IWindowHost.PlayerName => _config.PlayerName is { Length: > 0 } name ? name : "Player";
+    /// <summary>The settings' name, else the system's user name, else PLAYER, as the new game dialog starts it.</summary>
+    string IWindowHost.PlayerName => NewGameWindow.DefaultName(_config.PlayerName);
 
     string? IWindowHost.HotkeyText(string action) => _hotkeys[action]?.ToString();
 

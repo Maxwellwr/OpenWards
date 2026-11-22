@@ -45,7 +45,7 @@ catch (Exception e) when (e is InvalidDataException or IOException or Unauthoriz
     config = new GameConfig();
 }
 
-playerName ??= config.PlayerName is { Length: > 0 } configured ? configured : "Player";
+playerName ??= OpenWards.Client.Ui.Windows.NewGameWindow.DefaultName(config.PlayerName);
 
 ThemeHospitalInstall? install;
 if (options.GamePath is null)

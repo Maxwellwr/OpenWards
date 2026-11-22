@@ -930,7 +930,7 @@ public sealed class Simulation
             competitor.OnEndMonth(date.MonthOfGame, Random, Rules.ScoreMaxIncrease);
             if (date.IsLastDayOfYear)
             {
-                competitor.OnEndYear();
+                competitor.OnEndYear(Random);
             }
         }
 

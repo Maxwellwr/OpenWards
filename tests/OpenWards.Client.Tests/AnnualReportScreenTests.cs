@@ -37,9 +37,18 @@ public sealed class AnnualReportScreenTests
         }
 
         var entries = AnnualReportScreen.Entries(host);
+        Assert.Equal(host.PlayerName, entries[0].Name);
         Assert.Equal(["ORAC", "HAL"], entries.Skip(1).Select(e => e.Name));
         Assert.Equal(3, entries.Count);
         Assert.Equal("ORAC", AnnualReportScreen.Ranked(entries, e => e.Cured, ascending: false).First().Name);
         Assert.Equal("ORAC", AnnualReportScreen.Ranked(entries, e => e.Visitors, ascending: false).First().Name);
+    }
+
+    [Fact]
+    public void ThePlayerGoesByTheNameAnImportedSaveBrings()
+    {
+        var host = new WindowTestHost();
+        host.Simulation.Hospitals[0].Name = "MAXWELL";
+        Assert.Equal("MAXWELL", AnnualReportScreen.Entries(host)[0].Name);
     }
 }

@@ -39,7 +39,8 @@ public readonly record struct PlannedCompetitor(int Number, string Name);
 /// level 4). Its value is $100 per tile of the plot the players start on (all the opponents have one that size) plus $10
 /// per point of its standing above the start: $51,660 to $55,660 on level 4 with 520 tiles. Its owner's salary starts
 /// at $10,000 like the player's and each month rises by $12 per patient cured, between a sixth and all of
-/// <c>gbv.ScoreMaxInc</c>: $11,130 to $11,236 by December on level 4.
+/// <c>gbv.ScoreMaxInc</c>: $11,130 to $11,236 by December on level 4. At the end of the year the salary rises by 6 % to
+/// 9 % and the value by $2,030, as the original's charts of the year show.
 /// </para>
 /// </remarks>
 public sealed class CompetitorHospital
@@ -100,6 +101,15 @@ public sealed class CompetitorHospital
 
     /// <summary>How much the owner's salary rises in a month per patient cured.</summary>
     public const int SalaryPerCure = 12;
+
+    /// <summary>The least the owner's salary rises at the end of a year, in percent.</summary>
+    public const int YearEndRaiseLowest = 6;
+
+    /// <summary>The most the owner's salary rises at the end of a year, in percent.</summary>
+    public const int YearEndRaiseHighest = 9;
+
+    /// <summary>How much its value rises at the end of a year.</summary>
+    public const int YearEndValueRise = 2030;
 
     /// <summary>The owner's salary at the start, as the player's.</summary>
     public const long StartSalary = Hospital.StartPlayerSalary;
@@ -264,8 +274,20 @@ public sealed class CompetitorHospital
         }
     }
 
-    /// <summary>The part of <c>Hospital:onEndYear</c> that concerns it.</summary>
-    internal void OnEndYear() => VisitorsThisYear = 0;
+    /// <summary>
+    /// The year end: its owner's salary rises by 6 % to 9 % (12,247, 11,910 and 11,797 on 1 January from 11,236, 11,236 and
+    /// 11,130 on level 4) and its value by $2,030 (53,690 and 56,690 from 51,660 and 54,660; the third, which also bought
+    /// something for $1,000, 58,690 from 55,660), and the year's patients start afresh.
+    /// </summary>
+    internal void OnEndYear(SimRandom random)
+    {
+        VisitorsThisYear = 0;
+        PlayerSalary += PlayerSalary * random.NextInclusive(YearEndRaiseLowest, YearEndRaiseHighest) / 100;
+        if (Value > 0)
+        {
+            Value += YearEndValueRise;
+        }
+    }
 
     internal void Write(SimWriter writer)
     {

@@ -167,6 +167,7 @@ public static class OriginalSaveImporter
 
         return new ImportedGame
         {
+            PlayerName = hospital.Name,
             Staff = staff,
             Patients = patients,
             Visitors = hospital.Visitors,

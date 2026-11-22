@@ -67,7 +67,7 @@ internal sealed class NewGameWindow(IReadOnlyList<Difficulty> available, string 
         _ => UiText.Get("tooltip.new_game_window.medium", "This is the middle way to go if you are unsure what to choose"),
     };
 
-    private static string DefaultName(string name) =>
+    internal static string DefaultName(string? name) =>
         name is { Length: > 0 } ? name
         : Environment.GetEnvironmentVariable("USER") is { Length: > 0 } user ? user
         : Environment.GetEnvironmentVariable("USERNAME") is { Length: > 0 } userName ? userName

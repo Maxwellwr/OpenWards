@@ -53,6 +53,32 @@ public class CompetitorChartsTests
     }
 
     [Fact]
+    public void AYearsEndRaisesAnOpponentsSalaryAndValue()
+    {
+        // MULTIVAC on level 4: 11,236 and 51,660 on 31 December, 12,247 and 53,690 on 1 January.
+        var opponent = new CompetitorHospital(1, "MULTIVAC");
+        opponent.Import(new ImportedCompetitor("MULTIVAC", 532, 169, Value: 51_660, Salary: 11_236));
+        opponent.OnEndYear(new SimRandom(5));
+
+        Assert.Equal(51_660 + CompetitorHospital.YearEndValueRise, opponent.Value);
+        Assert.InRange(opponent.PlayerSalary, 11_236 + (11_236 * CompetitorHospital.YearEndRaiseLowest / 100), 11_236 + (11_236 * CompetitorHospital.YearEndRaiseHighest / 100));
+        Assert.Equal(0, opponent.VisitorsThisYear);
+    }
+
+    [Fact]
+    public void AnImportedGameKeepsThePlayersNameThroughASave()
+    {
+        var simulation = NewSimulation(new LevelRules(0, [], []));
+        GameImport.Apply(simulation, new ImportedGame { Month = 12, Day = 25, PlayerName = "MAXWELL" });
+        Assert.Equal("MAXWELL", simulation.Hospitals[0].Name);
+
+        using var stream = new MemoryStream();
+        simulation.Save(stream);
+        stream.Position = 0;
+        Assert.Equal("MAXWELL", Simulation.Load(stream).Hospitals[0].Name);
+    }
+
+    [Fact]
     public void AnOpponentStartsWithTheLevelsMoneyAndThePlayersPlotAndIsSaved()
     {
         var rules = new LevelRules(40_000, [], [], competitors: [new PlannedCompetitor(4, "MULTIVAC")]);
