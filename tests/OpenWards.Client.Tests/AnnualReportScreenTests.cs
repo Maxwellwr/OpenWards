@@ -37,7 +37,7 @@ public sealed class AnnualReportScreenTests
         }
 
         var entries = AnnualReportScreen.Entries(host);
-        Assert.Equal(host.PlayerName, entries[0].Name);
+        Assert.Equal(((Ui.IWindowHost)host).PlayerName, entries[0].Name);
         Assert.Equal(["ORAC", "HAL"], entries.Skip(1).Select(e => e.Name));
         Assert.Equal(3, entries.Count);
         Assert.Equal("ORAC", AnnualReportScreen.Ranked(entries, e => e.Cured, ascending: false).First().Name);
