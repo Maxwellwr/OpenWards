@@ -43,6 +43,8 @@ public enum PatientLook : byte
 /// </summary>
 public sealed class DiseaseDefinition
 {
+    private readonly bool _isContagious;
+
     public DiseaseDefinition(string id, int expertiseId, int curePrice)
     {
         Id = id;
@@ -77,8 +79,18 @@ public sealed class DiseaseDefinition
     /// <summary>Whether its patients need the toilet about three times as fast (<c>more_loo_use</c>).</summary>
     public bool MoreLooUse { get; init; }
 
-    /// <summary>Whether the disease spreads in epidemics.</summary>
-    public bool IsContagious { get; init; }
+    /// <summary>Whether the disease spreads in epidemics; never for a special disease (<see cref="IsSpecial"/>).</summary>
+    public bool IsContagious
+    {
+        get => _isContagious && !IsSpecial;
+        init => _isContagious = value;
+    }
+
+    /// <summary>
+    /// The original game's special diseases, a mark the level files do not hold (the maintainer's list): a failed drug
+    /// kills the patient, and the patient neither becomes contagious nor catches another disease.
+    /// </summary>
+    public bool IsSpecial { get; init; }
 
     /// <summary>Rooms other than the GP's office that may help diagnose it, in any order.</summary>
     public IReadOnlyList<string> DiagnosisRooms { get; init; } = [];

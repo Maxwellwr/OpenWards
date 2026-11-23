@@ -25,6 +25,7 @@ public static class DiseaseCatalog
     [
         new("alien_dna", 8, 2000)
         {
+            IsSpecial = true,
             EmergencyNumber = 16,
             VisualsId = 6,
             Look = PatientLook.Alien,
@@ -33,6 +34,7 @@ public static class DiseaseCatalog
         },
         new("baldness", 10, 950)
         {
+            IsSpecial = true,
             Look = PatientLook.Baldness,
             EmergencyNumber = 18,
             VisualsId = 8,
@@ -41,6 +43,7 @@ public static class DiseaseCatalog
         },
         new("bloaty_head", 2, 850)
         {
+            IsSpecial = true,
             EmergencyNumber = 18,
             VisualsId = 0,
             Look = PatientLook.BloatyHead,
@@ -97,6 +100,7 @@ public static class DiseaseCatalog
         },
         new("fractured_bones", 9, 450)
         {
+            IsSpecial = true,
             Look = PatientLook.FracturedBones,
             EmergencyNumber = 16,
             VisualsId = 7,
@@ -130,6 +134,7 @@ public static class DiseaseCatalog
         },
         new("hairyitis", 3, 1150)
         {
+            IsSpecial = true,
             Look = PatientLook.Hairyitis,
             EmergencyNumber = 12,
             VisualsId = 1,
@@ -154,6 +159,7 @@ public static class DiseaseCatalog
         },
         new("invisibility", 5, 1400)
         {
+            IsSpecial = true,
             Look = PatientLook.Invisible,
             EmergencyNumber = 18,
             VisualsId = 3,
@@ -185,6 +191,7 @@ public static class DiseaseCatalog
         },
         new("king_complex", 4, 1600)
         {
+            IsSpecial = true,
             Look = PatientLook.Elvis,
             EmergencyNumber = 18,
             VisualsId = 2,
@@ -193,6 +200,7 @@ public static class DiseaseCatalog
         },
         new("pregnant", 14, 200)
         {
+            IsSpecial = true,
             Look = PatientLook.Pregnant,
             EmergencyNumber = 8,
             VisualsId = 12,
@@ -216,6 +224,7 @@ public static class DiseaseCatalog
         },
         new("slack_tongue", 7, 900)
         {
+            IsSpecial = true,
             Look = PatientLook.SlackTongue,
             EmergencyNumber = 18,
             VisualsId = 5,
@@ -265,6 +274,7 @@ public static class DiseaseCatalog
         },
         new("transparency", 15, 800)
         {
+            IsSpecial = true,
             Look = PatientLook.Transparent,
             EmergencyNumber = 12,
             VisualsId = 13,

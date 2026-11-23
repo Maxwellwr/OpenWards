@@ -157,6 +157,22 @@ public class DiagnosisAndTreatmentTests
     }
 
     [Fact]
+    public void AFailedDrugKillsAnEmergencyPatient()
+    {
+        var (simulation, humanoid, patient) = NewPatient(maxDiagDiff: 0);
+        var hospital = simulation.Hospitals[0];
+        hospital.CaseOf(patient.Disease!, simulation.Rules.Diseases).CureEffectiveness = 1;
+        patient.IsDiagnosed = true;
+        patient.Health = 1m;
+        typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.EmergencyIndex))!.SetValue(patient, 1);
+
+        PatientCare.TreatDisease(simulation, Room(simulation, "pharmacy"), humanoid, patient, patient.Disease!);
+
+        Assert.Equal(-1000, patient.PendingHealthChange);
+        Assert.Equal(1, hospital.Deaths);
+    }
+
+    [Fact]
     public void WithoutDiagnosisRoomsAPatientDiagnosedFarEnoughHasTheCureGuessed()
     {
         var (simulation, _, patient) = NewPatient(maxDiagDiff: 0);

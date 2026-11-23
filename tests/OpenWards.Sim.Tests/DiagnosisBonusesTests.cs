@@ -37,4 +37,13 @@ public class DiagnosisBonusesTests
             Assert.All(disease.DiagnosisRooms, room => Assert.Contains(DiagnosisBonuses.Bonus(disease.Id, room), new[] { -400, -200, 0, 200, 400 }));
         }
     }
+
+    [Fact]
+    public void TheSpecialDiseasesAreTheMaintainersTenAndNeverContagious()
+    {
+        string[] special = ["bloaty_head", "hairyitis", "king_complex", "invisibility", "slack_tongue", "alien_dna", "fractured_bones", "baldness", "pregnant", "transparency"];
+        Assert.Equal(special.Order(), DiseaseCatalog.All.Where(d => d.IsSpecial).Select(d => d.Id).Order());
+        Assert.All(DiseaseCatalog.All.Where(d => d.IsSpecial), d => Assert.False(d.IsContagious));
+        Assert.Contains(DiseaseCatalog.All, d => d.IsContagious);
+    }
 }

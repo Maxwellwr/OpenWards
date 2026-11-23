@@ -452,7 +452,7 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
 - **Diagnosis and treatment** (`PatientCare`, by the community specification of the original game, not CorsixTH).
   Progress runs from 0 to 1000 and the disease is diagnosed at 1000. Each step at the GP's and in a diagnosis room
   adds `doctor's score + room's bonus − difficulty` when that is above 0. The score is skill `+ 250 − rnd(0, 500)`,
-  +200 for a consultant, −100 for a junior, +100 when not tired (below half of `gbv.Tired`), −100 when tired; the
+  +200 for a consultant, −100 for a junior, +100 when not tired (below `gbv.NotTired`), −100 when tired; the
   room's bonus comes from the maintainer's disease × room table (`DiagnosisBonuses`, which also gives each disease its
   diagnosis rooms; a negative bonus costs 5 health); the difficulty is `rnd(1, MaxDiagDiff)`, rolled at the first
   step. `rnd` is `SimRandom.Triangular`, the sum of two uniform draws. With no diagnosis room left, `p = progress / 10`:
@@ -460,7 +460,7 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   is wrong when `rng % 100 > min(p, 99)`; at or below `send_home` the patient goes home; in between they wait for a
   room or the player's fax answer, and give up after 60 days. The `stop_procedure` policy no longer matters. A
   treatment room always cures; a drug cures when `rnd(0, 99) <` its effectiveness and is paid for either way, and a
-  failed drug costs `1000 − 10 × effectiveness` health and sends the patient back to the GP. After a wrong guess any
+  failed drug costs `1000 − 10 × effectiveness` health (1000 for a special disease or an emergency) and sends the patient back to the GP. After a wrong guess any
   treatment costs 1000 health. Health changes made in a room count once the patient is out of it; a patient left
   below 1 of 1000 dies. Every procedure a doctor finishes adds 1 to their skill (within 30 to 1000).
 - **The patient window's buttons** (`PatientBehaviour.SendHome`, `GuessCure`, from `dialogs/patient.lua`).

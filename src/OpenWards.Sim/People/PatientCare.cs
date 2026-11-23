@@ -196,8 +196,9 @@ public static class PatientCare
     /// The treatment's last room is done (the community specification's "Treatment"; CorsixTH's
     /// <c>Patient:treatDisease</c>). The patient pays. A treatment room always cures; a drug cures when
     /// <c>rnd(0, 99)</c> is below its effectiveness, and is paid for either way. A failed drug costs
-    /// <c>1000 − 10 × effectiveness</c> health and sends the patient back to the GP; after a wrong guess any treatment
-    /// costs 1000. Health changes count once the patient is out of the room; a patient left below 1 dies.
+    /// <c>1000 − 10 × effectiveness</c> health and sends the patient back to the GP; for a special disease
+    /// (<see cref="DiseaseDefinition.IsSpecial"/>), an emergency patient or after a wrong guess it costs 1000, as any
+    /// treatment after a wrong guess does. Health changes count once the patient is out of the room; a patient left below 1 dies.
     /// </summary>
     /// <remarks>
     /// CorsixTH cures with a chance from the cure's effectiveness, the diagnosis progress and the staff's quality, for
@@ -214,7 +215,9 @@ public static class PatientCare
         if (isDrug)
         {
             cured = !patient.IsWrongGuess && simulation.Random.Triangular(0, 99) < entry.CureEffectiveness;
-            if (!patient.IsWrongGuess)
+
+            // A special disease's drug, an emergency's or one after a wrong guess kills when it fails.
+            if (!patient.IsWrongGuess && !disease.IsSpecial && patient.EmergencyIndex == 0)
             {
                 healthLoss = FullHealth - (10 * entry.CureEffectiveness);
             }
@@ -492,13 +495,10 @@ public static class PatientCare
 
     /// <summary>
     /// The doctor's score in a diagnosis step: skill (0 to 1000) <c>+ 250 − rnd(0, 500)</c>, +200 for a consultant, −100
-    /// for a junior, +100 when not tired (fatigue below half the level's <c>Tired</c>), −100 when tired (at or above
+    /// for a junior, +100 when not tired (fatigue below the level's <c>NotTired</c>), −100 when tired (at or above
     /// <c>Tired</c>). Without a doctor only the random part counts.
     /// </summary>
-    /// <remarks>
-    /// The specification adds a correction from the room that it leaves open; it is 0 here. It names a "not tired"
-    /// threshold that the level files do not have, so half of <c>Tired</c> stands in for it.
-    /// </remarks>
+    /// <remarks>The specification adds a correction from the room that it leaves open; it is 0 here.</remarks>
     internal static int DoctorScore(Simulation simulation, Humanoid? staff)
     {
         var score = 250 - simulation.Random.Triangular(0, 500);
@@ -517,13 +517,13 @@ public static class PatientCare
             score -= 100;
         }
 
-        var tired = simulation.Rules.Tiredness.Tired;
+        var tiredness = simulation.Rules.Tiredness;
         var fatigue = (int)decimal.Floor(staff.Fatigue * 1000);
-        if (fatigue >= tired)
+        if (fatigue >= tiredness.Tired)
         {
             score -= 100;
         }
-        else if (fatigue < tired / 2)
+        else if (fatigue < tiredness.NotTired)
         {
             score += 100;
         }

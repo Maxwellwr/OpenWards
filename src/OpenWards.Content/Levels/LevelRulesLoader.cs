@@ -212,9 +212,10 @@ public static partial class LevelRulesLoader
             EarthquakesFromConfig(config),
             config.GetInt("payroll.MaxSalary") ?? LevelRules.DefaultMaxSalary,
             new TirednessRules(
-                config.GetInt("gbv.Tired") ?? TirednessRules.Default.Tired,
-                config.GetInt("gbv.VeryTired") ?? TirednessRules.Default.VeryTired,
-                config.GetInt("gbv.CrackUpTired") ?? TirednessRules.Default.CrackUpTired),
+                config.GetInt("gbv.Tired") ?? TirednessRules.Unset.Tired,
+                config.GetInt("gbv.VeryTired") ?? TirednessRules.Unset.VeryTired,
+                config.GetInt("gbv.CrackUpTired") ?? TirednessRules.Unset.CrackUpTired,
+                config.GetInt("gbv.NotTired") ?? TirednessRules.Unset.NotTired),
             config.GetInt("gbv.MayorLaunch") ?? LevelRules.DefaultMayorLaunch,
             EmergenciesFromConfig(config),
             EpidemicsFromConfig(config),
