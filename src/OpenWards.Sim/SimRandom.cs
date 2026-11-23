@@ -73,6 +73,19 @@ public sealed class SimRandom
         return (int)(minInclusive + (long)offset);
     }
 
+    /// <summary>
+    /// The game's <c>rnd(lo, hi)</c>: the sum of two uniform draws, <c>lo + Next(n) + Next(n)</c> with
+    /// <c>n = (hi − lo) / 2 + 1</c>, so the middle of the range is likelier than its ends. When <c>hi − lo</c> is odd
+    /// the result stays below <paramref name="hi"/>: <c>Triangular(55, 60)</c> gives 55 to 59 weighted 1 : 2 : 3 : 2 : 1.
+    /// </summary>
+    /// <remarks>The distribution is the community specification's; the draws come from this generator.</remarks>
+    public int Triangular(int lo, int hi)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(lo, hi);
+        var n = (int)((((long)hi - lo) / 2) + 1);
+        return lo + Next(n) + Next(n);
+    }
+
     /// <summary>Returns true with probability <paramref name="numerator"/>/<paramref name="denominator"/>.</summary>
     public bool Chance(int numerator, int denominator)
     {

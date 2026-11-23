@@ -417,7 +417,8 @@ Next, in this order (2026-11-10):
    `TrainingRules` (gbv.TrainingRate, AbilityThreshold, TrainingValue); a student who becomes a consultant leaves. Not
    yet: the promotion advice and "not enough lecture chairs" advice (both since done). Learning on the job done
    2026-11-12 (`Training.LearnOnTheJob`: 0.000003 skill an hour using an object outside the training room, staff room
-   and toilets); doctors going back to the room after resting done the same night. No wage change on promotion: CorsixTH
+   and toilets; replaced 2026-11-23 by +1 skill per finished procedure, `StaffProfile.GainProcedureSkill`, by the
+   community specification); doctors going back to the room after resting done the same night. No wage change on promotion: CorsixTH
    has none (`parseSkillLevel` only sets the grade; the fair wage grows, so raise requests follow). Autopsies done (save format 71): the fax's Research choice
    (`PatientAnswer.Research`, `PatientBehaviour.CanGoToResearch`) sends a patient asking for a treatment room to the
    research department (`RoomSeek.Research`; it now has a door queue); the room's first researcher leaves research for

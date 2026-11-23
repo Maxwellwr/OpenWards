@@ -548,6 +548,13 @@ public class PatientFlowTests
         var doctors = simulation.AvailableStaff(StaffClass.Doctor);
         var doctor = weakDoctor ? doctors.Select((profile, index) => (profile.Skill, index)).Min().index : 0;
         Run(simulation, new HireStaffCommand(StaffClass.Doctor, doctor, new(15, 15)));
+        if (!weakDoctor)
+        {
+            // A diagnosis step adds the doctor's score less the patient's difficulty; a top consultant lets the GP
+            // alone diagnose most patients in one visit, so that other rooms see patients without diagnosis rooms.
+            simulation.Entities.OfType<Humanoid>().Single(h => h.Profile is { Class: StaffClass.Doctor }).Profile!.TrainSkill(1m, simulation.Rules.Staff);
+        }
+
         Run(simulation, new HireStaffCommand(StaffClass.Receptionist, 0, new(16, 15)));
         PlaceReceptionDesk(simulation);
 

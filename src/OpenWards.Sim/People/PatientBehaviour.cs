@@ -351,6 +351,23 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
 
     public bool IsDiagnosed { get; internal set; }
 
+    /// <summary>
+    /// How hard the patient's case is to diagnose, from 1 to the disease's <c>MaxDiagDiff</c>, taken from each diagnosis
+    /// step's gain; −1 until the first step rolls it (see <see cref="PatientCare"/>).
+    /// </summary>
+    public int DiagnosisDifficulty { get; internal set; } = -1;
+
+    /// <summary>
+    /// The cure was guessed and the guess is wrong: any treatment kills the patient (the community specification's
+    /// guess error flag).
+    /// </summary>
+    public bool IsWrongGuess { get; internal set; }
+
+    /// <summary>
+    /// Change to the patient's health, in thousandths, made while in a room and applied once out of it.
+    /// </summary>
+    public int PendingHealthChange { get; internal set; }
+
     /// <summary>The disease's diagnosis rooms the patient has not been to yet (CorsixTH's <c>available_diagnosis_rooms</c>).</summary>
     public IReadOnlyList<string> AvailableDiagnosisRooms => _availableDiagnosisRooms;
 
@@ -722,6 +739,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
                     }
                 }
 
+                ApplyPendingHealthChange();
                 if (IsFedUp && Next != AfterRoom.Die)
                 {
                     // Fed up while in the room: out of it, home (goHome("kicked")).
@@ -787,6 +805,8 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         DiseaseId = disease.Id;
         IsDiagnosed = false;
         DiagnosisProgress = 0;
+        DiagnosisDifficulty = -1;
+        IsWrongGuess = false;
         _availableDiagnosisRooms.Clear();
         _availableDiagnosisRooms.AddRange(disease.DiagnosisRooms);
         InsuranceCompany = insuranceCompany;
@@ -891,7 +911,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
             case PatientAnswer.GuessCure when question == PatientQuestion.NoDiagnosisRoom && Disease is { } disease
                 && PatientCare.IsDiscovered(simulation, humanoid, disease):
                 _question = PatientQuestion.None;
-                PatientCare.SetDiagnosed(simulation, humanoid, this, disease);
+                PatientCare.GuessDiagnosis(simulation, humanoid, this, disease);
                 if (PatientCare.AgreesToPay(simulation, humanoid, this, disease))
                 {
                     Seeking = RoomSeek.Treatment;
@@ -953,7 +973,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
             return;
         }
 
-        PatientCare.SetDiagnosed(simulation, humanoid, this, disease);
+        PatientCare.GuessDiagnosis(simulation, humanoid, this, disease);
         LeaveQueue(simulation, humanoid);
         _question = PatientQuestion.None;
         if (PatientCare.AgreesToPay(simulation, humanoid, this, disease))
@@ -2138,24 +2158,28 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     }
 
     /// <summary>
-    /// <c>action_seek_room_no_diagnosis_room_found</c> with the hospital's policies: a patient hardly diagnosed
-    /// goes home; one fairly far, or with a disease the hospital does not know, waits for the player's decision;
-    /// one nearly diagnosed has the disease guessed and goes on to treatment.
+    /// No diagnosis room is left for the patient, by the community specification's policy rule. With
+    /// <c>p = progress × 100 / 1000</c>: at or above the guess cure policy, above 0 and with every room of the treatment
+    /// built, the cure is guessed (see <see cref="PatientCare.GuessDiagnosis"/>) and the patient goes on to treatment if
+    /// they agree to pay; otherwise at or below the send home policy they go home. In between they wait for a room or for
+    /// the player's answer to their fax.
     /// </summary>
+    /// <remarks>
+    /// CorsixTH guesses only diseases the hospital knows, and sends home only below the send home policy; the treatment
+    /// rooms need not be there.
+    /// </remarks>
     private void NoDiagnosisRoomFound(Simulation simulation, Humanoid humanoid)
     {
         var policies = PatientCare.Policies(simulation, humanoid);
-        if (Disease is not { } disease || DiagnosisProgress < policies.SendHome)
+        var percent = DiagnosisProgress * 100 / PatientCare.FullDiagnosis;
+        if (Disease is not { } disease)
         {
             GoHome(simulation, humanoid, ReputationChange.Kicked);
         }
-        else if (DiagnosisProgress < policies.GuessCure || !PatientCare.IsDiscovered(simulation, humanoid, disease))
+        else if (percent * 10 >= policies.GuessCure && percent > 0
+            && disease.TreatmentRooms.All(roomType => FindRoom(simulation, humanoid, roomType) is not null))
         {
-            StartWaiting(simulation, humanoid, PatientQuestion.NoDiagnosisRoom);
-        }
-        else
-        {
-            PatientCare.SetDiagnosed(simulation, humanoid, this, disease);
+            PatientCare.GuessDiagnosis(simulation, humanoid, this, disease);
             if (PatientCare.AgreesToPay(simulation, humanoid, this, disease))
             {
                 Seeking = RoomSeek.Treatment;
@@ -2165,6 +2189,14 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
             {
                 GoHome(simulation, humanoid, ReputationChange.OverPriced);
             }
+        }
+        else if (percent * 10 <= policies.SendHome)
+        {
+            GoHome(simulation, humanoid, ReputationChange.Kicked);
+        }
+        else
+        {
+            StartWaiting(simulation, humanoid, PatientQuestion.NoDiagnosisRoom);
         }
     }
 
@@ -3063,6 +3095,21 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
 
     internal void AddToTreatmentHistory(TreatmentHistoryEntry entry) => _treatmentHistory.Add(entry);
 
+    /// <summary>Health in thousandths (the community specification's 0 to 1000).</summary>
+    internal int HealthThousandths => (int)decimal.Floor(Health * 1000);
+
+    /// <summary>Applies the health change made in the room the patient is leaving, within 0 to 1000 thousandths.</summary>
+    private void ApplyPendingHealthChange()
+    {
+        if (PendingHealthChange == 0)
+        {
+            return;
+        }
+
+        Health = Math.Clamp(Health + (PendingHealthChange / 1000m), 0m, 1m);
+        PendingHealthChange = 0;
+    }
+
     /// <summary><c>Patient:_dailyHealthHistoryRefresh</c>: today's health goes into the graph, the oldest day out.</summary>
     internal void RecordHealth()
     {
@@ -3569,6 +3616,9 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         writer.WriteByte((byte)HomeMood);
         writer.WriteBool(IsFedUp);
         writer.WriteBool(IsCountedInReputation);
+        writer.WriteInt32(DiagnosisDifficulty);
+        writer.WriteBool(IsWrongGuess);
+        writer.WriteInt32(PendingHealthChange);
     }
 
     internal static PatientBehaviour ReadState(SimReader reader)
@@ -3721,6 +3771,13 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
 
         // Before version 105 visits counted at the end; a patient still about had not.
         patient.IsCountedInReputation = reader.Version is 0 or >= 105 && reader.ReadBool();
+        if (reader.Version is 0 or >= 106)
+        {
+            patient.DiagnosisDifficulty = reader.ReadInt32();
+            patient.IsWrongGuess = reader.ReadBool();
+            patient.PendingHealthChange = reader.ReadInt32();
+        }
+
         return patient;
     }
 }

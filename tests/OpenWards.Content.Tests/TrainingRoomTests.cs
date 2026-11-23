@@ -161,24 +161,21 @@ public class TrainingRoomTests
     }
 
     [Fact]
-    public void ADoctorLearnsOnTheJobWhileUsingTheGpsDesk()
+    public void ADoctorGainsASkillPointForEachPatientSeen()
     {
         var simulation = NewStaffedHospital(weakDoctor: true);
         var doctor = simulation.Entities.OfType<Humanoid>().Single(h => h.Profile?.Class == StaffClass.Doctor);
+        var gp = simulation.Entities.OfType<Room>().Single(r => r.RoomType == "gp");
         var before = doctor.Profile!.Skill;
-        var usingHours = 0;
         for (var tick = 0; tick < 60 * GameDate.HoursPerDay; tick++)
         {
             simulation.Step();
-            if (doctor.ActionAnimation is not null && !doctor.IsCrossingDoor)
-            {
-                usingHours++;
-            }
         }
 
-        // 0.000003 of skill an hour at the desk or cabinet: thousandths of skill gained, at most one per 333 hours.
-        Assert.True(usingHours > 1000, $"Only {usingHours} hours at the desk.");
-        Assert.InRange(doctor.Profile.Skill - before, 1, (usingHours / 333) + 1);
+        // The community specification's experience rule: +1 skill per finished procedure, from at least 30.
+        var seen = gp.DoorQueue!.VisitorCount;
+        Assert.True(seen > 3, $"Only {seen} patients saw the GP.");
+        Assert.InRange(doctor.Profile.Skill, Math.Max(before, StaffProfile.MinProcedureSkill - 1) + 1, Math.Max(before + seen, StaffProfile.MinProcedureSkill + seen));
     }
 
     [Fact]
