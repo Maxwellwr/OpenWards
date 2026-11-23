@@ -1,10 +1,9 @@
 // Spending, receiving, the transaction log and monthly wages ported from CorsixTH CorsixTH/Lua/hospital.lua
 // (Hospital:spendMoney, Hospital:receiveMoney, Hospital:logTransaction, Hospital:onEndMonth); the casebook,
-// treatment prices and insurance from the same file (Hospital:Hospital, Hospital:receiveMoneyForTreatment,
-// Hospital:getTreatmentPrice, Hospital:addInsuranceMoney, Hospital:onEndYear); the price's impact from the same file
-// (computePriceLevelImpact, updateNotCuredCounts) and entities/humanoids/patient.lua (Patient:getPriceDistortion).
-// The reputation is not CorsixTH's: it follows the community's description of the original game (an average of the
-// patients' outcomes, see ReputationScore); the hospital's value and the year's counts from the same file (Hospital:Hospital,
+// treatment money from the same file (Hospital:receiveMoneyForTreatment) and updateNotCuredCounts. The reputation
+// is not CorsixTH's: it follows the community's description of the original game (an average of the patients'
+// outcomes, see ReputationScore); nor are prices, insurance companies and the monthly price level (the game logic
+// spec's price and payment section). The hospital's value and the year's counts from the same file (Hospital:Hospital,
 // spendMoney, receiveMoney, onEndYear) and the year end's trophies and awards from
 // dialogs/fullscreen/annual_report.lua (UIAnnualReport:checkTrophiesAndAwards, updateAwards); the rooms discovered
 // from the same file (Hospital:Hospital's room_discoveries, Hospital:isRoomDiscovered); heating from the same file
@@ -300,8 +299,23 @@ public sealed class Hospital
     /// <summary>Insurance companies a hospital deals with.</summary>
     public const int InsuranceCompanies = 3;
 
-    /// <summary>The insurance companies there are to choose from (<c>insurance_companies</c>, the original's S[20][2] to [12]).</summary>
-    public const int InsuranceCompanyNames = 11;
+    /// <summary>
+    /// The insurance companies there are to choose from, as the original game has them: the first eight names of
+    /// <c>insurance_companies</c> (string S[20][2] to [9]), each with its own delay and price bonus.
+    /// </summary>
+    public const int InsuranceCompanyNames = 8;
+
+    /// <summary>The companies CorsixTH chose from, which saves before format 106 may name.</summary>
+    private const int OldInsuranceCompanyNames = 11;
+
+    /// <summary>Months each insurance company (1 to 8, index 0 unused) takes to pay what it owes.</summary>
+    private static readonly int[] InsurerPaymentDelays = [0, 3, 6, 8, 2, 9, 10, 4, 3];
+
+    /// <summary>
+    /// How much more each insurance company (1 to 8, index 0 unused) lets its patients pay, in percent of the price
+    /// they expect.
+    /// </summary>
+    private static readonly int[] InsurerPriceBonuses = [0, 15, 10, 5, 8, 9, 40, 12, 3];
 
     private readonly int[] _insurers = [1, 2, 3];
 
@@ -311,24 +325,56 @@ public sealed class Hospital
     /// </summary>
     public IReadOnlyList<int> Insurers => _insurers;
 
-    /// <summary>
-    /// <c>Hospital:Hospital</c>: three different companies, each a number up to a quarter of those left with half the
-    /// chance, else any of those left.
-    /// </summary>
+    /// <summary>Three different companies of the eight, each as likely as the others, all of which the hospital accepts.</summary>
     public void ChooseInsurers(SimRandom random)
     {
         var companies = Enumerable.Range(1, InsuranceCompanyNames).ToList();
         for (var i = 0; i < InsuranceCompanies; i++)
         {
-            var count = companies.Count;
-            var index = random.NextInclusive(1, 2) == 1 ? random.NextInclusive(1, (count + 3) / 4) : random.NextInclusive(1, count);
-            _insurers[i] = companies[index - 1];
-            companies.RemoveAt(index - 1);
+            var index = random.Next(companies.Count);
+            _insurers[i] = companies[index];
+            companies.RemoveAt(index);
         }
     }
 
-    /// <summary>Months an insurance company keeps what it owes: payments of one month are paid two months later.</summary>
-    private const int InsuranceMonths = 3;
+    /// <summary>
+    /// Replaces a company past the eighth, which a save before format 106 may name, with the first of the eight the
+    /// hospital does not deal with yet.
+    /// </summary>
+    private void KeepInsurersKnown()
+    {
+        for (var i = 0; i < InsuranceCompanies; i++)
+        {
+            if (_insurers[i] > InsuranceCompanyNames)
+            {
+                _insurers[i] = Enumerable.Range(1, InsuranceCompanyNames).First(company => !_insurers.Contains(company));
+            }
+        }
+    }
+
+    /// <summary>Months an insurance company takes to pay (1 to 8), as <see cref="Insurers"/> numbers them.</summary>
+    public static int InsurerPaymentDelay(int insurer) => InsurerPaymentDelays[insurer];
+
+    /// <summary>How much more, in percent of the expected price, a patient of the insurance company (1 to 8) agrees to pay.</summary>
+    public static int InsurerPriceBonus(int insurer) => InsurerPriceBonuses[insurer];
+
+    /// <summary>
+    /// The months ahead for which insurance companies owe: index 0 is paid at the end of this month, index 1 at the end
+    /// of the next, and so on. The original keeps a slot for each month of the year, so no delay reaches 12 months.
+    /// </summary>
+    private const int InsuranceMonths = 12;
+
+    /// <summary>The months CorsixTH's companies (and saves before format 106) kept: paid at the end of the third.</summary>
+    private const int OldInsuranceMonths = 3;
+
+    /// <summary>The lowest monthly price level at which the adviser says prices are too low (unless it is 0).</summary>
+    public const int LowPriceLevel = 60;
+
+    /// <summary>The highest monthly price level at which the adviser does not yet say prices are too high.</summary>
+    public const int HighPriceLevel = 150;
+
+    /// <summary>The highest price level there is.</summary>
+    public const int MaxPriceLevel = 300;
 
     /// <summary>Yearly inflation of prices (CorsixTH's <c>inflation_rate</c>).</summary>
     public const decimal InflationRate = 0.045m;
@@ -389,22 +435,13 @@ public sealed class Hospital
     /// <summary>What a point of a patient's outcome adds to <see cref="ReputationScore"/>: a visit with one point stands for 500.</summary>
     public const int ReputationPerPoint = 500;
 
-    /// <summary>
-    /// Price distortion below which a patient may find a price low, by difficulty (CorsixTH's
-    /// <c>under_priced_thresholds</c>).
-    /// </summary>
-    private static readonly decimal[] UnderPricedThresholds = [-0.3m, -0.4m, -0.5m];
-
-    /// <summary>Price distortion above which a patient may find a price too high, by difficulty (<c>over_priced_thresholds</c>).</summary>
-    private static readonly decimal[] OverPricedThresholds = [0.4m, 0.3m, 0.2m];
-
     /// <summary>Days without a heating disaster, give or take 10, by difficulty (<c>disaster_free_days</c>).</summary>
     private static readonly int[] DisasterFreeDays = [300, 200, 150];
 
     private readonly List<Transaction> _transactions = [];
     private readonly SortedDictionary<string, DiseaseCase> _casebook = new(StringComparer.Ordinal);
 
-    /// <summary>What each insurance company owes: this month, last month and the month before.</summary>
+    /// <summary>What each of the hospital's insurance companies owes, by the month it pays (<see cref="InsuranceMonths"/>).</summary>
     private readonly long[,] _insuranceOwed = new long[InsuranceCompanies, InsuranceMonths];
 
     private readonly List<YearEndAward> _lastYearAwards = [];
@@ -541,13 +578,16 @@ public sealed class Hospital
     public int AutopsiesDiscovered { get; internal set; }
 
     /// <summary>
-    /// How many times <c>computePriceLevelImpact</c> has had the adviser judge a price, and the last judgement and its
-    /// casebook entry (<c>PlayerHospital:advisePriceLevelImpact</c>), for the interface to say.
+    /// How many times the month's price level has had the adviser judge the prices, and the last judgement with the
+    /// casebook entry furthest that way, for the interface to say.
     /// </summary>
     public int PriceAdvices { get; private set; }
 
     /// <inheritdoc cref="PriceAdvices"/>
     public PriceJudgment LastPriceJudgment { get; private set; }
+
+    /// <summary>The price level of the last month's end (<see cref="UpdatePriceLevel"/>): 100 at the expected prices.</summary>
+    public int PriceLevel { get; private set; } = DiseaseCase.StandardPrice;
 
     /// <inheritdoc cref="PriceAdvices"/>
     public string LastPriceAdviceDisease { get; private set; } = string.Empty;
@@ -825,27 +865,24 @@ public sealed class Hospital
     }
 
     /// <summary>
-    /// <c>Hospital:getTreatmentPrice</c>: the standard price with inflation, times the player's percentage, and with a
-    /// reputation for the disease above 500 times reputation / 500, rounded up.
+    /// The price a patient expects to pay: the level's <c>StartPrice</c>, and with a reputation for the disease (the
+    /// hospital's for a diagnosis) above 500 ⌊StartPrice × reputation / 500⌋. Unlike CorsixTH's, prices do not rise with
+    /// inflation.
     /// </summary>
-    public int TreatmentPrice(DiseaseDefinition disease, DiseaseRules rules)
+    public int ExpectedPrice(DiseaseDefinition disease, DiseaseRules rules)
     {
-        var inflation = 1m;
-        for (var i = 0; i < InflationYears; i++)
-        {
-            inflation *= 1 + InflationRate;
-        }
-
         // Peeking, so that working out a price (also for a window) does not add to the casebook.
         var entry = PeekCase(disease, rules);
-        var price = rules.CurePrice(disease) * inflation * entry.PricePercent / DiseaseCase.StandardPrice;
+        var start = (long)rules.CurePrice(disease);
         var reputation = entry.Reputation ?? Reputation;
-        if (reputation >= AverageReputation)
-        {
-            price = price * reputation / AverageReputation;
-        }
+        return (int)Math.Max(start, start * reputation / AverageReputation);
+    }
 
-        return (int)decimal.Ceiling(price);
+    /// <summary>The price the hospital charges: ⌊<see cref="ExpectedPrice"/> × the player's percentage / 100⌋.</summary>
+    public int TreatmentPrice(DiseaseDefinition disease, DiseaseRules rules)
+    {
+        var entry = PeekCase(disease, rules);
+        return (int)((long)ExpectedPrice(disease, rules) * entry.PricePercent / DiseaseCase.StandardPrice);
     }
 
     /// <summary>
@@ -958,8 +995,8 @@ public sealed class Hospital
     }
 
     /// <summary>
-    /// <c>Hospital:receiveMoneyForTreatment</c>: the patient pays, or their insurance company owes it until two
-    /// months later.
+    /// <c>Hospital:receiveMoneyForTreatment</c>: the patient pays, or their insurance company owes it until the end of
+    /// the month its delay brings (<see cref="InsurerPaymentDelay"/>).
     /// </summary>
     /// <param name="tick">When.</param>
     /// <param name="entry">The casebook entry of what was paid for.</param>
@@ -969,7 +1006,7 @@ public sealed class Hospital
     {
         if (insuranceCompany > 0)
         {
-            _insuranceOwed[insuranceCompany - 1, 0] += amount;
+            _insuranceOwed[insuranceCompany - 1, InsurerPaymentDelay(_insurers[insuranceCompany - 1])] += amount;
         }
         else
         {
@@ -980,25 +1017,25 @@ public sealed class Hospital
     }
 
     /// <summary>
-    /// The insurance part of <c>Hospital:onEndMonth</c>: each company pays what it owed from two months ago, and
-    /// a new month begins with nothing owed.
+    /// The insurance part of the end of a month: each company pays in full what it owes for this month, and what it
+    /// owes for later months comes a month nearer.
     /// </summary>
     internal void PayInsurance(long tick)
     {
         for (var company = 0; company < InsuranceCompanies; company++)
         {
-            var payout = _insuranceOwed[company, InsuranceMonths - 1];
+            var payout = _insuranceOwed[company, 0];
             if (payout > 0)
             {
                 Receive(tick, checked((int)payout), TransactionKind.Insurance, (company + 1).ToString(CultureInfo.InvariantCulture));
             }
 
-            for (var month = InsuranceMonths - 1; month > 0; month--)
+            for (var month = 0; month < InsuranceMonths - 1; month++)
             {
-                _insuranceOwed[company, month] = _insuranceOwed[company, month - 1];
+                _insuranceOwed[company, month] = _insuranceOwed[company, month + 1];
             }
 
-            _insuranceOwed[company, 0] = 0;
+            _insuranceOwed[company, InsuranceMonths - 1] = 0;
         }
     }
 
@@ -1078,7 +1115,8 @@ public sealed class Hospital
 
     /// <summary>
     /// <c>Hospital:updateNotCuredCounts</c>: a patient went home without a cure, sent home (<see cref="ReputationChange.Kicked"/>)
-    /// or because of the price (<see cref="ReputationChange.OverPriced"/>).
+    /// or because of the price (<see cref="ReputationChange.OverPriced"/>). Unlike CorsixTH, as in the original game, the
+    /// price itself does not change the reputation.
     /// </summary>
     internal void UpdateNotCuredCounts(ReputationChange reason, DiseaseCase entry)
     {
@@ -1097,45 +1135,61 @@ public sealed class Hospital
     }
 
     /// <summary>
-    /// <c>Hospital:computePriceLevelImpact</c> for a patient paying themselves, with <c>Patient:getPriceDistortion</c>:
-    /// the price level (0 at half price, 1 at double) against what the patient expects from the reputation for the
-    /// disease, the cure's effectiveness and their happiness. The patient's happiness drops by half the distortion (or
-    /// rises, at a low price); now and then the adviser speaks of a price far off what they expect. Unlike CorsixTH, the
-    /// price does not change the reputation by itself.
+    /// The month's price level: Σ prices × 100 / Σ expected prices (<see cref="TreatmentPrice"/>, <see cref="ExpectedPrice"/>)
+    /// over what the hospital can treat or diagnose now, 100 when it can do nothing, held to 0 to 300. Above 150 the
+    /// adviser says prices are too high, below 60 (but not at 0) too low, naming the casebook entry furthest that way.
     /// </summary>
-    internal void ComputePriceLevelImpact(Simulation simulation, Humanoid patient, DiseaseCase entry)
+    internal void UpdatePriceLevel(DiseaseRules rules)
     {
-        const decimal happinessWeight = 0.1m;
-        const decimal reputationWeight = 0.6m;
-        const decimal effectivenessWeight = 0.3m;
-        var random = simulation.Random;
-        var reputation = entry.Reputation ?? Reputation;
-        var expected = (happinessWeight * patient.Happiness) + (reputationWeight * reputation / 1000m) + (effectivenessWeight * entry.CureEffectiveness / 100m);
-        var priceLevel = (((entry.PricePercent / 100m) - 0.5m) / 3) * 2;
-        var distortion = priceLevel - expected;
-        Feelings.ChangeHappiness(simulation, patient, -(distortion / 2));
-        var difficulty = (int)simulation.Rules.Difficulty - 1;
-        if (distortion < UnderPricedThresholds[difficulty])
+        long prices = 0;
+        long expected = 0;
+        DiseaseCase? dearest = null;
+        DiseaseCase? cheapest = null;
+        foreach (var disease in DiseaseCatalog.All)
         {
-            if (random.NextInclusive(1, 100) == 1)
+            if (!IsAvailableProcedure(disease, rules))
             {
-                if (entry.PricePercent < DiseaseCase.StandardPrice)
-                {
-                    AdvisePrice(PriceJudgment.Under, entry);
-                }
+                continue;
+            }
+
+            var entry = PeekCase(disease, rules);
+            prices += TreatmentPrice(disease, rules);
+            expected += ExpectedPrice(disease, rules);
+            if (dearest is null || entry.PricePercent > dearest.PricePercent)
+            {
+                dearest = entry;
+            }
+
+            if (cheapest is null || entry.PricePercent < cheapest.PricePercent)
+            {
+                cheapest = entry;
             }
         }
-        else if (distortion > OverPricedThresholds[difficulty])
+
+        PriceLevel = expected > 0 ? (int)Math.Clamp(prices * 100 / expected, 0, MaxPriceLevel) : DiseaseCase.StandardPrice;
+        if (PriceLevel > HighPriceLevel && dearest is not null)
         {
-            if (random.NextInclusive(1, 100) == 1)
-            {
-                AdvisePrice(PriceJudgment.Over, entry);
-            }
+            AdvisePrice(PriceJudgment.Over, dearest);
         }
-        else if (Math.Abs(distortion) <= 0.15m && random.NextInclusive(1, 200) == 1)
+        else if (PriceLevel is > 0 and < LowPriceLevel && cheapest is not null)
         {
-            AdvisePrice(PriceJudgment.Fair, entry);
+            AdvisePrice(PriceJudgment.Under, cheapest);
         }
+    }
+
+    /// <summary>
+    /// Whether the hospital can do it now: a diagnosis whose room it has, or a disease of the level it knows whose
+    /// treatment rooms it has all.
+    /// </summary>
+    private bool IsAvailableProcedure(DiseaseDefinition disease, DiseaseRules rules)
+    {
+        if (disease.IsPseudo)
+        {
+            return disease.Id.StartsWith(DiseaseCatalog.DiagnosisPrefix, StringComparison.Ordinal)
+                && IsRoomDiscovered(disease.Id[DiseaseCatalog.DiagnosisPrefix.Length..]);
+        }
+
+        return rules.Frequency(disease) != 0 && PeekCase(disease, rules).Discovered && disease.TreatmentRooms.All(IsRoomDiscovered);
     }
 
     internal void AdvisePrice(PriceJudgment judgment, DiseaseCase entry)
@@ -1744,6 +1798,8 @@ public sealed class Hospital
             writer.WriteInt64(entry.ReputationScore);
             writer.WriteInt32(entry.ReputationVisits);
         }
+
+        writer.WriteInt32(PriceLevel);
     }
 
     internal static Hospital Read(SimReader reader, int player)
@@ -1846,9 +1902,20 @@ public sealed class Hospital
         }
         for (var company = 0; company < InsuranceCompanies; company++)
         {
-            for (var month = 0; month < InsuranceMonths; month++)
+            if (reader.Version is 0 or >= 106)
             {
-                hospital._insuranceOwed[company, month] = reader.ReadInt64();
+                for (var month = 0; month < InsuranceMonths; month++)
+                {
+                    hospital._insuranceOwed[company, month] = reader.ReadInt64();
+                }
+            }
+            else
+            {
+                // CorsixTH's months: this month's, last month's and the month before's, which is paid at this month's end.
+                for (var month = 0; month < OldInsuranceMonths; month++)
+                {
+                    hospital._insuranceOwed[company, OldInsuranceMonths - 1 - month] = reader.ReadInt64();
+                }
             }
         }
 
@@ -1922,8 +1989,10 @@ public sealed class Hospital
             for (var i = 0; i < InsuranceCompanies; i++)
             {
                 var insurer = reader.ReadByte();
-                hospital._insurers[i] = insurer is >= 1 and <= InsuranceCompanyNames ? insurer : throw new InvalidDataException($"Unknown insurance company {insurer}.");
+                hospital._insurers[i] = insurer is >= 1 and <= OldInsuranceCompanyNames ? insurer : throw new InvalidDataException($"Unknown insurance company {insurer}.");
             }
+
+            hospital.KeepInsurersKnown();
         }
 
         if ((reader.Version is 0 or >= 97) && reader.ReadBool())
@@ -1973,6 +2042,12 @@ public sealed class Hospital
                     entry.ReputationScore = (long)diseaseReputation * entry.ReputationVisits;
                 }
             }
+        }
+
+        // Version 106 keeps the month's price level.
+        if (reader.Version is 0 or >= 106)
+        {
+            hospital.PriceLevel = Math.Clamp(reader.ReadInt32(), 0, MaxPriceLevel);
         }
 
         return hospital;

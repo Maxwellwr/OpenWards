@@ -46,9 +46,11 @@ public class RoomRebuildTests
         hospital = simulation.Hospitals[0];
         Assert.NotNull(hospital.Rebuild);
 
-        // Built again with the door moved: only its objects are bought again.
+        // Built again with the door moved: only its objects are bought again. A patient may pay meanwhile.
         balance = hospital.Balance;
+        var moneyIn = hospital.MoneyInThisMonth;
         Run(simulation, new BuildRoomCommand(new RoomPlan("inflation", area, new DoorPlacement(new(area.X + 1, area.Y), EdgeOrientation.North))));
+        balance += hospital.MoneyInThisMonth - moneyIn;
         var rebuilt = Assert.Single(simulation.Entities.OfType<Room>(), r => r.RoomType == "inflation");
         Assert.True(rebuilt.IsPaid);
         var definition = simulation.Content.FindRoom("inflation")!;

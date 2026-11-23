@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 105;
+    private const int FormatVersion = 106;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -125,10 +125,14 @@ public sealed class Simulation
         Map = map;
         Temperatures = new TileTemperatures(map.Width, map.Height);
         Random = random;
+        MoneyRandom = new SimRandom(random.State, MoneySequence);
         Content = content;
         Rules = rules;
         _hospitals = new Hospital[map.PlayerCount];
     }
+
+    /// <summary>The stream of <see cref="MoneyRandom"/>.</summary>
+    private const ulong MoneySequence = 0x3A11E7u;
 
     /// <summary>The content definitions the rules refer to. Not part of the saved state.</summary>
     public GameContent Content { get; }
@@ -185,6 +189,12 @@ public sealed class Simulation
 
     /// <summary>The only source of randomness the simulation may use.</summary>
     public SimRandom Random { get; private set; }
+
+    /// <summary>
+    /// The money new patients bring (<see cref="People.PatientBehaviour.Wallet"/>), drawn from a stream of its own so
+    /// that the game's other draws stay as they were.
+    /// </summary>
+    internal SimRandom MoneyRandom { get; private set; }
 
     /// <summary>All entities, in increasing id order.</summary>
     public IReadOnlyList<Entity> Entities => _entities;
@@ -586,6 +596,12 @@ public sealed class Simulation
             simulation._parcelAdjacency[i] = reader.ReadBool();
         }
 
+        // Version 106 keeps the stream of the patients' money; older games start it from the game's.
+        if (version >= 106)
+        {
+            simulation.MoneyRandom = SimRandom.FromState(reader.ReadUInt64(), reader.ReadUInt64());
+        }
+
         return simulation;
     }
 
@@ -701,6 +717,9 @@ public sealed class Simulation
         {
             writer.WriteBool(adjacent);
         }
+
+        writer.WriteUInt64(MoneyRandom.State);
+        writer.WriteUInt64(MoneyRandom.Increment);
     }
 
     /// <summary>
@@ -806,7 +825,7 @@ public sealed class Simulation
     /// <summary>
     /// The end of the current day, as CorsixTH's <c>World:onTick</c> handles it: the next day's patient arrivals
     /// get their hours (<c>World:onEndDay</c>). At the end of a month every hospital pays its staff's wages
-    /// and receives what insurance companies owed from two months ago (<c>Hospital:onEndMonth</c>), at the end of
+    /// and receives what insurance companies owe for the month (<c>Hospital:onEndMonth</c>), and the month's price level is worked out, at the end of
     /// a year prices go up (<c>Hospital:onEndYear</c>), then the next month's arrivals are planned and the
     /// candidates for hire are replaced (<c>World:onEndMonth</c>).
     /// </summary>
@@ -910,6 +929,7 @@ public sealed class Simulation
             hospital.PayInterest(Hours);
             hospital.PayResearch(Hours);
             hospital.PayInsurance(Hours);
+            hospital.UpdatePriceLevel(Rules.Diseases);
 
             // Hospital:onEndMonth: equipment the level brings this month.
             hospital.Research.CheckAutomaticDiscovery(this, hospital, date.MonthOfGame);
