@@ -111,11 +111,11 @@ public class AdviserTests
         host.Adviser.Next(0);
 
         // warnPatientNotPaying, once a month.
-        hospital.UpdateNotCuredCounts(simulation.Random, ReputationChange.OverPriced, entry);
+        hospital.UpdateNotCuredCounts(ReputationChange.OverPriced, entry);
         checks.Observe(simulation, 0, null, 0);
         Assert.Equal(AdviserChecks.PatientNotPaying.Fallback.Replace("%s", "uncommon_cold", StringComparison.Ordinal), host.Adviser.Current);
         host.Adviser.Next(0);
-        hospital.UpdateNotCuredCounts(simulation.Random, ReputationChange.OverPriced, entry);
+        hospital.UpdateNotCuredCounts(ReputationChange.OverPriced, entry);
         checks.Observe(simulation, 0, null, 0);
         Assert.Null(host.Adviser.Current);
 

@@ -61,6 +61,12 @@ public sealed class MachineState
 /// <summary>What happens to machines as they are used.</summary>
 internal static class Machines
 {
+    /// <summary>
+    /// An explosion costs this many percent of the visits in reputation points (about −50), as the community describes the
+    /// original game; CorsixTH takes 50 off the reputation.
+    /// </summary>
+    internal const int ExplosionReputationPercent = -10;
+
     /// <summary>A machine that is placed starts as strong as the hospital's research has made it (<c>start_strength</c>).</summary>
     internal static void OnPlaced(Simulation simulation, RoomObject placed, int player)
     {
@@ -315,7 +321,7 @@ internal static class Machines
                 hospital.ChangeValue(-RoomPurchases.BuildCost(simulation, hospital, definition));
             }
 
-            hospital.ChangeReputation(simulation.Random, -50, null);
+            hospital.ChangeReputationPercent(ExplosionReputationPercent);
         }
     }
 }

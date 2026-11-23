@@ -893,10 +893,8 @@ public static class Epidemics
     {
         ClearAllInfectedPatients(simulation, epidemic);
         hospital.Spend(simulation.Hours, epidemic.DeclareFine, TransactionKind.EpidemicFine, epidemic.DiseaseId);
-        epidemic.ReputationHit = ReputationFromFine(epidemic.DeclareFine);
-
-        // CorsixTH lowers the reputation directly, without holding it to 0–1000.
-        hospital.UnconditionalChangeReputation(-epidemic.ReputationHit);
+        // Unlike CorsixTH's hundredth of the fine, declaring costs a fixed share of the visits.
+        epidemic.ReputationHit = -hospital.ChangeReputationPercent(DeclaredReputationPercent);
         epidemic.Outcome = EpidemicOutcome.Declared;
         hospital.Epidemics.LastOutcome = EpidemicOutcome.Declared;
         hospital.Epidemics.LastAmount = epidemic.DeclareFine;
@@ -1053,16 +1051,13 @@ public static class Epidemics
         {
             if (epidemic.Outcome == EpidemicOutcome.Evacuated)
             {
-                epidemic.ReputationHit = (int)Math.Floor((hospital.Reputation / 3m) + 0.5m);
                 EvacuateHospital(simulation, hospital);
             }
-            else
-            {
-                epidemic.ReputationHit = ReputationFromFine(epidemic.CoverUpFine);
-            }
 
+            // Unlike CorsixTH (a hundredth of the fine, or a third of the reputation on evacuation), an inspector who
+            // finds the infected costs a fixed share of the visits.
             hospital.Spend(simulation.Hours, epidemic.CoverUpFine, TransactionKind.EpidemicCoverUpFine, epidemic.DiseaseId);
-            hospital.UnconditionalChangeReputation(-epidemic.ReputationHit);
+            epidemic.ReputationHit = -hospital.ChangeReputationPercent(InspectionReputationPercent);
             hospital.Epidemics.LastAmount = epidemic.CoverUpFine;
         }
         else
@@ -1109,7 +1104,11 @@ public static class Epidemics
     private static int CalculateFine(Simulation simulation, int infected) => Math.Max(MinimumFine, infected * simulation.Rules.Epidemics.Fine);
 
     /// <summary><c>getBaseReputationFromFine</c>: a hundredth of the fine, rounded.</summary>
-    private static int ReputationFromFine(int fine) => (int)Math.Floor((fine / 100m) + 0.5m);
+    /// <summary>Declaring an epidemic costs this many percent of the visits in reputation points (about −10).</summary>
+    public const int DeclaredReputationPercent = -2;
+
+    /// <summary>An inspector who finds infected patients costs this many percent of the visits (about −50).</summary>
+    public const int InspectionReputationPercent = -10;
 
     /// <summary><c>Hospital:isInHospital</c>: a hospital tile of a parcel the player owns.</summary>
     internal static bool IsInHospital(Simulation simulation, int player, TilePosition tile)

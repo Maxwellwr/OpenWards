@@ -12,7 +12,7 @@ namespace OpenWards.Sim.Tests;
 public class StaffEmploymentTests
 {
     [Fact]
-    public void FiredStaffGetAMonthsWageCostReputationAndLeave()
+    public void FiredStaffGetAMonthsWageAndLeave()
     {
         var simulation = NewSimulation();
         var doctor = Hire(simulation, StaffClass.Doctor);
@@ -26,7 +26,9 @@ public class StaffEmploymentTests
         Assert.IsType<LeavingBehaviour>(doctor.Behaviour);
         Assert.Equal(balance - doctor.Profile!.Wage, hospital.Balance);
         Assert.Contains(hospital.Transactions, t => t is { Kind: TransactionKind.Severance, Subject: "Doctor" } && t.Amount == -doctor.Profile.Wage);
-        Assert.Equal(reputation - 3, hospital.Reputation);
+
+        // Unlike CorsixTH, firing does not touch the reputation.
+        Assert.Equal(reputation, hospital.Reputation);
 
         // Firing again does nothing, and the fired no longer tire or mind the temperature.
         Run(simulation, new FireStaffCommand(doctor.Id));

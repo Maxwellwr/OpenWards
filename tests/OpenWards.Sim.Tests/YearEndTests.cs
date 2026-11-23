@@ -112,9 +112,9 @@ public class YearEndTests
         var random = new SimRandom(4);
         var prices = AwardRules.With([new(AwardRules.Reputation, 500)]);
         var hospital = new Hospital(0, 0, reputation: 504, value: 100_000);
-        hospital.ChangeReputation(random, ReputationChange.Death);
-        hospital.ChangeReputation(random, ReputationChange.Cured);
-        Assert.Equal((501, 500), (hospital.Reputation, hospital.LowestReputationThisYear));
+        hospital.CountPatient(null, visit: true, points: 0);
+        hospital.ShiftReputation(21);
+        Assert.Equal((501, 480), (hospital.Reputation, hospital.LowestReputationThisYear)); // ⌊10,080 / 21⌋, then +21
         hospital.CuredThisYear = 20;
         hospital.NotCuredThisYear = 1;
 

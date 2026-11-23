@@ -12,63 +12,130 @@ public class ReputationTests
     private static readonly DiseaseDefinition Gp = DiseaseCatalog.Find(DiseaseCatalog.GpDiagnosis)!;
 
     [Fact]
-    public void ChangesNearTheAverageAlwaysCount()
+    public void TheReputationIsTheAverageOutcomeOfThePatients()
     {
         var hospital = new Hospital(0, 0);
-        var random = new SimRandom(1);
         var cold = hospital.CaseOf(Cold, DiseaseRules.Default);
-        Assert.Equal(Hospital.AverageReputation, hospital.Reputation);
-        Assert.Equal(Hospital.AverageReputation, cold.Reputation);
+        Assert.Equal((Hospital.AverageReputation, 10_000, 20), (hospital.Reputation, hospital.ReputationScore, hospital.ReputationVisits));
+        Assert.Equal((Hospital.AverageReputation, 20), (cold.Reputation, cold.ReputationVisits));
         Assert.Null(hospital.CaseOf(Gp, DiseaseRules.Default).Reputation);
 
-        hospital.ChangeReputation(random, ReputationChange.Cured, cold);
-        Assert.Equal((501, 501), (hospital.Reputation, cold.Reputation));
+        // The community's example: 100 patients fully diagnosed and cured, ⌊(20 + 200) × 500 / 120⌋.
+        for (var i = 0; i < 100; i++)
+        {
+            hospital.CountPatient(cold, visit: true, points: 2);
+        }
 
-        hospital.ChangeReputation(random, ReputationChange.Death, cold);
-        Assert.Equal((497, 497), (hospital.Reputation, cold.Reputation));
+        Assert.Equal((916, 916), (hospital.Reputation, cold.Reputation));
 
-        hospital.UpdateNotCuredCounts(random, ReputationChange.Kicked, cold);
-        hospital.UpdateNotCuredCounts(random, ReputationChange.OverPriced, cold);
-        Assert.Equal((492, 492), (hospital.Reputation, cold.Reputation));
-        Assert.Equal(2, hospital.NotCured);
-        Assert.Equal(1, cold.TurnedAway);
+        // Nothing wears off: a patient who leaves undiagnosed only dilutes it, ⌊110,000 / 121⌋.
+        hospital.CountPatient(cold, visit: true, points: 0);
+        Assert.Equal((909, 909), (hospital.Reputation, cold.Reputation));
 
-        // A change without a disease moves only the hospital's reputation.
-        hospital.ChangeReputation(random, ReputationChange.UnderPriced);
-        Assert.Equal((493, 492), (hospital.Reputation, cold.Reputation));
+        // An event without a disease moves only the hospital's.
+        hospital.ChangeReputationPercent(-10);
+        Assert.Equal((859, 909), (hospital.Reputation, cold.Reputation)); // 12.1 points cut to 12: ⌊104,000 / 121⌋
     }
 
     [Fact]
-    public void ChangesGetRarerTowardsTheEnds()
+    public void EachOutcomePullsTheReputationTowardsItsOwnLevel()
     {
-        Assert.Equal(0m, new Hospital(0, 0, Hospital.MinReputation).ReputationChangeLikelihood);
-        Assert.Equal(0m, new Hospital(0, 0, Hospital.MaxReputation).ReputationChangeLikelihood);
-        Assert.Equal(1.002m, new Hospital(0, 0).ReputationChangeLikelihood);
-        Assert.Equal(0.7515m, new Hospital(0, 0, 750).ReputationChangeLikelihood);
+        // Pulled to 1000, 500, 0 and below 0 by +2, +1, 0 and −1 points a visit.
+        Assert.Equal(999, After(2, 10_000)); // ⌊10,010,000 / 10,020⌋
+        Assert.Equal(500, After(1, 10_000));
+        Assert.Equal(0, After(0, 100_000));
+        Assert.Equal(0, After(-1, 30));
 
-        // At the top a gain never counts for the hospital, but always for the disease; a loss always counts.
-        var top = new Hospital(0, 0, 2000);
-        var random = new SimRandom(5);
-        var cold = top.CaseOf(Cold, DiseaseRules.Default);
-        for (var i = 0; i < 100; i++)
+        static int After(int points, int patients)
         {
-            top.ChangeReputation(random, ReputationChange.Cured, cold);
+            var hospital = new Hospital(0, 0);
+            for (var i = 0; i < patients; i++)
+            {
+                hospital.CountPatient(null, visit: true, points);
+            }
+
+            return hospital.Reputation;
+        }
+    }
+
+    [Fact]
+    public void OnlyTheReputationIsHeldWhatIsBeyondItStays()
+    {
+        var hospital = new Hospital(0, 0);
+        for (var i = 0; i < 20; i++)
+        {
+            hospital.CountPatient(null, visit: false, points: 2);
         }
 
-        Assert.Equal((1000, 600), (top.Reputation, cold.Reputation));
-        top.ChangeReputation(random, ReputationChange.Death, cold);
-        Assert.Equal(996, top.Reputation);
+        // 60 points for 20 visits would be 1500.
+        Assert.Equal((Hospital.MaxReputation, 30_000), (hospital.Reputation, hospital.ReputationScore));
+        hospital.CountPatient(null, visit: false, points: -10);
+        Assert.Equal(Hospital.MaxReputation, hospital.Reputation);
+    }
 
-        // At 750 about three gains in four count.
-        var counted = 0;
-        for (var i = 0; i < 4000; i++)
+    [Fact]
+    public void EventsAreAShareOfTheVisits()
+    {
+        // With 20 visits 2 % is 0.4 of a point, which is cut to nothing.
+        var hospital = new Hospital(0, 0);
+        Assert.Equal(0, hospital.ChangeReputationPercent(2));
+        Assert.Equal(-50, hospital.ChangeReputationPercent(-10)); // 2 points of 20 visits
+
+        // With 200 visits ±2 % is ±4 points, ±10 in reputation, whatever the reputation is.
+        var busy = new Hospital(0, 0);
+        for (var i = 0; i < 180; i++)
         {
-            var high = new Hospital(0, 0, 750);
-            high.ChangeReputation(random, ReputationChange.Cured);
-            counted += high.Reputation - 750;
+            busy.CountPatient(null, visit: true, points: 1);
         }
 
-        Assert.InRange(counted, 2850, 3150);
+        Assert.Equal(10, busy.ChangeReputationPercent(2));
+        Assert.Equal(-10, busy.ChangeReputationPercent(-2));
+        Assert.Equal(-5, busy.ChangeReputationPercent(-1));
+
+        // The year end's awards are in reputation and move it by as much.
+        Assert.Equal(25, busy.ShiftReputation(25));
+    }
+
+    [Fact]
+    public void APatientsVisitCountsOnceAndTheirOutcomesAddPoints()
+    {
+        var simulation = new Simulation(TestMaps.FromRows("."), seed: 3);
+        var hospital = simulation.Hospitals[0];
+        var humanoid = new Humanoid(1, new TilePosition(0, 0)) { HospitalPlayer = 0 };
+        var patient = new People.PatientBehaviour();
+        patient.SetDisease(Cold, 0, simulation.Random);
+        humanoid.Behaviour = patient;
+        var (score, visits) = (hospital.ReputationScore, hospital.ReputationVisits);
+
+        People.PatientCare.SetDiagnosisProgress(simulation, humanoid, patient, 700);
+        Assert.Equal((score, visits), (hospital.ReputationScore, hospital.ReputationVisits));
+
+        // A complete diagnosis is the first outcome: the visit and a point.
+        People.PatientCare.SetDiagnosisProgress(simulation, humanoid, patient, People.PatientCare.FullDiagnosis);
+        Assert.Equal((score + 500, visits + 1), (hospital.ReputationScore, hospital.ReputationVisits));
+        Assert.True(patient.IsCountedInReputation);
+
+        // The cure adds a point, not another visit; so does the disease's reputation.
+        People.PatientCare.CountForReputation(simulation, humanoid, patient, People.PatientCare.CurePoints);
+        Assert.Equal((score + 1000, visits + 1), (hospital.ReputationScore, hospital.ReputationVisits));
+        Assert.Equal((11_000, 21), (hospital.Casebook[Cold.Id].ReputationScore, hospital.Casebook[Cold.Id].ReputationVisits));
+
+        // A patient who dies undiagnosed: the visit and −1.
+        var other = new People.PatientBehaviour();
+        other.SetDisease(Cold, 0, simulation.Random);
+        var otherHumanoid = new Humanoid(2, new TilePosition(0, 0)) { HospitalPlayer = 0 };
+        otherHumanoid.Behaviour = other;
+        People.PatientCare.RecordDeath(simulation, otherHumanoid, other);
+        Assert.Equal((score + 500, visits + 2, 1), (hospital.ReputationScore, hospital.ReputationVisits, hospital.Deaths));
+    }
+
+    [Fact]
+    public void AVipsReportIsGoodMiddlingOrBad()
+    {
+        Assert.Equal(VipVisits.GoodReputationPercent, VipVisits.ReputationPercent(People.VipBehaviour.PleasedRating));
+        Assert.Equal(VipVisits.MiddlingReputationPercent, VipVisits.ReputationPercent(People.VipBehaviour.PleasedRating + 1));
+        Assert.Equal(VipVisits.MiddlingReputationPercent, VipVisits.ReputationPercent(VipVisits.MiddlingRating));
+        Assert.Equal(VipVisits.BadReputationPercent, VipVisits.ReputationPercent(VipVisits.MiddlingRating + 1));
     }
 
     [Fact]
@@ -89,42 +156,25 @@ public class ReputationTests
     }
 
     [Fact]
-    public void NowAndThenAPriceFarFromWhatPatientsExpectMovesTheReputation()
+    public void APriceFarFromWhatPatientsExpectDoesNotMoveTheReputation()
     {
         var simulation = new Simulation(TestMaps.FromRows("."), seed: 9);
 
-        // A new, fully happy patient pays each time. At half price for a cure that always works, patients expect more: 0 − (0.1 + 0.3 + 0.3) < −0.4.
-        var cheap = new Hospital(0, 0);
-        var gp = cheap.CaseOf(Gp, DiseaseRules.Default);
-        gp.PricePercent = 50;
-        gp.CureEffectiveness = 100;
-        for (var i = 0; i < 2000; i++)
+        // Unlike CorsixTH, neither a low nor a high price moves the reputation by itself; the adviser still speaks of it.
+        foreach (var (percent, effectiveness) in new[] { (50, 100), (200, 0) })
         {
-            cheap.ComputePriceLevelImpact(simulation, NewPatient(), gp);
+            var hospital = new Hospital(0, 0);
+            var gp = hospital.CaseOf(Gp, DiseaseRules.Default);
+            gp.PricePercent = percent;
+            gp.CureEffectiveness = effectiveness;
+            for (var i = 0; i < 2000; i++)
+            {
+                hospital.ComputePriceLevelImpact(simulation, NewPatient(), gp);
+            }
+
+            Assert.Equal(Hospital.AverageReputation, hospital.Reputation);
+            Assert.True(hospital.PriceAdvices > 0);
         }
-
-        Assert.InRange(cheap.Reputation, 505, 540);
-
-        // At double price for a cure that never works, patients expect less: 1 − (0.1 + 0.3) > 0.3.
-        var dear = new Hospital(0, 0);
-        gp = dear.CaseOf(Gp, DiseaseRules.Default);
-        gp.PricePercent = 200;
-        gp.CureEffectiveness = 0;
-        for (var i = 0; i < 2000; i++)
-        {
-            dear.ComputePriceLevelImpact(simulation, NewPatient(), gp);
-        }
-
-        Assert.InRange(dear.Reputation, 420, 490);
-
-        // At the standard price nothing changes.
-        var fair = new Hospital(0, 0);
-        for (var i = 0; i < 2000; i++)
-        {
-            fair.ComputePriceLevelImpact(simulation, NewPatient(), fair.CaseOf(Cold, DiseaseRules.Default));
-        }
-
-        Assert.Equal(Hospital.AverageReputation, fair.Reputation);
     }
 
     [Fact]
@@ -155,7 +205,8 @@ public class ReputationTests
         Assert.Equal(640, hospital.Reputation);
 
         var cold = hospital.CaseOf(Cold, original.Rules.Diseases);
-        hospital.UpdateNotCuredCounts(original.Random, ReputationChange.Kicked, cold);
+        hospital.UpdateNotCuredCounts(ReputationChange.Kicked, cold);
+        hospital.CountPatient(cold, visit: true, points: 0);
 
         using var stream = new MemoryStream();
         original.Save(stream);
@@ -165,8 +216,8 @@ public class ReputationTests
         Assert.Equal(original.ComputeStateHash(), restored.ComputeStateHash());
         var loaded = restored.Hospitals[0];
         Assert.Equal(640, restored.Rules.StartReputation);
-        Assert.Equal((637, 1), (loaded.Reputation, loaded.NotCured));
-        Assert.Equal((497, 1), (loaded.Casebook[Cold.Id].Reputation, loaded.Casebook[Cold.Id].TurnedAway));
+        Assert.Equal((609, 12_800, 21, 1), (loaded.Reputation, loaded.ReputationScore, loaded.ReputationVisits, loaded.NotCured)); // ⌊640 × 20 / 21⌋
+        Assert.Equal((476, 21, 1), (loaded.Casebook[Cold.Id].Reputation, loaded.Casebook[Cold.Id].ReputationVisits, loaded.Casebook[Cold.Id].TurnedAway));
         Assert.Null(loaded.CaseOf(Gp, restored.Rules.Diseases).Reputation);
     }
 }

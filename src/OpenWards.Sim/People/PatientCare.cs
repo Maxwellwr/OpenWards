@@ -27,6 +27,15 @@ public static class PatientCare
     /// <summary>Diagnosis progress in thousandths that stands for a complete diagnosis.</summary>
     public const int FullDiagnosis = 1000;
 
+    /// <summary>Reputation points of a complete diagnosis.</summary>
+    public const int FullDiagnosisPoints = 1;
+
+    /// <summary>Reputation points of a cure.</summary>
+    public const int CurePoints = 1;
+
+    /// <summary>Reputation points of a death.</summary>
+    public const int DeathPoints = -1;
+
     /// <summary>Days a patient waits for a missing room or the player's decision before going home.</summary>
     public const int WaitingDays = 60;
 
@@ -145,7 +154,7 @@ public static class PatientCare
         if (IsTreatmentEffective(simulation, room, patient, entry))
         {
             // Patient:cure and goHome("cured") with Hospital:updateCuredCounts.
-            hospital.ChangeReputation(simulation.Random, ReputationChange.Cured, entry);
+            CountForReputation(simulation, humanoid, patient, CurePoints);
             hospital.Cured++;
             hospital.CuredThisYear++;
             entry.Recoveries++;
@@ -156,7 +165,7 @@ public static class PatientCare
         else
         {
             // Patient:die with Hospital:humanoidDeath.
-            RecordDeath(simulation, hospital, entry);
+            RecordDeath(simulation, humanoid, patient);
             patient.SetNextDie();
         }
 
@@ -247,16 +256,45 @@ public static class PatientCare
     /// because of the price, which changes the reputation for their disease.
     /// </summary>
     /// <summary><c>Hospital:humanoidDeath</c>: the death counts, the disease's fatalities and the reputation.</summary>
-    internal static void RecordDeath(Simulation simulation, Hospital hospital, DiseaseCase? entry)
+    internal static void RecordDeath(Simulation simulation, Humanoid humanoid, PatientBehaviour patient)
     {
-        if (entry is not null)
+        var hospital = simulation.Hospitals[humanoid.HospitalPlayer];
+        if (patient.Disease is { } disease)
         {
-            entry.Fatalities++;
+            hospital.CaseOf(disease, simulation.Rules.Diseases).Fatalities++;
         }
 
         hospital.Deaths++;
         hospital.DeathsThisYear++;
-        hospital.ChangeReputation(simulation.Random, ReputationChange.Death, entry);
+        CountForReputation(simulation, humanoid, patient, DeathPoints);
+    }
+
+    /// <summary>
+    /// Counts a patient's outcome in the reputation (<see cref="Hospital.CountPatient"/>): their visit, if it has not
+    /// counted yet, and the outcome's points. Unlike CorsixTH's fixed amounts (+1 a cure, −4 a death, −3 sent home, −2 the
+    /// price) the reputation is the average of these, as the community describes the original game.
+    /// </summary>
+    internal static void CountForReputation(Simulation simulation, Humanoid humanoid, PatientBehaviour patient, int points)
+    {
+        var hospital = simulation.Hospitals[humanoid.HospitalPlayer];
+        var entry = patient.Disease is { } disease ? hospital.CaseOf(disease, simulation.Rules.Diseases) : null;
+        var visit = !patient.IsCountedInReputation;
+        patient.IsCountedInReputation = true;
+        hospital.CountPatient(entry, visit, points);
+    }
+
+    /// <summary>
+    /// Sets the patient's diagnosis progress; reaching a complete diagnosis (<see cref="FullDiagnosis"/>) for the first
+    /// time adds <see cref="FullDiagnosisPoints"/> to the reputation.
+    /// </summary>
+    internal static void SetDiagnosisProgress(Simulation simulation, Humanoid humanoid, PatientBehaviour patient, int progress)
+    {
+        var before = patient.DiagnosisProgress;
+        patient.DiagnosisProgress = progress;
+        if (before < FullDiagnosis && progress >= FullDiagnosis)
+        {
+            CountForReputation(simulation, humanoid, patient, FullDiagnosisPoints);
+        }
     }
 
     /// <summary>The policies of the patient's hospital.</summary>
@@ -270,7 +308,8 @@ public static class PatientCare
         }
 
         var hospital = simulation.Hospitals[humanoid.HospitalPlayer];
-        hospital.UpdateNotCuredCounts(simulation.Random, reason, hospital.CaseOf(disease, simulation.Rules.Diseases));
+        hospital.UpdateNotCuredCounts(reason, hospital.CaseOf(disease, simulation.Rules.Diseases));
+        CountForReputation(simulation, humanoid, patient, 0);
 
         // Though not killed, this lets the emergency's watch end early.
         if (patient.EmergencyIndex > 0)
@@ -359,6 +398,6 @@ public static class PatientCare
         var progress = (patient.DiagnosisProgress / 1000m) + diagnosisBase + (bonus * multiplier);
         // Patient:modifyDiagnosisProgress: no further than the stop_procedure policy.
         progress = Math.Clamp(progress, 0, Policies(simulation, humanoid).StopProcedure / 1000m);
-        patient.DiagnosisProgress = (int)decimal.Floor(progress * 1000);
+        SetDiagnosisProgress(simulation, humanoid, patient, (int)decimal.Floor(progress * 1000));
     }
 }

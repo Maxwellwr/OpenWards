@@ -170,7 +170,7 @@ public static class Cheats
                 hospital.DeathsThisYear = 0;
                 break;
             case CheatKind.MaxReputation:
-                hospital.UnconditionalChangeReputation(Hospital.MaxReputation);
+                hospital.SetReputation(Hospital.MaxReputation);
                 break;
             case CheatKind.Earthquake:
                 if (!simulation.Earthquakes.Create(simulation.Date, simulation.Random))
