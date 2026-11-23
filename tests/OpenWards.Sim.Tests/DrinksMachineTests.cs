@@ -42,7 +42,9 @@ public class DrinksMachineTests
 
         StartForDrink(simulation, humanoid, patient);
         Assert.Equal(machine.Id, patient.DrinksMachineId);
-        var toiletNeed = patient.ToiletNeed;
+        var bowel = patient.Bowel;
+        humanoid.Happiness = 0.5m;
+        humanoid.Warmth = 0.7m;
         Assert.Equal(PatientPhase.SeekReception, patient.Phase);
 
         var animations = new HashSet<int>();
@@ -61,10 +63,13 @@ public class DrinksMachineTests
         Assert.Contains(humanoid.Type == HumanoidType.StandardMalePatient ? MaleUse : FemaleUse, animations);
         Assert.Null(humanoid.ActionAnimation);
 
-        // patient_drinks_machine_after_use: 0.7 to 1 less thirsty, 0.05 to 0.1 more in need of the toilet, the can paid for.
-        Assert.InRange(patient.Thirst, 0m, 0.1m);
+        // Drinks full, happier by DrinkHappy, 10 more for the toilet and litter, cooled to 60; the can paid for.
+        Assert.InRange(patient.DrinkStock, 95, 100);
         Assert.False(patient.IsThirsty);
-        Assert.InRange(patient.ToiletNeed - toiletNeed, 0.05m, 0.1m);
+        Assert.InRange(patient.Bowel - bowel, 10, 12);
+        Assert.InRange(patient.LitterCount, 10, 10 + 12);
+        Assert.InRange(PatientNeeds.Warmth(humanoid), 55, 61);
+        Assert.InRange(PatientNeeds.Mood(humanoid), 50 + PatientNeedsRules.DefaultDrinkHappy - 2, 50 + PatientNeedsRules.DefaultDrinkHappy + 12);
         Assert.Equal(1, hospital.SodasSold);
         Assert.Equal(new Transaction(simulation.Hours - 1, TransactionKind.Drinks, string.Empty, LevelRules.DefaultSodaPrice, 10_000 + LevelRules.DefaultSodaPrice), hospital.Transactions[0]);
         Assert.Contains(simulation.FloatingDollarSigns, sign => sign.Amount == LevelRules.DefaultSodaPrice && !sign.Insurance);
@@ -86,7 +91,7 @@ public class DrinksMachineTests
         Assert.NotNull(humanoid.ActionAnimation);
         StepUntil(simulation, () => patient.DrinksMachineId == 0);
         Assert.Equal(0, simulation.Hospitals[0].SodasSold);
-        Assert.True(patient.Thirst < 0.8m);
+        Assert.True(patient.DrinkStock > 20);
         StepUntil(simulation, () => humanoid.IsMoving);
     }
 
@@ -123,15 +128,12 @@ public class DrinksMachineTests
         Assert.Equal(LevelRules.DefaultSodaPrice, new LevelRules(0, [], []).SodaPrice);
     }
 
-    /// <summary>A thirsty patient looking for a desk whose daily check finds the machine (the chance of not going is retried).</summary>
+    /// <summary>A thirsty patient looking for a desk goes for the machine.</summary>
     private static void StartForDrink(Simulation simulation, Humanoid humanoid, PatientBehaviour patient)
     {
-        for (var day = 0; day < 50 && patient.DrinksMachineId == 0; day++)
-        {
-            patient.Thirst = 0.8m;
-            patient.DrinkTimeout = 0;
-            Feelings.OnEndDay(simulation, humanoid);
-        }
+        patient.DrinkStock = 20;
+        var machine = simulation.Entities.OfType<RoomObject>().Single(placed => placed.ObjectType == "drinks_machine");
+        Assert.True(patient.GoForDrink(simulation, humanoid, machine));
     }
 
     private static void StepUntil(Simulation simulation, Func<bool> done)
@@ -147,8 +149,8 @@ public class DrinksMachineTests
     private static (Humanoid Humanoid, PatientBehaviour Patient) AddPatient(Simulation simulation)
     {
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(2, 5), simulation.Random, PatientLook.Standard, 0));
-        var patient = new PatientBehaviour { Health = 0.9m };
-        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, simulation.Random);
+        var patient = new PatientBehaviour { Health = 900 };
+        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
         humanoid.Behaviour = patient;
         return (humanoid, patient);
     }

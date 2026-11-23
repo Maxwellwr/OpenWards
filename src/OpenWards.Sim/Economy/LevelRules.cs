@@ -88,6 +88,7 @@ public sealed class LevelRules
     /// <param name="sodaPrice">What a can from the drinks machine costs (<c>gbv.SodaPrice</c>).</param>
     /// <param name="research">What research goes by; by default nothing to research.</param>
     /// <param name="allocation">How patients are shared between the hospitals; by default base_config.lua's <c>gbv.Alloc…</c>.</param>
+    /// <param name="needs">What patients put up with before they leave; by default <see cref="PatientNeedsRules.ForDifficulty"/>.</param>
     public LevelRules(
         int startCash,
         IEnumerable<KeyValuePair<string, int>> roomCosts,
@@ -115,9 +116,11 @@ public sealed class LevelRules
         Difficulty difficulty = Difficulty.Medium,
         int sodaPrice = DefaultSodaPrice,
         Research.ResearchRules? research = null,
-        PatientAllocationRules? allocation = null)
+        PatientAllocationRules? allocation = null,
+        PatientNeedsRules? needs = null)
     {
         Allocation = allocation ?? PatientAllocationRules.Default;
+        Needs = needs ?? PatientNeedsRules.ForDifficulty(Enum.IsDefined(difficulty) ? difficulty : Difficulty.Medium);
         Research = research ?? Sim.Research.ResearchRules.Default;
         SodaPrice = sodaPrice;
         Difficulty = Enum.IsDefined(difficulty) ? difficulty : throw new ArgumentOutOfRangeException(nameof(difficulty));
@@ -223,6 +226,9 @@ public sealed class LevelRules
 
     /// <summary>How the town's patients are shared between the hospitals (<c>gbv.Alloc…</c>).</summary>
     public PatientAllocationRules Allocation { get; }
+
+    /// <summary>What patients put up with before they leave (<c>gbv.LeaveMax</c> and the like).</summary>
+    public PatientNeedsRules Needs { get; }
 
     /// <summary>The campaign level's number (CorsixTH's <c>map.level_number</c>), or null for another map.</summary>
     public int? LevelNumber { get; }
@@ -371,6 +377,7 @@ public sealed class LevelRules
         writer.WriteInt32(SodaPrice);
         Research.Write(writer);
         Allocation.Write(writer);
+        Needs.Write(writer);
         writer.WriteBool(FreeBuild);
     }
 
@@ -415,7 +422,10 @@ public sealed class LevelRules
             Sim.Research.ResearchRules.Read(reader),
 
             // Version 103 shares patients by reputation; a game saved before went on taking turns.
-            reader.Version is 0 or >= 103 ? PatientAllocationRules.Read(reader) : PatientAllocationRules.InTurn);
+            reader.Version is 0 or >= 103 ? PatientAllocationRules.Read(reader) : PatientAllocationRules.InTurn,
+
+            // Version 108 keeps what patients put up with; a game saved before gets the difficulty's defaults.
+            reader.Version is 0 or >= 108 ? PatientNeedsRules.Read(reader) : null);
         return reader.ReadBool() ? rules.WithFreeBuild() : rules;
     }
 

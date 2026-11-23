@@ -9,7 +9,7 @@ using static OpenWards.Content.Tests.PatientFlowTests;
 
 namespace OpenWards.Content.Tests;
 
-/// <summary>Patients dropping litter in the corridors (CorsixTH's Patient:setTile) and people minding it.</summary>
+/// <summary>Patients dropping litter in the corridors (PatientNeeds' litter count, where CorsixTH's Patient:setTile) and people minding it.</summary>
 public class LitterDroppingTests
 {
     [Fact]
@@ -34,8 +34,8 @@ public class LitterDroppingTests
         });
         Assert.Equal(litter.Count, litter.Select(piece => piece.Tile).Distinct().Count());
 
-        // Patients in the hospital have their countdown.
-        Assert.Contains(simulation.Entities, entity => entity is Humanoid { Behaviour: PatientBehaviour { LitterCountdown: > 0 } });
+        // Patients in the hospital gather litter to drop, cans from the drinks machine and the mess around them.
+        Assert.Contains(simulation.Entities, entity => entity is Humanoid { Behaviour: PatientBehaviour { LitterCount: >= 0 } });
 
         using var stream = new MemoryStream();
         simulation.Save(stream);

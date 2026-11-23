@@ -43,8 +43,8 @@ public class ReferralTests
     private static (Humanoid Humanoid, PatientBehaviour Patient) AddPatient(Simulation simulation, PatientPhase phase)
     {
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(5, 5), simulation.Random, PatientLook.Standard, 0));
-        var patient = new PatientBehaviour { Health = 0.9m };
-        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, simulation.Random);
+        var patient = new PatientBehaviour { Health = 900 };
+        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
         typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.Phase))!.SetValue(patient, phase);
         humanoid.Behaviour = patient;
         return (humanoid, patient);

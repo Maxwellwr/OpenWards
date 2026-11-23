@@ -103,7 +103,7 @@ public class ReputationTests
         var hospital = simulation.Hospitals[0];
         var humanoid = new Humanoid(1, new TilePosition(0, 0)) { HospitalPlayer = 0 };
         var patient = new People.PatientBehaviour();
-        patient.SetDisease(Cold, 0, simulation.Random);
+        patient.SetDisease(Cold, 0);
         humanoid.Behaviour = patient;
         var (score, visits) = (hospital.ReputationScore, hospital.ReputationVisits);
 
@@ -122,7 +122,7 @@ public class ReputationTests
 
         // A patient who dies undiagnosed: the visit and −1.
         var other = new People.PatientBehaviour();
-        other.SetDisease(Cold, 0, simulation.Random);
+        other.SetDisease(Cold, 0);
         var otherHumanoid = new Humanoid(2, new TilePosition(0, 0)) { HospitalPlayer = 0 };
         otherHumanoid.Behaviour = other;
         People.PatientCare.RecordDeath(simulation, otherHumanoid, other);

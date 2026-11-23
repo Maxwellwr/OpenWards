@@ -20,7 +20,7 @@ public class HumanoidMoodsTests
         var simulation = host.Simulation;
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(10, 10), simulation.Random, PatientLook.Standard, 0));
         var patient = new PatientBehaviour();
-        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, simulation.Random);
+        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
         humanoid.Behaviour = patient;
         Assert.Null(HumanoidMoods.Icon(simulation, humanoid));
 
@@ -31,13 +31,15 @@ public class HumanoidMoodsTests
         patient.IsSad = true;
         Assert.Equal(4578, HumanoidMoods.Icon(simulation, humanoid));
 
-        // dying1 to dying5 as health falls.
-        patient.Health = 0.2m;
+        // dying1 to dying5 as health falls below 101 of 1000.
+        patient.Health = 101;
+        Assert.Equal(4578, HumanoidMoods.Icon(simulation, humanoid));
+        patient.Health = 90;
         Assert.Equal(4000, HumanoidMoods.Icon(simulation, humanoid));
-        patient.Health = 0.05m;
+        patient.Health = 10;
         Assert.Equal(4008, HumanoidMoods.Icon(simulation, humanoid));
 
-        patient.Health = 0m;
+        patient.Health = 0;
         patient.Die(simulation, humanoid);
         Assert.Equal(4046, HumanoidMoods.Icon(simulation, humanoid));
     }
@@ -49,7 +51,7 @@ public class HumanoidMoodsTests
         var simulation = host.Simulation;
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(10, 10), simulation.Random, PatientLook.Standard, 0));
         var patient = new PatientBehaviour();
-        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, simulation.Random);
+        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
         humanoid.Behaviour = patient;
         patient.SendHome(simulation, humanoid);
         Assert.Equal(PatientPhase.GoingHome, patient.Phase);
@@ -81,7 +83,7 @@ public class HumanoidMoodsTests
         // Called in from the door queue (Room:tryAdvanceQueue), the patient walks in while the doctor waits.
         var patientHumanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(5, 2), simulation.Random, PatientLook.Standard, 0));
         var patient = new PatientBehaviour();
-        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, simulation.Random);
+        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
         patientHumanoid.Behaviour = patient;
         room.PatientId = patientHumanoid.Id;
         patient.LetIn(simulation, patientHumanoid, room, (RoomDoor)simulation.FindEntity(room.DoorId)!);
@@ -109,16 +111,16 @@ public class HumanoidMoodsTests
         var room = Assert.Single(simulation.Entities.OfType<Room>());
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(5, 2), simulation.Random, PatientLook.Standard, 0));
         var patient = new PatientBehaviour { IsThirsty = true };
-        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, simulation.Random);
+        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
         humanoid.Behaviour = patient;
 
-        // Humanoid:checkWarmth's cold and hot show only under the cursor (on_hover), over any other mood.
+        // Cold and hot show only under the cursor (on_hover), over any other mood: a patient below 20 and above 80 of 100.
         humanoid.Warmth = 0.1m;
         Assert.Equal(3986, HumanoidMoods.Icon(simulation, humanoid));
         Assert.Equal(3994, HumanoidMoods.Icon(simulation, humanoid, hovered: true));
-        humanoid.Warmth = 0.5m;
+        humanoid.Warmth = 0.9m;
         Assert.Equal(3988, HumanoidMoods.Icon(simulation, humanoid, hovered: true));
-        humanoid.Warmth = 0.3m;
+        humanoid.Warmth = 0.5m;
         Assert.Equal(3986, HumanoidMoods.Icon(simulation, humanoid, hovered: true));
 
         // GameUI: the cursor over the room shows the queue mood over its queueing patients.

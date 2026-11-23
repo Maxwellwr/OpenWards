@@ -299,9 +299,6 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
 
     private const int MaxDiagnosisRooms = 64;
 
-    /// <summary>What each day costs a patient's health (<c>changeAttribute("health", -0.004)</c>).</summary>
-    internal const decimal DailyHealthLoss = 0.004m;
-
     /// <summary>How many days of health the patient window's graph shows (<c>health_history.size</c>).</summary>
     public const int HealthHistorySize = 20;
 
@@ -309,7 +306,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     private const int MaxTreatmentHistory = 1024;
 
     private readonly List<string> _availableDiagnosisRooms = [];
-    private readonly List<decimal> _healthHistory = [];
+    private readonly List<int> _healthHistory = [];
     private readonly List<TreatmentHistoryEntry> _treatmentHistory = [];
 
     public override BehaviourKind Kind => BehaviourKind.Patient;
@@ -428,8 +425,11 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     /// <summary>In general diagnosis: whether the doctor has examined the patient on the crash trolley.</summary>
     private bool IsExamined { get; set; }
 
-    /// <summary>How well the patient is, from 0 to 1 (CorsixTH's <c>health</c> attribute).</summary>
-    public decimal Health { get; internal set; } = 1m;
+    /// <summary>
+    /// How well the patient is, from 0 to <see cref="PatientNeeds.MaxHealth"/>: it falls a point every
+    /// <see cref="PatientNeeds.ModifyFreq"/> ticks and below 1 the patient dies.
+    /// </summary>
+    public int Health { get; internal set; } = PatientNeeds.MaxHealth;
 
     /// <summary>
     /// Health ran out: the patient dies as soon as they are out of rooms and doorways (CorsixTH's <c>set_to_die</c>).
@@ -442,20 +442,26 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     /// <summary>Whether the patient was cured (CorsixTH's <c>cured</c>).</summary>
     public bool IsCured { get; private set; }
 
+    /// <summary>How much the patient has had to drink, from 0 to 100; below 30 they are thirsty (see <see cref="PatientNeeds"/>).</summary>
+    public int DrinkStock { get; internal set; } = PatientNeeds.MaxPoints;
+
+    /// <summary>How thirsty the patient is, from 0 to 1: what <see cref="DrinkStock"/> lacks of 100.</summary>
+    public decimal Thirst => (PatientNeeds.MaxPoints - DrinkStock) / (decimal)PatientNeeds.MaxPoints;
+
+    /// <summary>How much the patient needs the toilet, from 0 up; above the level's <c>BowelFull</c> they want to go.</summary>
+    public int Bowel { get; internal set; }
+
+    /// <summary>How sick the patient feels, from 0 up; at the level's <c>VomitLimit</c> they may be sick.</summary>
+    public int Nausea { get; internal set; }
+
+    /// <summary>How much litter the patient has to drop, from 0 up; over the level's <c>LitterDrop</c> they may drop it.</summary>
+    public int LitterCount { get; internal set; }
+
     /// <summary>
-    /// Tiles to walk before the patient drops litter (CorsixTH's <c>litter_countdown</c>), or −1 until they reach the
-    /// hospital's floor; see <see cref="Littering"/>.
+    /// The patient's one count of grievances, from 0 up: once above the level's <c>LeaveMax</c> a waiting patient goes home.
+    /// Every procedure and the toilet reset it.
     /// </summary>
-    public int LitterCountdown { get; internal set; } = -1;
-
-    /// <summary>How thirsty the patient is, from 0 to 1 (CorsixTH's <c>thirst</c> attribute); see <see cref="Needs"/>.</summary>
-    public decimal Thirst { get; internal set; }
-
-    /// <summary>How much the patient needs the toilet, from 0 to 1 (CorsixTH's <c>toilet_need</c> attribute).</summary>
-    public decimal ToiletNeed { get; internal set; }
-
-    /// <summary>Days before a thirsty patient looks for a drinks machine again (CorsixTH's <c>timeout</c>).</summary>
-    public int DrinkTimeout { get; internal set; }
+    public int LeaveCount { get; internal set; }
 
     /// <summary>
     /// The drinks machine the patient is on the way to or buying a can from, or 0. Meanwhile <see cref="Phase"/> keeps
@@ -556,7 +562,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     /// <summary>Whether the patient shows the thirsty mood (CorsixTH's <c>setMood("thirsty", "activate")</c>).</summary>
     public bool IsThirsty { get; internal set; }
 
-    /// <summary>Whether the patient shows the sad mood: happiness below 0.3 at the end of the day (<c>sad2</c>).</summary>
+    /// <summary>Whether the patient shows the sad mood: their mood below the level's <c>Unhappy</c>.</summary>
     public bool IsSad { get; internal set; }
 
     /// <summary>
@@ -569,7 +575,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     /// The patient's health on each of their last <see cref="HealthHistorySize"/> days in the hospital, oldest first, for
     /// the patient window's graph (CorsixTH's <c>health_history</c> ring).
     /// </summary>
-    public IReadOnlyList<decimal> HealthHistory => _healthHistory;
+    public IReadOnlyList<int> HealthHistory => _healthHistory;
 
     /// <summary>
     /// The rooms the patient was dealt with in, their diagnosis and their cure, in order, for the patient window
@@ -626,13 +632,6 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         {
             Die(simulation, humanoid);
             return;
-        }
-
-        // CorsixTH counts a patient's wait by the day, whatever they are doing: being sick or getting a drink does not
-        // make them wait longer.
-        if (IsSidetracked && Phase == PatientPhase.Waiting && Waiting > 0)
-        {
-            Waiting--;
         }
 
         if (SpotAction != PatientSpotAction.None)
@@ -744,6 +743,9 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
                 {
                     room.PatientId = 0;
 
+                    // Out of a procedure, the wait starts again.
+                    LeaveCount = 0;
+
                     // Room:onHumanoidLeave: there might be other rooms like this one with patients queueing.
                     if (room.DoorQueue is { Count: 0 } && room.IsActive && room.StaffPresent)
                     {
@@ -793,26 +795,16 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
 
                 break;
             case PatientPhase.Waiting:
-                if (Waiting <= 0)
-                {
-                    GoHome(simulation, humanoid, ReputationChange.Kicked);
-                }
-                else
-                {
-                    Waiting--;
-                    WaitingEvent(humanoid);
-                }
-
+                // A waiting patient stays until their leave count runs over (PatientNeeds).
                 break;
         }
     }
 
     /// <summary>
     /// The first half of <c>Patient:setDisease</c>: the disease, nothing diagnosed yet, all its diagnosis rooms
-    /// still to visit, and who pays; and some thirst and need for the toilet to start with, unless only emergencies
-    /// bring the disease.
+    /// still to visit, and who pays. A patient with the squits comes with their bowels half full.
     /// </summary>
-    internal void SetDisease(DiseaseDefinition disease, int insuranceCompany, SimRandom random)
+    internal void SetDisease(DiseaseDefinition disease, int insuranceCompany, PatientNeedsRules? needs = null)
     {
         DiseaseId = disease.Id;
         IsDiagnosed = false;
@@ -823,13 +815,11 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         _availableDiagnosisRooms.AddRange(disease.DiagnosisRooms);
         InsuranceCompany = insuranceCompany;
 
-        // Alien patients do not have the animations for these things.
-        if (!disease.OnlyEmergency)
-        {
-            Thirst = Needs.Random(random) * 0.2m;
-            ToiletNeed = Needs.Random(random) * 0.2m;
-        }
+        Bowel = disease.Id == SquitsDisease ? (needs ?? PatientNeedsRules.Default).BowelFull / 2 : 0;
     }
+
+    /// <summary>The one disease whose patients come needing the toilet.</summary>
+    private const string SquitsDisease = "the_squits";
 
     /// <summary>
     /// <c>Helicopter:spawnPatient</c>: an emergency patient comes diagnosed and heads straight for the last room of the
@@ -899,7 +889,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     }
 
     /// <summary>
-    /// <c>UIFax:choice</c> for a patient's fax: sent home (counted as kicked out), waiting another 60 days, or, when the
+    /// <c>UIFax:choice</c> for a patient's fax: sent home (counted as kicked out), waiting with their leave count reset, or, when the
     /// diagnosis ran out of rooms and the disease is known, the cure guessed and on to treatment if they agree to pay.
     /// </summary>
     internal void Answer(Simulation simulation, Humanoid humanoid, PatientAnswer answer)
@@ -917,8 +907,9 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
                 GoHome(simulation, humanoid, ReputationChange.Kicked);
                 break;
             case PatientAnswer.Wait:
+                // Told to wait, the patient starts their wait again.
                 _question = PatientQuestion.None;
-                Waiting = PatientCare.WaitingDays * GameDate.HoursPerDay;
+                LeaveCount = 0;
                 break;
             case PatientAnswer.GuessCure when question == PatientQuestion.NoDiagnosisRoom && Disease is { } disease
                 && PatientCare.IsDiscovered(simulation, humanoid, disease):
@@ -1391,7 +1382,8 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     /// <c>Patient:_constructGetSodaAction</c>: a thirsty patient in a corridor walks to the drinks machine and buys a can,
     /// then goes back to what they were doing; one in a queue keeps their place (<c>action_queue_get_soda</c>).
     /// </summary>
-    internal void GoForDrink(Simulation simulation, Humanoid humanoid, RoomObject machine)
+    /// <returns>False when the patient cannot walk to the machine.</returns>
+    internal bool GoForDrink(Simulation simulation, Humanoid humanoid, RoomObject machine)
     {
         // action_queue_get_soda: a patient sitting in a queue gets up first, then buys the can.
         if (BenchId != 0 && DrinksMachineId == 0 && SpotAction == PatientSpotAction.None
@@ -1399,19 +1391,22 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         {
             _benchDrink = machine.Id;
             LeaveBench(simulation, humanoid);
-            return;
+            return true;
         }
 
         if (IsSidetracked || Phase is not (PatientPhase.SeekReception or PatientPhase.WalkingToReception or PatientPhase.InReceptionQueue
             or PatientPhase.SeekRoom or PatientPhase.WalkingToRoom or PatientPhase.InDoorQueue or PatientPhase.Waiting))
         {
-            return;
+            return true;
         }
 
-        if (humanoid.WalkTo(simulation, RoomVisits.UseTile(simulation, machine)))
+        if (!humanoid.WalkTo(simulation, RoomVisits.UseTile(simulation, machine)))
         {
-            DrinksMachineId = machine.Id;
+            return false;
         }
+
+        DrinksMachineId = machine.Id;
+        return true;
     }
 
     /// <summary>At the machine, the patient uses it; with the can, they go back to what they were doing.</summary>
@@ -1443,14 +1438,21 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     }
 
     /// <summary>
-    /// <c>patient_drinks_machine_after_use</c>: less thirsty, more in need of the toilet, the can is paid for unless the
-    /// patient was sent home meanwhile, and six times in ten it will be dropped within 1 to 12 tiles.
+    /// After the can: drinks full, happier by the level's <c>DrinkHappy</c>, 10 more litter to drop and 10 more for the
+    /// toilet, cooled down to 60 if warmer; the can is paid for unless the patient was sent home meanwhile.
     /// </summary>
     private void AfterDrink(Simulation simulation, Humanoid humanoid)
     {
-        var random = simulation.Random;
-        Thirst = Math.Clamp(Thirst - (0.7m + (Needs.Random(random) * 0.3m)), 0m, 1m);
-        ToiletNeed = Math.Clamp(ToiletNeed + 0.05m + (Needs.Random(random) * 0.05m), 0m, 1m);
+        var needs = simulation.Rules.Needs;
+        DrinkStock = PatientNeeds.MaxPoints;
+        PatientNeeds.ChangeMood(humanoid, needs.DrinkHappy);
+        LitterCount += 10;
+        Bowel += 10;
+        if (PatientNeeds.Warmth(humanoid) > PatientNeeds.Warm)
+        {
+            humanoid.Warmth = PatientNeeds.Warm / (decimal)PatientNeeds.MaxPoints;
+        }
+
         IsThirsty = false;
         if (Phase != PatientPhase.GoingHome && humanoid.HospitalPlayer >= 0 && humanoid.HospitalPlayer < simulation.Hospitals.Count)
         {
@@ -1460,11 +1462,6 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
             simulation.ShowFloatingDollarSign(humanoid, price, insurance: false);
             hospital.Receive(simulation.Hours, price, TransactionKind.Drinks, string.Empty);
             hospital.SodasSold++;
-        }
-
-        if (Needs.Random(random) < 0.6m)
-        {
-            LitterCountdown = random.NextInclusive(1, 12);
         }
     }
 
@@ -1572,7 +1569,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
                         _looRounds--;
                         if (_looRounds <= 0)
                         {
-                            Relieved(simulation);
+                            Relieved(simulation, humanoid);
                             Use!.Interrupt();
                         }
 
@@ -1580,7 +1577,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
                     case ObjectUseEvent.Done:
                         if (GoingToToilet == ToiletVisit.Yes)
                         {
-                            Relieved(simulation);
+                            Relieved(simulation, humanoid);
                         }
 
                         Use = null;
@@ -1616,11 +1613,13 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         }
     }
 
-    /// <summary>The toilets' loop callback when the use time runs out.</summary>
-    private void Relieved(Simulation simulation)
+    /// <summary>Done on the toilet: happier by the level's <c>ToiletHappy</c>, bowels empty and the wait starts again.</summary>
+    private void Relieved(Simulation simulation, Humanoid humanoid)
     {
         IsNeedingToilet = false;
-        ToiletNeed = Math.Clamp(ToiletNeed - (0.85m + (Needs.Random(simulation.Random) * 0.15m)), 0m, 1m);
+        PatientNeeds.ChangeMood(humanoid, simulation.Rules.Needs.ToiletHappy);
+        Bowel = 0;
+        LeaveCount = 0;
         GoingToToilet = ToiletVisit.No;
     }
 
@@ -1696,62 +1695,60 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
             && map.GetParcelOwner(cell.Parcel) == humanoid.HospitalPlayer + 1;
     }
 
-    /// <summary>
-    /// <c>Patient:vomit</c>: at a fully empty tile and not sick already since they last waited, the patient is sick on the
-    /// spot, and unhappy about it.
-    /// </summary>
-    internal void Vomit(Simulation simulation, Humanoid humanoid)
+    /// <summary><c>Patient:vomit</c>: at a fully empty tile the patient is sick on the spot.</summary>
+    /// <returns>False when the patient is not where they could be sick.</returns>
+    internal bool Vomit(Simulation simulation, Humanoid humanoid)
     {
         // atFullyEmptyTile's good_actions: not while sitting on a bench (use_object).
-        if (BenchId != 0 || !IsAtFullyEmptyTile(simulation, humanoid) || HasVomited)
+        if (BenchId != 0 || !IsAtFullyEmptyTile(simulation, humanoid))
         {
-            return;
+            return false;
         }
 
         StartSpotAction(humanoid, PatientSpotAction.Vomit);
         HasVomited = true;
-        Feelings.ChangeHappiness(simulation, humanoid, -0.02m);
+        return true;
     }
 
     /// <summary>
-    /// <c>Patient:pee</c>: at a fully empty tile the patient does it on the floor, and is sad about it; the hospital
-    /// remembers the first time, for the adviser (<c>did_it_on_floor</c>).
+    /// <c>Patient:pee</c>: at a fully empty tile the patient does it on the floor; the hospital remembers the first time,
+    /// for the adviser (<c>did_it_on_floor</c>).
     /// </summary>
-    internal void Pee(Simulation simulation, Humanoid humanoid)
+    /// <returns>False when the patient is not where they could do it.</returns>
+    internal bool Pee(Simulation simulation, Humanoid humanoid)
     {
         if (BenchId != 0 || !IsAtFullyEmptyTile(simulation, humanoid))
         {
-            return;
+            return false;
         }
 
         StartSpotAction(humanoid, PatientSpotAction.Pee);
         IsNeedingToilet = false;
-        Feelings.ChangeHappiness(simulation, humanoid, -0.02m);
         if (humanoid.HospitalPlayer >= 0 && humanoid.HospitalPlayer < simulation.Hospitals.Count)
         {
             simulation.Hospitals[humanoid.HospitalPlayer].DidItOnFloor = true;
         }
+
+        return true;
     }
 
     /// <summary>
-    /// <c>Patient:_dailyWaitChecks</c>' waiting events: with 30 days left the patient looks at the watch, with 20 yawns and
-    /// with 10 taps a foot, if their type has the animation and they are standing (<c>checkWatch</c>, <c>yawn</c>,
-    /// <c>tapFoot</c>).
+    /// Impatience: a patient standing and waiting their turn looks at the watch when their leave count passes half the
+    /// level's <c>LeaveMax</c>, yawns at five eighths and taps a foot at three quarters, if their type has the animation
+    /// (CorsixTH's <c>checkWatch</c>, <c>yawn</c> and <c>tapFoot</c>).
     /// </summary>
-    private void WaitingEvent(Humanoid humanoid)
+    internal void ShowImpatience(Humanoid humanoid, int before, int leaveMax)
     {
-        if (Waiting % GameDate.HoursPerDay != 0 || humanoid.IsMoving || IsSidetracked)
+        if (!IsWaitingForTurn || humanoid.IsMoving || IsSidetracked)
         {
             return;
         }
 
-        var spot = (Waiting / GameDate.HoursPerDay) switch
-        {
-            30 => PatientSpotAction.CheckWatch,
-            20 => PatientSpotAction.Yawn,
-            10 => PatientSpotAction.TapFoot,
-            _ => PatientSpotAction.None,
-        };
+        bool Passed(int threshold) => before <= threshold && LeaveCount > threshold;
+        var spot = Passed(leaveMax * 3 / 4) ? PatientSpotAction.TapFoot
+            : Passed(leaveMax * 5 / 8) ? PatientSpotAction.Yawn
+            : Passed(leaveMax / 2) ? PatientSpotAction.CheckWatch
+            : PatientSpotAction.None;
         if (spot != PatientSpotAction.None)
         {
             StartSpotAction(humanoid, spot);
@@ -1789,8 +1786,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     /// </summary>
     internal void MaybeYawn(Simulation simulation, Humanoid humanoid)
     {
-        var willYawn = Phase == PatientPhase.Waiting && Waiting > 0 && Waiting / GameDate.HoursPerDay == 20;
-        if (DiseaseId == "sleeping_illness" && !willYawn && simulation.Random.NextInclusive(1, 10) == 5
+        if (DiseaseId == "sleeping_illness" && simulation.Random.NextInclusive(1, 10) == 5
             && Phase is PatientPhase.Waiting or PatientPhase.SeekRoom && !humanoid.IsMoving && !IsSidetracked
             && simulation.Content.FindPatientAnimations(humanoid.Type)?.Yawn is not null)
         {
@@ -2249,15 +2245,15 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     }
 
     /// <summary>
-    /// Waits <see cref="PatientCare.WaitingDays"/> days, then goes home. The patient first steps off to a free spot
-    /// nearby, as CorsixTH's patients meander off before they idle.
+    /// Waits for a room or the player's decision until the leave count runs over (<see cref="PatientNeeds"/>), then goes
+    /// home. The patient first steps off to a free spot nearby, as CorsixTH's patients meander off before they idle.
     /// </summary>
     private void StartWaiting(Simulation simulation, Humanoid humanoid, PatientQuestion question)
     {
         _question = question;
         Phase = PatientPhase.Waiting;
         TargetId = 0;
-        Waiting = PatientCare.WaitingDays * GameDate.HoursPerDay;
+        Waiting = -1;
         if (simulation.Pathfinder.TryFindIdleTile(simulation.Map, humanoid.Tile, simulation.Random.Next(8), out var spot) && spot != humanoid.Tile)
         {
             humanoid.WalkTo(simulation, spot);
@@ -3097,7 +3093,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     /// <summary><c>Patient:cure</c>: well again, and no longer dying.</summary>
     internal void Cure()
     {
-        Health = 1m;
+        Health = PatientNeeds.MaxHealth;
         IsCured = true;
         IsInfected = false;
 
@@ -3107,10 +3103,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
 
     internal void AddToTreatmentHistory(TreatmentHistoryEntry entry) => _treatmentHistory.Add(entry);
 
-    /// <summary>Health in thousandths (the community specification's 0 to 1000).</summary>
-    internal int HealthThousandths => (int)decimal.Floor(Health * 1000);
-
-    /// <summary>Applies the health change made in the room the patient is leaving, within 0 to 1000 thousandths.</summary>
+    /// <summary>Applies the health change made in the room the patient is leaving, within 0 to 1000.</summary>
     private void ApplyPendingHealthChange()
     {
         if (PendingHealthChange == 0)
@@ -3118,7 +3111,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
             return;
         }
 
-        Health = Math.Clamp(Health + (PendingHealthChange / 1000m), 0m, 1m);
+        Health = Math.Clamp(Health + PendingHealthChange, 0, PatientNeeds.MaxHealth);
         PendingHealthChange = 0;
     }
 
@@ -3133,50 +3126,18 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         _healthHistory.Add(Health);
     }
 
-    /// <summary>
-    /// <c>Patient:_dailyHealthChecks</c>: below 0.01 health goes to 0, and at 0 the patient is set to die. On the way
-    /// down, while health is from 0.18 to below 0.22, each day costs a little happiness and one time in 30 the patient is
-    /// fed up and goes home, unless they are in a room that cures them.
-    /// </summary>
-    /// <returns>False when health was already 0, which ends the patient's day.</returns>
-    internal bool OnEndDayHealth(Simulation simulation, Humanoid humanoid)
+    /// <summary>Health ran out: the patient dies as soon as they are out of rooms and doorways.</summary>
+    internal void SetToDie() => IsSetToDie = true;
+
+    /// <summary>Whether the patient waits for their turn: in a queue, or waiting for a room or a decision.</summary>
+    internal bool IsWaitingForTurn => Phase is PatientPhase.InReceptionQueue or PatientPhase.InDoorQueue or PatientPhase.Waiting;
+
+    /// <summary>The leave count went over the level's limit: the waiting patient leaves the queue and goes home.</summary>
+    internal void LeaveFedUpWaiting(Simulation simulation, Humanoid humanoid)
     {
-        var health = Health;
-        if (health < 0.01m)
-        {
-            if (health == 0)
-            {
-                IsSetToDie = true;
-                return false;
-            }
-
-            // Time to say a prayer: dying tomorrow.
-            Health = 0;
-            return true;
-        }
-
-        if (health is >= 0.18m and < 0.22m)
-        {
-            // Entered the road of deterioration: waiting too long makes sad.
-            Feelings.ChangeHappiness(simulation, humanoid, -0.0002m);
-
-            // A 1 in 30 chance each of these days (about a third in all) that the patient gives up, unless they are in a
-            // room that cures them (_checkIfCureRoom); one in another room leaves it at once (LeaveFedUp) and goes home.
-            if (!IsCureRoom(simulation) && simulation.Random.NextInclusive(1, 30) == 1)
-            {
-                if (IsInRoom)
-                {
-                    IsFedUp = true;
-                }
-                else
-                {
-                    LeaveQueue(simulation, humanoid);
-                    GoHome(simulation, humanoid, ReputationChange.Kicked);
-                }
-            }
-        }
-
-        return true;
+        LeaveQueue(simulation, humanoid);
+        Waiting = -1;
+        GoHome(simulation, humanoid, ReputationChange.Kicked);
     }
 
     /// <summary><c>Patient:die</c>: the death counts, and the patient is gone.</summary>
@@ -3564,7 +3525,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         writer.WriteInt32(CureRoomsVisited);
         writer.WriteBool(IsExamined);
         MultiObjectUse.WriteOptional(writer, TrolleyUse);
-        writer.WriteDecimal(Health);
+        writer.WriteInt32(Health);
         writer.WriteBool(IsSetToDie);
         writer.WriteInt32(EmergencyIndex);
         writer.WriteBool(IsCured);
@@ -3575,10 +3536,10 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         writer.WriteBool(IsMarkedForVaccination);
         writer.WriteInt32(VaccinatingNurseId);
         writer.WriteByte((byte)_question);
-        writer.WriteInt32(LitterCountdown);
-        writer.WriteDecimal(Thirst);
-        writer.WriteDecimal(ToiletNeed);
-        writer.WriteInt32(DrinkTimeout);
+        writer.WriteInt32(LitterCount);
+        writer.WriteInt32(DrinkStock);
+        writer.WriteInt32(Bowel);
+        writer.WriteInt32(Nausea);
         writer.WriteInt32(DrinksMachineId);
         ObjectUse.WriteOptional(writer, _drinkUse);
         writer.WriteByte((byte)SpotAction);
@@ -3608,7 +3569,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         writer.WriteInt32(_healthHistory.Count);
         foreach (var health in _healthHistory)
         {
-            writer.WriteDecimal(health);
+            writer.WriteInt32(health);
         }
 
         writer.WriteInt32(_treatmentHistory.Count);
@@ -3632,6 +3593,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         writer.WriteInt32(DiagnosisDifficulty);
         writer.WriteBool(IsWrongGuess);
         writer.WriteInt32(PendingHealthChange);
+        writer.WriteInt32(LeaveCount);
     }
 
     internal static PatientBehaviour ReadState(SimReader reader)
@@ -3669,10 +3631,12 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         patient.CureRoomsVisited = reader.ReadInt32();
         patient.IsExamined = reader.ReadBool();
         patient.TrolleyUse = MultiObjectUse.ReadOptional(reader);
-        patient.Health = reader.ReadDecimal();
-        if (patient.Health is < 0m or > 1m)
+        // Version 108 keeps health from 0 to 1000; before, from 0 to 1.
+        var needs = reader.Version is 0 or >= 108;
+        patient.Health = needs ? reader.ReadInt32() : ReadOldShare(reader, PatientNeeds.MaxHealth);
+        if (patient.Health is < 0 or > PatientNeeds.MaxHealth)
         {
-            throw new InvalidDataException($"Patient health {patient.Health} is not between 0 and 1.");
+            throw new InvalidDataException($"Patient health {patient.Health} is not between 0 and {PatientNeeds.MaxHealth}.");
         }
 
         patient.IsSetToDie = reader.ReadBool();
@@ -3686,10 +3650,22 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         patient.VaccinatingNurseId = reader.ReadInt32();
         var question = reader.ReadByte();
         patient._question = question <= (byte)PatientQuestion.NoTreatmentRoom ? (PatientQuestion)question : throw new InvalidDataException($"Unknown patient question {question}.");
-        patient.LitterCountdown = reader.ReadInt32();
-        patient.Thirst = reader.ReadDecimal();
-        patient.ToiletNeed = reader.ReadDecimal();
-        patient.DrinkTimeout = reader.ReadInt32();
+        if (needs)
+        {
+            patient.LitterCount = Math.Max(0, reader.ReadInt32());
+            patient.DrinkStock = Math.Clamp(reader.ReadInt32(), 0, PatientNeeds.MaxPoints);
+            patient.Bowel = Math.Max(0, reader.ReadInt32());
+            patient.Nausea = Math.Max(0, reader.ReadInt32());
+        }
+        else
+        {
+            // Before version 108: the countdown to littering, thirst and need for the toilet from 0 to 1, and the drink timeout.
+            reader.ReadInt32();
+            patient.DrinkStock = PatientNeeds.MaxPoints - ReadOldShare(reader, PatientNeeds.MaxPoints);
+            patient.Bowel = ReadOldShare(reader, PatientNeedsRules.DefaultBowelOverflows);
+            reader.ReadInt32();
+        }
+
         patient.DrinksMachineId = reader.ReadInt32();
         patient._drinkUse = ObjectUse.ReadOptional(reader);
         var spot = reader.ReadByte();
@@ -3740,7 +3716,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         var days = reader.ReadCount(HealthHistorySize);
         for (var i = 0; i < days; i++)
         {
-            patient._healthHistory.Add(reader.ReadDecimal());
+            patient._healthHistory.Add(needs ? Math.Clamp(reader.ReadInt32(), 0, PatientNeeds.MaxHealth) : ReadOldShare(reader, PatientNeeds.MaxHealth));
         }
 
         var lines = reader.ReadCount(MaxTreatmentHistory);
@@ -3798,6 +3774,14 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
             patient.PendingHealthChange = reader.ReadInt32();
         }
 
+        if (needs)
+        {
+            patient.LeaveCount = Math.Max(0, reader.ReadInt32());
+        }
+
         return patient;
     }
+
+    /// <summary>A share from 0 to 1 of a save before version 108, as a whole number up to <paramref name="scale"/>.</summary>
+    private static int ReadOldShare(SimReader reader, int scale) => (int)(Math.Clamp(reader.ReadDecimal(), 0m, 1m) * scale);
 }

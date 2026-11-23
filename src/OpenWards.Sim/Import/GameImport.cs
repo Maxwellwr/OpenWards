@@ -279,14 +279,14 @@ public static class GameImport
             }
 
             var patient = simulation.AddEntity(id => Humanoid.CreatePatient(id, tile, simulation.Random, disease.Look, player));
-            var behaviour = new People.PatientBehaviour { Health = Math.Clamp(imported.Health, 0.01m, 1m) };
-            behaviour.SetDisease(disease, People.PatientCare.ChooseInsuranceCompany(simulation), simulation.Random);
+            var behaviour = new People.PatientBehaviour { Health = (int)(Math.Clamp(imported.Health, 0.001m, 1m) * People.PatientNeeds.MaxHealth) };
+            behaviour.SetDisease(disease, People.PatientCare.ChooseInsuranceCompany(simulation), simulation.Rules.Needs);
             behaviour.Wallet = People.PatientCare.NewPatientMoney(simulation);
             behaviour.DiagnosisProgress = Math.Clamp(imported.DiagnosisProgress, 0, 1000);
 
             // The save's visitors, which the reputation is weighed against, count them already.
             behaviour.IsCountedInReputation = true;
-            behaviour.Thirst = Math.Clamp(imported.Thirst, 0m, 1m);
+            behaviour.DrinkStock = People.PatientNeeds.MaxPoints - (int)(Math.Clamp(imported.Thirst, 0m, 1m) * People.PatientNeeds.MaxPoints);
             patient.Behaviour = behaviour;
             patient.Happiness = Math.Clamp(imported.Happiness, 0m, 1m);
             patient.Warmth = Math.Clamp(imported.Warmth, 0m, 1m);

@@ -122,7 +122,7 @@ public class PriceAndPaymentTests
         var hospital = simulation.Hospitals[0];
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(1, 0), simulation.Random, PatientLook.Standard, 0));
         var patient = new PatientBehaviour();
-        patient.SetDisease(Cold, 1, simulation.Random);
+        patient.SetDisease(Cold, 1);
         humanoid.Behaviour = patient;
         var wallet = patient.Wallet;
 
@@ -231,7 +231,7 @@ public class PriceAndPaymentTests
     {
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(1, 0), simulation.Random, PatientLook.Standard, 0));
         var patient = new PatientBehaviour();
-        patient.SetDisease(Cold, 0, simulation.Random);
+        patient.SetDisease(Cold, 0);
         humanoid.Behaviour = patient;
         return (humanoid, patient);
     }

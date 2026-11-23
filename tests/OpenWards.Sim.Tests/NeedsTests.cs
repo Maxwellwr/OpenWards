@@ -1,3 +1,4 @@
+using OpenWards.Sim.Commands;
 using OpenWards.Sim.Diseases;
 using OpenWards.Sim.Economy;
 using OpenWards.Sim.Entities;
@@ -6,131 +7,262 @@ using OpenWards.Sim.People;
 
 namespace OpenWards.Sim.Tests;
 
-/// <summary>Patients' thirst and need for the toilet (CorsixTH's Patient:tickDay, _dailyBowelChecks, _handleExcessThirst).</summary>
+/// <summary>Patients' mood, needs and leave count, updated every 16 ticks (<see cref="PatientNeeds"/>).</summary>
 public class NeedsTests
 {
     [Fact]
-    public void PatientsComeALittleThirstyExceptAliens()
+    public void TheTriangularRandomFavoursTheMiddleAndMissesAnOddTop()
     {
-        var simulation = NewSimulation();
-        var patients = Enumerable.Range(0, 100).Select(_ => AddPatient(simulation, "uncommon_cold").Patient).ToList();
-        Assert.All(patients, patient =>
+        var random = new SimRandom(7);
+        var counts = new int[6];
+        for (var i = 0; i < 90_000; i++)
         {
-            Assert.InRange(patient.Thirst, 0m, 0.2m);
-            Assert.InRange(patient.ToiletNeed, 0m, 0.2m);
-        });
-        Assert.Contains(patients, patient => patient.Thirst > 0.1m);
+            counts[random.Triangular(55, 60) - 55]++;
+        }
 
-        var alien = AddPatient(simulation, "alien_dna").Patient;
-        Assert.Equal(0m, alien.Thirst);
-        Assert.Equal(0m, alien.ToiletNeed);
+        // 1 : 2 : 3 : 2 : 1, and never 60.
+        Assert.Equal(0, counts[5]);
+        Assert.InRange(counts[0], 9_000, 11_000);
+        Assert.InRange(counts[1], 19_000, 21_000);
+        Assert.InRange(counts[2], 29_000, 31_000);
+        Assert.InRange(counts[3], 19_000, 21_000);
+        Assert.InRange(counts[4], 9_000, 11_000);
+
+        for (var i = 0; i < 1000; i++)
+        {
+            Assert.InRange(random.Triangular(200, 1000), 200, 1000);
+        }
     }
 
     [Fact]
-    public void EachDayThirstGrowsWithWarmthAndTheSquitsSendToTheToiletSooner()
-    {
-        var simulation = NewSimulation();
-        var (cold, coldPatient) = AddPatient(simulation, "uncommon_cold");
-        var (squits, squitsPatient) = AddPatient(simulation, "the_squits");
-        var thirst = coldPatient.Thirst;
-        var coldNeed = coldPatient.ToiletNeed;
-        var squitsNeed = squitsPatient.ToiletNeed;
-
-        Feelings.OnEndDay(simulation, cold);
-        Feelings.OnEndDay(simulation, squits);
-
-        // Warmth is updated first in the day: from 0.29 to 0.75 × 0.29 at a cold tile.
-        var warmth = cold.Warmth;
-        Assert.InRange(coldPatient.Thirst - thirst, (warmth * 0.02m) + 0.004m, (warmth * 0.02m) + 0.008m);
-        Assert.InRange(coldPatient.ToiletNeed - coldNeed, 0.002m, 0.008m);
-        Assert.InRange(squitsPatient.ToiletNeed - squitsNeed, 0.008m, 0.026m);
-    }
-
-    [Fact]
-    public void EachDayShowsWhetherThePatientIsSadAndAddsToTheHealthGraph()
+    public void PatientsStartFullOfDrinkAtMiddleWarmthAndTheSquitsHalfWayToTheToilet()
     {
         var simulation = NewSimulation();
         var (humanoid, patient) = AddPatient(simulation, "uncommon_cold");
-        humanoid.Happiness = 0.29m;
+        Assert.Equal(100, patient.DrinkStock);
+        Assert.Equal(0, patient.Bowel);
+        Assert.Equal(50, PatientNeeds.Warmth(humanoid));
+        Assert.Equal(100, PatientNeeds.Mood(humanoid));
 
-        Feelings.OnEndDay(simulation, humanoid);
+        var squits = AddPatient(simulation, "the_squits").Patient;
+        Assert.Equal(PatientNeedsRules.Default.BowelFull / 2, squits.Bowel);
+    }
 
-        // The mood is set before the day changes happiness; health goes into the graph before the day's loss.
+    [Fact]
+    public void EachUpdateTheWaitGrowsTheDrinksRunDownAndHealthFalls()
+    {
+        var simulation = NewSimulation();
+        var (humanoid, patient) = AddPatient(simulation, "uncommon_cold");
+        humanoid.Happiness = 0.9m;
+
+        PatientNeeds.Modify(simulation);
+
+        // No radiators: warmth falls a point towards 0 and is still comfortable.
+        Assert.Equal(49, PatientNeeds.Warmth(humanoid));
+        Assert.Equal(91, PatientNeeds.Mood(humanoid));
+        Assert.Equal(1, patient.LeaveCount);
+        Assert.Equal(99, patient.DrinkStock);
+        Assert.Equal(899, patient.Health);
+        Assert.InRange(patient.Bowel, 0, 1);
+    }
+
+    [Fact]
+    public void EachGrievanceMakesTheWaitGrowFaster()
+    {
+        var simulation = NewSimulation();
+        var (humanoid, patient) = AddPatient(simulation, "uncommon_cold");
+        humanoid.Happiness = 0.3m;
+        patient.Bowel = 60;
+        patient.DrinkStock = 20;
+
+        PatientNeeds.Modify(simulation);
+
+        // One for the time, one each for being unhappy (below 50), needing the toilet (above 50) and thirsty (below 30).
+        Assert.Equal(4, patient.LeaveCount);
         Assert.True(patient.IsSad);
-        Assert.Equal([0.9m], patient.HealthHistory);
-        Assert.Equal(0.896m, patient.Health);
+        Assert.True(patient.IsNeedingToilet);
+        Assert.True(patient.IsThirsty);
+    }
 
+    [Fact]
+    public void ColdAndHeatCostMoodAndHeatMakesSickAndThirsty()
+    {
+        var simulation = NewSimulation();
+        var (humanoid, patient) = AddPatient(simulation, "uncommon_cold");
+        humanoid.Happiness = 0.7m;
+        humanoid.Warmth = 0.1m;
+        PatientNeeds.Modify(simulation);
+        Assert.Equal(69, PatientNeeds.Mood(humanoid));
+
+        humanoid.Warmth = 0.9m;
+        PatientNeeds.Modify(simulation);
+
+        // Warmth 89: hot, so one less mood and one more nausea, and 2 more drink gone for being above 60.
+        Assert.Equal(68, PatientNeeds.Mood(humanoid));
+        Assert.Equal(1, patient.Nausea);
+        Assert.Equal(100 - 1 - 3, patient.DrinkStock);
+    }
+
+    [Fact]
+    public void RadiatorsWarmTheCorridorByTheirDistance()
+    {
+        var simulation = NewSimulation();
+        var (humanoid, _) = AddPatient(simulation, "uncommon_cold");
+        AddObject(simulation, "radiator", new TilePosition(4, 2));
+        AddObject(simulation, "radiator", new TilePosition(2, 3));
+        var world = PatientNeeds.World.Of(simulation);
+
+        // Heat 5: ⌊50 / 2⌋ + ⌊50 / 1⌋.
+        Assert.Equal(75, PatientNeeds.WarmthTarget(simulation, world, humanoid, roomId: 0));
+
+        PatientNeeds.Modify(simulation);
+        Assert.Equal(51, PatientNeeds.Warmth(humanoid));
+    }
+
+    [Fact]
+    public void PlantsAndLitterNearbyChangeMoodAndNausea()
+    {
+        var simulation = NewSimulation();
+        var (humanoid, patient) = AddPatient(simulation, "uncommon_cold");
+        humanoid.Happiness = 0.5m;
+        AddObject(simulation, "plant", new TilePosition(5, 5));
+        Litter.Drop(simulation, 0, LitterType.Puke, new TilePosition(3, 2), false);
+        Litter.Drop(simulation, 0, LitterType.Paper, new TilePosition(2, 2), false);
+        Litter.Drop(simulation, 0, LitterType.Paper, new TilePosition(5, 2), false);
+
+        PatientNeeds.Modify(simulation);
+
+        // Plant +1, puke next to them −2, paper underfoot −1, comfortable +1; paper three tiles away does not count.
+        Assert.Equal(49, PatientNeeds.Mood(humanoid));
+        Assert.Equal(3, patient.Nausea);
+        Assert.Equal(3, patient.LitterCount);
+    }
+
+    [Fact]
+    public void AWaitingPatientLeavesOnceTheWaitIsOverTheLimit()
+    {
+        var simulation = NewSimulation();
+        var (humanoid, patient) = AddPatient(simulation, "uncommon_cold");
+        var hospital = simulation.Hospitals[0];
+        hospital.CaseOf(patient.Disease!, simulation.Rules.Diseases).Discovered = true;
+        patient.DiagnosisProgress = 300;
+        simulation.Schedule(0, new GuessPatientCureCommand(humanoid.Id));
+        simulation.Step();
+        Assert.Equal(PatientPhase.Waiting, patient.Phase);
+
+        patient.LeaveCount = PatientNeedsRules.Default.LeaveMax - 1;
+        PatientNeeds.Modify(simulation);
+        Assert.Equal(PatientPhase.Waiting, patient.Phase);
+
+        PatientNeeds.Modify(simulation);
+        Assert.Equal(PatientPhase.GoingHome, patient.Phase);
+        Assert.Equal(1, hospital.NotCured);
+    }
+
+    [Fact]
+    public void AnEmergencyPatientKeepsTheirHealthAndAPatientAtNoHealthIsSetToDie()
+    {
+        var simulation = NewSimulation();
+        var (emergency, emergencyPatient) = AddPatient(simulation, "uncommon_cold");
+        emergencyPatient.StartEmergency(simulation, emergency, 1);
+        var (_, dying) = AddPatient(simulation, "uncommon_cold");
+        dying.Health = 1;
+
+        PatientNeeds.Modify(simulation);
+
+        Assert.Equal(900, emergencyPatient.Health);
+        Assert.Equal(0, dying.Health);
+        Assert.True(dying.IsSetToDie);
+    }
+
+    [Fact]
+    public void TheUpdateComesEverySixteenTicks()
+    {
+        Assert.True(PatientNeeds.IsDue(0));
+        Assert.False(PatientNeeds.IsDue(15));
+        Assert.True(PatientNeeds.IsDue(16));
+
+        var simulation = NewSimulation();
+        var (_, patient) = AddPatient(simulation, "uncommon_cold");
+        for (var tick = 0; tick < 50; tick++)
+        {
+            simulation.Step();
+        }
+
+        // Ticks 0, 16, 32 and 48.
+        Assert.Equal(896, patient.Health);
+    }
+
+    [Fact]
+    public void EachDayAddsToTheHealthGraph()
+    {
+        var simulation = NewSimulation();
+        var (humanoid, patient) = AddPatient(simulation, "uncommon_cold");
         for (var day = 0; day < 25; day++)
         {
-            humanoid.Happiness = 0.3m;
+            patient.Health = 900 - day;
             Feelings.OnEndDay(simulation, humanoid);
         }
 
-        Assert.False(patient.IsSad);
         Assert.Equal(PatientBehaviour.HealthHistorySize, patient.HealthHistory.Count);
-        Assert.Equal(0.9m - (6 * 0.004m), patient.HealthHistory[0]);
-        Assert.Equal(0.9m - (25 * 0.004m), patient.HealthHistory[^1]);
+        Assert.Equal(895, patient.HealthHistory[0]);
+        Assert.Equal(876, patient.HealthHistory[^1]);
     }
 
     [Fact]
-    public void AThirstyPatientIsUnhappyAndLooksForADrinksMachineEveryFewDays()
+    public void TheLevelFilesSetWhatPatientsPutUpWith()
     {
-        var simulation = NewSimulation();
-        var (humanoid, patient) = AddPatient(simulation, "uncommon_cold");
-        patient.Thirst = 0.8m;
-        humanoid.Happiness = 0.5m;
-
-        Feelings.OnEndDay(simulation, humanoid);
-
-        Assert.True(patient.IsThirsty);
-
-        // Comfortable (0.005), standing about (−0.00002), thirsty (−0.002).
-        Assert.Equal(0.50298m, humanoid.Happiness);
-
-        // No machine: they look again in two to four days.
-        Assert.InRange(patient.DrinkTimeout, 2, 4);
-        var timeout = patient.DrinkTimeout;
-        Feelings.OnEndDay(simulation, humanoid);
-        Assert.Equal(timeout - 1, patient.DrinkTimeout);
-
-        // An emergency patient's needs do not change.
-        var (emergency, emergencyPatient) = AddPatient(simulation, "uncommon_cold");
-        emergencyPatient.StartEmergency(simulation, emergency, 1);
-        var before = emergencyPatient.Thirst;
-        Feelings.OnEndDay(simulation, emergency);
-        Assert.Equal(before, emergencyPatient.Thirst);
+        Assert.Equal(250, PatientNeedsRules.ForDifficulty(Difficulty.Easy).LeaveMax);
+        Assert.Equal(30, PatientNeedsRules.ForDifficulty(Difficulty.Easy).Unhappy);
+        Assert.Equal(150, PatientNeedsRules.ForDifficulty(Difficulty.Medium).LeaveMax);
+        Assert.Equal(100, PatientNeedsRules.ForDifficulty(Difficulty.Hard).LeaveMax);
+        Assert.Equal(50, PatientNeedsRules.ForDifficulty(Difficulty.Hard).Unhappy);
+        Assert.Equal(PatientNeedsRules.ForDifficulty(Difficulty.Hard), new LevelRules(0, [], [], difficulty: Difficulty.Hard).Needs);
     }
 
     [Fact]
     public void NeedsAreSaved()
     {
-        var simulation = NewSimulation();
-        var (humanoid, patient) = AddPatient(simulation, "uncommon_cold");
-        patient.Thirst = 0.8m;
-        Feelings.OnEndDay(simulation, humanoid);
+        var needs = PatientNeedsRules.Default with { LeaveMax = 123, DrinkHappy = 7 };
+        var simulation = NewSimulation(needs);
+        var (_, patient) = AddPatient(simulation, "uncommon_cold");
+        patient.Nausea = 4;
+        patient.LitterCount = 6;
+        patient.Bowel = 33;
+        patient.DrinkStock = 20;
+        PatientNeeds.Modify(simulation);
 
         using var stream = new MemoryStream();
         simulation.Save(stream);
         stream.Position = 0;
         var restored = Simulation.Load(stream);
         Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
+        Assert.Equal(needs, restored.Rules.Needs);
         var copy = (PatientBehaviour)restored.Entities.OfType<Humanoid>().Single().Behaviour!;
-        Assert.Equal(patient.Thirst, copy.Thirst);
-        Assert.Equal(patient.ToiletNeed, copy.ToiletNeed);
-        Assert.Equal(patient.DrinkTimeout, copy.DrinkTimeout);
+        Assert.Equal(patient.Health, copy.Health);
+        Assert.Equal(patient.DrinkStock, copy.DrinkStock);
+        Assert.Equal(patient.Bowel, copy.Bowel);
+        Assert.Equal(patient.Nausea, copy.Nausea);
+        Assert.Equal(patient.LitterCount, copy.LitterCount);
+        Assert.Equal(patient.LeaveCount, copy.LeaveCount);
         Assert.True(copy.IsThirsty);
     }
 
     private static (Humanoid Humanoid, PatientBehaviour Patient) AddPatient(Simulation simulation, string diseaseId)
     {
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(2, 2), simulation.Random, PatientLook.Standard, 0));
-        var patient = new PatientBehaviour { Health = 0.9m };
-        patient.SetDisease(DiseaseCatalog.Find(diseaseId)!, 0, simulation.Random);
+        var patient = new PatientBehaviour { Health = 900 };
+        patient.SetDisease(DiseaseCatalog.Find(diseaseId)!, 0, simulation.Rules.Needs);
         humanoid.Behaviour = patient;
         return (humanoid, patient);
     }
 
-    private static Simulation NewSimulation()
+    private static void AddObject(Simulation simulation, string objectType, TilePosition tile)
+    {
+        simulation.AddEntity(id => new RoomObject(id, objectType, tile, Direction.South, 0));
+    }
+
+    private static Simulation NewSimulation(PatientNeedsRules? needs = null)
     {
         var map = TestMaps.FromRows("........", "........", "........", "........", "........", "........", "........", "........");
         map.ParcelCount = 2;
@@ -144,6 +276,6 @@ public class NeedsTests
             }
         }
 
-        return new Simulation(map, seed: 1, rules: new LevelRules(10_000, [], []));
+        return new Simulation(map, seed: 1, rules: new LevelRules(10_000, [], [], needs: needs));
     }
 }

@@ -67,6 +67,8 @@ public class MachineWearTests
         Assert.True(simulation.Hospitals[0].ActiveCheats.HasFlag(ToggleCheats.InvulnerableMachines));
         Assert.True(simulation.Hospitals[0].Cheated);
 
+        // A weak machine, so that a few patients use it past its strength.
+        inflator.Machine!.Strength = 4;
         for (var hour = 0; hour < 6 * 31 * GameDate.HoursPerDay && inflator.Machine!.TotalUsage <= inflator.Machine.Strength; hour++)
         {
             simulation.Step();
@@ -165,11 +167,12 @@ public class MachineWearTests
         var room = InflationTests.BuildInflation(simulation);
         Run(simulation, new HireStaffCommand(StaffClass.Handyman, 0, new(14, 15)));
         var inflator = Inflator(simulation);
+        inflator.Machine!.Strength = 4;
         var repairs = 0;
         var wasRepairing = false;
         var repairAnimations = new HashSet<int>();
 
-        for (var tick = 0; tick < 6 * 31 * GameDate.HoursPerDay; tick++)
+        for (var tick = 0; tick < 12 * 31 * GameDate.HoursPerDay && (repairs == 0 || inflator.Machine!.TotalUsage <= inflator.Machine.Strength); tick++)
         {
             simulation.Step();
             var repairing = false;
@@ -196,7 +199,7 @@ public class MachineWearTests
 
         Assert.False(room.IsCrashed);
         Assert.True(repairs > 0, $"The inflator was used {inflator.Machine!.TotalUsage} times and never repaired.");
-        Assert.True(inflator.Machine!.TotalUsage > inflator.Machine.Strength);
+        Assert.True(inflator.Machine!.TotalUsage > inflator.Machine.Strength, $"Only {inflator.Machine.TotalUsage} uses, {repairs} repairs.");
         Assert.Equal([3480], repairAnimations);
     }
 

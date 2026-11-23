@@ -22,14 +22,23 @@ internal static class HumanoidMoods
     public const int OffsetY = -96;
 
     /// <summary>
-    /// Too cold (below 11 °C, warmth 0.22) or too hot (above 18 °C, 0.36): <c>Humanoid:checkWarmth</c>'s cold and hot moods,
-    /// which have no priority and show only while the cursor is over the humanoid (GameUI's hoverable moods).
+    /// Too cold or too hot: <c>Humanoid:checkWarmth</c>'s cold and hot moods, which have no priority and show only while
+    /// the cursor is over the humanoid (GameUI's hoverable moods). Staff are cold below 11 °C (warmth 0.22) and hot above
+    /// 18 °C (0.36); patients below 20 and above 80 of 100 (<see cref="PatientNeeds"/>).
     /// </summary>
-    public static int? HoverIcon(Humanoid humanoid) =>
-        humanoid.Behaviour is not PatientBehaviour && humanoid.Profile is null ? null
-        : humanoid.Warmth < 0.22m ? 3994
-        : humanoid.Warmth > 0.36m ? 3988
-        : null;
+    public static int? HoverIcon(Humanoid humanoid)
+    {
+        if (humanoid.Behaviour is PatientBehaviour)
+        {
+            var warmth = PatientNeeds.Warmth(humanoid);
+            return warmth < PatientNeeds.Cold ? 3994 : warmth > PatientNeeds.Hot ? 3988 : null;
+        }
+
+        return humanoid.Profile is null ? null
+            : humanoid.Warmth < 0.22m ? 3994
+            : humanoid.Warmth > 0.36m ? 3988
+            : null;
+    }
 
     /// <summary>
     /// The animation of the humanoid's mood icon, or null for none. <paramref name="hovered"/>: the cursor is over the
@@ -82,10 +91,10 @@ internal static class HumanoidMoods
                 Offer(true, 4574, 55);
             }
 
-            // Patient:_dailyHealthChecks's health_treshold_rangemap: dying1 to dying5 as health falls below 0.22.
-            if (!patient.IsCured && !dying && patient.Health < 0.22m)
+            // dying1 to dying5 as health falls below 101 of 1000, the only time the state shows.
+            if (!patient.IsCured && !dying && patient.Health < PatientNeeds.ShowsHealth)
             {
-                var stage = patient.Health < 0.06m ? 4 : patient.Health < 0.10m ? 3 : patient.Health < 0.14m ? 2 : patient.Health < 0.18m ? 1 : 0;
+                var stage = patient.Health < 20 ? 4 : patient.Health < 40 ? 3 : patient.Health < 60 ? 2 : patient.Health < 80 ? 1 : 0;
                 Offer(true, 4000 + (2 * stage), 41 + stage);
             }
 

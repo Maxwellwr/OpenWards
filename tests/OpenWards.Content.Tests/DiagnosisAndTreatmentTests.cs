@@ -91,7 +91,7 @@ public class DiagnosisAndTreatmentTests
         // rnd(0, 99) < 1 only when both draws are 0, once in 2500.
         entry.CureEffectiveness = 1;
         patient.IsDiagnosed = true;
-        patient.Health = 1m;
+        patient.Health = 1000;
 
         PatientCare.TreatDisease(simulation, Room(simulation, "pharmacy"), humanoid, patient, patient.Disease!);
 
@@ -109,7 +109,7 @@ public class DiagnosisAndTreatmentTests
         var hospital = simulation.Hospitals[0];
         hospital.CaseOf(patient.Disease!, simulation.Rules.Diseases).CureEffectiveness = 0;
         patient.IsDiagnosed = true;
-        patient.Health = 0.5m;
+        patient.Health = 500;
 
         PatientCare.TreatDisease(simulation, Room(simulation, "pharmacy"), humanoid, patient, patient.Disease!);
 
@@ -163,7 +163,7 @@ public class DiagnosisAndTreatmentTests
         var hospital = simulation.Hospitals[0];
         hospital.CaseOf(patient.Disease!, simulation.Rules.Diseases).CureEffectiveness = 1;
         patient.IsDiagnosed = true;
-        patient.Health = 1m;
+        patient.Health = 1000;
         typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.EmergencyIndex))!.SetValue(patient, 1);
 
         PatientCare.TreatDisease(simulation, Room(simulation, "pharmacy"), humanoid, patient, patient.Disease!);

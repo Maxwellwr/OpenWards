@@ -155,10 +155,10 @@ internal sealed class PatientWindow(int patientId) : UiWindow
         var disease = patient.IsDiagnosed ? host.Texts?.DiseaseName(patient.DiseaseId) ?? patient.DiseaseId : UiText.Get("openwards.patient.not_diagnosed", "Not diagnosed yet");
         yield return WindowRow.Of(UiText.Get("openwards.casebook.disease", "Disease"), new WindowCell(disease, Highlight: patient.IsDiagnosed));
         yield return WindowRow.Of(UiText.Get("openwards.policy.diagnosis", "Diagnosis"), WindowCell.Number(string.Create(CultureInfo.InvariantCulture, $"{Math.Min(100, patient.DiagnosisProgress / 10)} %")));
-        yield return WindowRow.Of(UiText.Get("openwards.patient.health", "Health"), WindowCell.Number(StaffLabels.Percent(patient.Health)), HealthGraph(patient));
+        yield return WindowRow.Of(UiText.Get("openwards.patient.health", "Health"), WindowCell.Number(StaffLabels.Percent(patient.Health / (decimal)PatientNeeds.MaxHealth)), HealthGraph(patient));
         yield return WindowRow.Of(UiText.Get("openwards.patient.warmth", "Warmth"), WindowCell.Number(StaffLabels.Percent(humanoid.Warmth)));
         yield return WindowRow.Of(UiText.Get("openwards.patient.thirst", "Thirst"), WindowCell.Number(StaffLabels.Percent(patient.Thirst)));
-        yield return WindowRow.Of(UiText.Get("openwards.patient.toilet", "Toilet"), WindowCell.Number(StaffLabels.Percent(patient.ToiletNeed)));
+        yield return WindowRow.Of(UiText.Get("openwards.patient.toilet", "Toilet"), WindowCell.Number(StaffLabels.Percent(Math.Min(1m, patient.Bowel / (decimal)Math.Max(1, simulation.Rules.Needs.BowelOverflows)))));
         yield return WindowRow.Of(UiText.Get("tooltip.handyman_window.happiness", "Happiness"), WindowCell.Number(StaffLabels.Percent(humanoid.Happiness)), patient.IsSad ? UiText.Get("openwards.patient.sad", "Sad") : string.Empty);
         if (patient.PayAmount > 0)
         {
@@ -212,7 +212,7 @@ internal sealed class PatientWindow(int patientId) : UiWindow
     private static string HealthGraph(PatientBehaviour patient)
     {
         const string bars = ".:-=+*#";
-        return new string(patient.HealthHistory.Select(health => bars[(int)Math.Clamp(health * (bars.Length - 1), 0m, bars.Length - 1)]).ToArray());
+        return new string(patient.HealthHistory.Select(health => bars[Math.Clamp(health * (bars.Length - 1) / PatientNeeds.MaxHealth, 0, bars.Length - 1)]).ToArray());
     }
 
     private Humanoid? Patient(IWindowHost host) =>
@@ -311,7 +311,7 @@ internal sealed class QueueWindow(int ownerId) : UiWindow
             {
                 WindowCell.Number(string.Create(CultureInfo.InvariantCulture, $"{i + 1}.")),
                 WindowCell.Button(patient.IsDiagnosed ? host.Texts?.DiseaseName(patient.DiseaseId) ?? patient.DiseaseId : UiText.Format("openwards.patient.number", "Patient %1%", member.Id), () => host.Open(new PatientWindow(member.Id))).WithTooltip(OriginalTooltips.Get(host, 80, "Open the patient's window")),
-                WindowCell.Number(StaffLabels.Percent(patient.Health)),
+                WindowCell.Number(StaffLabels.Percent(patient.Health / (decimal)PatientNeeds.MaxHealth)),
                 WindowCell.Button(UiText.Get("openwards.patient.front", "Front"), () => host.Submit(new MoveInQueueCommand(id, 0)), position > 0).WithTooltip(OriginalTooltips.Get(host, 77, "Move the patient to the front of the queue")),
                 WindowCell.Button(UiText.Get("openwards.patient.back", "Back"), () => host.Submit(new MoveInQueueCommand(id, queue.Count - 1)), position < queue.Count - 1).WithTooltip(OriginalTooltips.Get(host, 78, "Move the patient to the end of the queue")),
             };

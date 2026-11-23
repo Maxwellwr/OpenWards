@@ -7,134 +7,23 @@ using OpenWards.Sim.Rooms;
 
 namespace OpenWards.Sim.Tests;
 
-/// <summary>Patients' health day by day (CorsixTH's Patient:tickDay, _dailyHealthChecks, setToDying, tick and die).</summary>
+/// <summary>Patients' health running out (<see cref="PatientNeeds"/>) and dying (CorsixTH's Patient:tick and die).</summary>
 public class PatientHealthTests
 {
     private static readonly DiseaseDefinition Cold = DiseaseCatalog.Find("uncommon_cold")!;
 
     [Fact]
-    public void EachDayCostsHealthAndStandingInTheCorridorALittleHappiness()
-    {
-        var simulation = NewSimulation();
-        var (humanoid, patient) = AddPatient(simulation, new TilePosition(2, 2), 0.9m);
-        humanoid.Happiness = 0.5m;
-
-        Feelings.OnEndDay(simulation, humanoid);
-
-        Assert.Equal(0.896m, patient.Health);
-
-        // Comfortable (0.005), standing about (−0.00002).
-        Assert.Equal(0.50498m, humanoid.Happiness);
-    }
-
-    [Fact]
-    public void AnExtinguisherInSightReassuresOnlyOutsideRooms()
-    {
-        var simulation = NewSimulation();
-        var (outside, _) = AddPatient(simulation, new TilePosition(2, 2), 0.9m);
-        var (inside, _) = AddPatient(simulation, new TilePosition(5, 5), 0.9m);
-        simulation.Map[5, 5].RoomId = 99;
-        simulation.Map[6, 5].RoomId = 99;
-        simulation.AddEntity(id => new RoomObject(id, "extinguisher", new TilePosition(3, 3), Direction.South, 0));
-        simulation.AddEntity(id => new RoomObject(id, "extinguisher", new TilePosition(6, 5), Direction.South, 0));
-        outside.Happiness = 0.5m;
-        inside.Happiness = 0.5m;
-
-        Feelings.OnEndDay(simulation, outside);
-        Feelings.OnEndDay(simulation, inside);
-
-        Assert.Equal(0.50518m, outside.Happiness);
-        Assert.Equal(0.505m, inside.Happiness);
-    }
-
-    [Fact]
-    public void OnTheRoadOfDeteriorationSomeGetFedUpAndGoHome()
-    {
-        var simulation = NewSimulation();
-        var patients = Enumerable.Range(0, 200).Select(_ => AddPatient(simulation, new TilePosition(2, 2), 0.2m)).ToList();
-        foreach (var (humanoid, _) in patients)
-        {
-            humanoid.Happiness = 0.5m;
-            Feelings.OnEndDay(simulation, humanoid);
-        }
-
-        var fedUp = patients.Count(entry => entry.Patient.Phase == PatientPhase.GoingHome);
-        Assert.InRange(fedUp, 1, 30);
-        Assert.Equal(fedUp, simulation.Hospitals[0].CaseOf(Cold, simulation.Rules.Diseases).TurnedAway);
-        Assert.All(patients, entry => Assert.Equal(0.196m, entry.Patient.Health));
-
-        // Less happy by 0.0002 than a comfortable day in the corridor.
-        Assert.All(patients, entry => Assert.Equal(0.50478m, entry.Humanoid.Happiness));
-    }
-
-    [Fact]
-    public void FedUpInARoomThatDoesNotCureThemTheyGoHomeOnceOut()
-    {
-        var simulation = NewSimulation();
-        Room Room(string type) => simulation.AddEntity(id => new Room(id, type, new TileRect(4, 4, 2, 2), Enumerable.Repeat(new OriginalTile(0, TileFlags.None), 4).ToList()));
-        var gp = Room("gp");
-        var pharmacy = Room("pharmacy");
-        var phase = typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.Phase))!;
-        var target = typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.TargetId))!;
-        var patients = Enumerable.Range(0, 400).Select(i => (Entry: AddPatient(simulation, new TilePosition(2, 2), 0.2m), Room: i % 2 == 0 ? gp : pharmacy)).ToList();
-        foreach (var ((humanoid, patient), room) in patients)
-        {
-            phase.SetValue(patient, PatientPhase.UsingObject);
-            target.SetValue(patient, room.Id);
-            Feelings.OnEndDay(simulation, humanoid);
-        }
-
-        // In the GP's office some give up; in the pharmacy, which cures a cold, none.
-        var fedUp = patients.Where(p => p.Entry.Patient.IsFedUp).ToList();
-        Assert.NotEmpty(fedUp);
-        Assert.All(fedUp, p => Assert.Same(gp, p.Room));
-        Assert.All(patients, p => Assert.Equal(PatientPhase.UsingObject, p.Entry.Patient.Phase));
-
-        var (leaving, quitter) = fedUp[0].Entry;
-        phase.SetValue(quitter, PatientPhase.LeavingRoom);
-        quitter.Update(simulation, leaving);
-        Assert.Equal(PatientPhase.GoingHome, quitter.Phase);
-        Assert.False(quitter.IsFedUp);
-    }
-
-    [Fact]
-    public void FedUpWaitingAtTheObjectTheyLeaveTheRoomAtOnce()
-    {
-        var simulation = NewSimulation();
-        var gp = simulation.AddEntity(id => new Room(id, "gp", new TileRect(4, 4, 2, 2), Enumerable.Repeat(new OriginalTile(0, TileFlags.None), 4).ToList()));
-        var phase = typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.Phase))!;
-        var target = typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.TargetId))!;
-        var patients = Enumerable.Range(0, 200).Select(_ => AddPatient(simulation, new TilePosition(2, 2), 0.2m)).ToList();
-        foreach (var (humanoid, patient) in patients)
-        {
-            phase.SetValue(patient, PatientPhase.StandingAtObject);
-            target.SetValue(patient, gp.Id);
-            Feelings.OnEndDay(simulation, humanoid);
-        }
-
-        var fedUp = patients.Where(p => p.Patient.IsFedUp).ToList();
-        Assert.NotEmpty(fedUp);
-        foreach (var (humanoid, patient) in patients)
-        {
-            patient.Update(simulation, humanoid);
-        }
-
-        // patient.lua's goHome: room:makeHumanoidLeave at once, not when the visit is over (with no door to walk to, they
-        // are out at once and on their way home); the others wait on.
-        Assert.All(fedUp, p => Assert.Equal(PatientPhase.GoingHome, p.Patient.Phase));
-        Assert.All(patients.Except(fedUp), p => Assert.Equal(PatientPhase.StandingAtObject, p.Patient.Phase));
-    }
-    [Fact]
     public void AtNoHealthAPatientDiesOnceOutOfTheRoom()
     {
         var simulation = NewSimulation();
-        var (humanoid, patient) = AddPatient(simulation, new TilePosition(2, 2), 0.005m);
+        var (humanoid, patient) = AddPatient(simulation, new TilePosition(2, 2), 2);
 
-        Feelings.OnEndDay(simulation, humanoid);
-        Assert.Equal(0m, patient.Health);
+        PatientNeeds.Modify(simulation);
+        Assert.Equal(1, patient.Health);
         Assert.False(patient.IsSetToDie);
 
-        Feelings.OnEndDay(simulation, humanoid);
+        PatientNeeds.Modify(simulation);
+        Assert.Equal(0, patient.Health);
         Assert.True(patient.IsSetToDie);
 
         // In a room, the patient lives on for now.
@@ -161,13 +50,13 @@ public class PatientHealthTests
     public void ACureRestoresHealthAndCancelsDying()
     {
         var simulation = NewSimulation();
-        var (humanoid, patient) = AddPatient(simulation, new TilePosition(2, 2), 0m);
-        Feelings.OnEndDay(simulation, humanoid);
+        var (_, patient) = AddPatient(simulation, new TilePosition(2, 2), 1);
+        PatientNeeds.Modify(simulation);
         Assert.True(patient.IsSetToDie);
 
         patient.Cure();
 
-        Assert.Equal(1m, patient.Health);
+        Assert.Equal(PatientNeeds.MaxHealth, patient.Health);
         Assert.False(patient.IsSetToDie);
     }
 
@@ -175,9 +64,9 @@ public class PatientHealthTests
     public void SavesKeepHealth()
     {
         var simulation = NewSimulation();
-        var (humanoid, patient) = AddPatient(simulation, new TilePosition(2, 2), 0m);
-        Feelings.OnEndDay(simulation, humanoid);
-        AddPatient(simulation, new TilePosition(3, 3), 0.83m);
+        AddPatient(simulation, new TilePosition(2, 2), 1);
+        PatientNeeds.Modify(simulation);
+        AddPatient(simulation, new TilePosition(3, 3), 830);
 
         using var stream = new MemoryStream();
         simulation.Save(stream);
@@ -187,14 +76,14 @@ public class PatientHealthTests
         Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
         var copies = restored.Entities.OfType<Humanoid>().Select(entry => (PatientBehaviour)entry.Behaviour!).ToList();
         Assert.True(copies[0].IsSetToDie);
-        Assert.Equal(0.83m, copies[1].Health);
+        Assert.Equal(830, copies[1].Health);
     }
 
-    private static (Humanoid Humanoid, PatientBehaviour Patient) AddPatient(Simulation simulation, TilePosition tile, decimal health)
+    private static (Humanoid Humanoid, PatientBehaviour Patient) AddPatient(Simulation simulation, TilePosition tile, int health)
     {
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, tile, simulation.Random, PatientLook.Standard, 0));
         var patient = new PatientBehaviour { Health = health };
-        patient.SetDisease(Cold, 0, simulation.Random);
+        patient.SetDisease(Cold, 0);
         humanoid.Behaviour = patient;
         return (humanoid, patient);
     }
