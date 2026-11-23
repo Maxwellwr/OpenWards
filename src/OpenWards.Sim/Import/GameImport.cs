@@ -280,7 +280,8 @@ public static class GameImport
 
             var patient = simulation.AddEntity(id => Humanoid.CreatePatient(id, tile, simulation.Random, disease.Look, player));
             var behaviour = new People.PatientBehaviour { Health = Math.Clamp(imported.Health, 0.01m, 1m) };
-            behaviour.SetDisease(disease, People.PatientCare.ChooseInsuranceCompany(simulation.Random), simulation.Random);
+            behaviour.SetDisease(disease, People.PatientCare.ChooseInsuranceCompany(simulation), simulation.Random);
+            behaviour.Wallet = People.PatientCare.NewPatientMoney(simulation);
             behaviour.DiagnosisProgress = Math.Clamp(imported.DiagnosisProgress, 0, 1000);
 
             // The save's visitors, which the reputation is weighed against, count them already.

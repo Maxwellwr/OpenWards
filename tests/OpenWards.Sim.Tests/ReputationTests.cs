@@ -151,49 +151,9 @@ public class ReputationTests
         Assert.Equal(300, hospital.TreatmentPrice(Cold, rules));
 
         // A diagnosis goes by the hospital's reputation.
-        Assert.Equal(118, new Hospital(0, 0, 586).TreatmentPrice(Gp, rules)); // ceil(100 * 586 / 500) = ceil(117.2)
+        Assert.Equal(117, new Hospital(0, 0, 586).TreatmentPrice(Gp, rules)); // ⌊100 × 586 / 500⌋
         Assert.Equal(100, new Hospital(0, 0, 100).TreatmentPrice(Gp, rules));
     }
-
-    [Fact]
-    public void APriceFarFromWhatPatientsExpectDoesNotMoveTheReputation()
-    {
-        var simulation = new Simulation(TestMaps.FromRows("."), seed: 9);
-
-        // Unlike CorsixTH, neither a low nor a high price moves the reputation by itself; the adviser still speaks of it.
-        foreach (var (percent, effectiveness) in new[] { (50, 100), (200, 0) })
-        {
-            var hospital = new Hospital(0, 0);
-            var gp = hospital.CaseOf(Gp, DiseaseRules.Default);
-            gp.PricePercent = percent;
-            gp.CureEffectiveness = effectiveness;
-            for (var i = 0; i < 2000; i++)
-            {
-                hospital.ComputePriceLevelImpact(simulation, NewPatient(), gp);
-            }
-
-            Assert.Equal(Hospital.AverageReputation, hospital.Reputation);
-            Assert.True(hospital.PriceAdvices > 0);
-        }
-    }
-
-    [Fact]
-    public void APriceAboveWhatThePatientExpectsMakesThemUnhappy()
-    {
-        var simulation = new Simulation(TestMaps.FromRows("."), seed: 9);
-        var hospital = new Hospital(0, 0);
-        var gp = hospital.CaseOf(Gp, DiseaseRules.Default);
-        gp.PricePercent = 200;
-        gp.CureEffectiveness = 0;
-        var patient = NewPatient();
-
-        // 1 − (0.1 + 0.3 + 0) = 0.6 too dear: happiness drops by half of it.
-        hospital.ComputePriceLevelImpact(simulation, patient, gp);
-
-        Assert.Equal(0.7m, patient.Happiness);
-    }
-
-    private static Humanoid NewPatient() => new(1, new TilePosition(0, 0));
 
     [Fact]
     public void TheLevelSetsTheStartingReputationAndSavesKeepIt()

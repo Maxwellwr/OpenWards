@@ -1,7 +1,7 @@
 // Ported from CorsixTH CorsixTH/Lua/world.lua (calculateSpawnTiles, spawnPatient, _findClosestSpawnToDesk,
 // onEndMonth, _prepareSpawnDates, _prepareSpawnHours, and chooseHospitalForPatient with the reputation-based choice it
-// has commented out), CorsixTH/Lua/hospital.lua (Hospital:getDiseaseReputationPriceFactor) and
-// CorsixTH/Lua/app.lua (math.p_random).
+// has commented out) and CorsixTH/Lua/app.lua (math.p_random). How much a hospital appeals to a patient follows the
+// community's description of the original game (the game logic spec's choice of hospital), not CorsixTH.
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using OpenWards.Sim.Calendar;
@@ -168,43 +168,48 @@ public sealed class PatientArrivals
     }
 
     /// <summary>
-    /// How much a hospital appeals to a new patient with the disease: its reputation times <c>gbv.AllocTotalRep</c> plus its
-    /// reputation for the disease times <c>gbv.AllocIndRep</c>, times what its price is worth for that reputation
-    /// (<c>Hospital:getDiseaseReputationPriceFactor</c>: the reputation for the disease / 500 / the price's share of the
-    /// standard price, from 0.5 to 1.5). A computer opponent charges the standard price, and its reputation is also its
-    /// reputation for every disease.
+    /// How much a hospital appeals to a new patient with the disease, as the original game weighs it:
+    /// ⌊<c>gbv.AllocIndRep</c> × its reputation for the disease × k / 100⌋, with k = ⌊expected price × 100 / price⌋ held
+    /// to 50 to 150 (<see cref="Hospital.ExpectedPrice"/>, <see cref="Hospital.TreatmentPrice"/>). Since the reputation
+    /// raises both prices alike, k is about 100 / the price's percentage. Unlike CorsixTH's
+    /// <c>getDiseaseReputationPriceFactor</c>, the hospital's overall reputation (<c>gbv.AllocTotalRep</c>) does not
+    /// count. A computer opponent charges the expected price, and its reputation is also its reputation for every
+    /// disease; without a disease the hospital's reputation counts.
     /// </summary>
     /// <param name="simulation">The game.</param>
     /// <param name="index">A player's hospital, or past the players' a computer opponent's.</param>
     /// <param name="disease">The patient's disease, if any.</param>
     public static long Appeal(Simulation simulation, int index, DiseaseDefinition? disease)
     {
-        int reputation;
         int diseaseReputation;
-        var pricePercent = DiseaseCase.StandardPrice;
+        long priceFactor = DiseaseCase.StandardPrice;
         if (index < simulation.Hospitals.Count)
         {
             var hospital = simulation.Hospitals[index];
-            reputation = hospital.Reputation;
-            diseaseReputation = reputation;
+            diseaseReputation = hospital.Reputation;
             if (disease is not null)
             {
                 // Peeking, so that choosing a hospital does not add to the casebook.
-                var entry = hospital.PeekCase(disease, simulation.Rules.Diseases);
-                diseaseReputation = entry.Reputation ?? reputation;
-                pricePercent = entry.PricePercent;
+                var rules = simulation.Rules.Diseases;
+                diseaseReputation = hospital.PeekCase(disease, rules).Reputation ?? diseaseReputation;
+                priceFactor = PriceFactor(hospital.ExpectedPrice(disease, rules), hospital.TreatmentPrice(disease, rules));
             }
         }
         else
         {
-            reputation = simulation.Competitors[index - simulation.Hospitals.Count].Reputation;
-            diseaseReputation = reputation;
+            diseaseReputation = simulation.Competitors[index - simulation.Hospitals.Count].Reputation;
         }
 
-        var allocation = simulation.Rules.Allocation;
-        var priceFactor = Math.Clamp(diseaseReputation * (decimal)DiseaseCase.StandardPrice / (Hospital.AverageReputation * pricePercent), 0.5m, 1.5m);
-        return (long)(((long)allocation.TotalReputation * reputation + ((long)allocation.DiseaseReputation * diseaseReputation)) * priceFactor);
+        return Math.Max(0, (long)simulation.Rules.Allocation.DiseaseReputation * diseaseReputation * priceFactor / 100);
     }
+
+    /// <summary>The k of <see cref="Appeal"/>: ⌊expected × 100 / price⌋, from 50 to 150; 150 for a free procedure.</summary>
+    public static long PriceFactor(int expected, int price) =>
+        price <= 0 ? MaxPriceFactor : Math.Clamp((long)expected * 100 / price, MinPriceFactor, MaxPriceFactor);
+
+    private const long MinPriceFactor = 50;
+
+    private const long MaxPriceFactor = 150;
 
     /// <summary>A number from 0 to below <paramref name="maxExclusive"/>, which may be beyond what an int holds.</summary>
     private static long NextLong(SimRandom random, long maxExclusive)
@@ -272,7 +277,8 @@ public sealed class PatientArrivals
         var behaviour = new PatientBehaviour { Health = health };
         if (disease is not null)
         {
-            behaviour.SetDisease(disease, PatientCare.ChooseInsuranceCompany(simulation.Random), simulation.Random);
+            behaviour.SetDisease(disease, PatientCare.ChooseInsuranceCompany(simulation), simulation.Random);
+            behaviour.Wallet = PatientCare.NewPatientMoney(simulation);
         }
 
         patient.Behaviour = behaviour;

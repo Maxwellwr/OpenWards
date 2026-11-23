@@ -309,8 +309,7 @@ cost. `LevelRulesLoader` reads them from the original's level files, as CorsixTH
 difficulty's base file (`FULL00.SAM` at medium difficulty, `EASY00.SAM` or `HARD00.SAM`), then the level's
 own file (`FULL01.SAM` for `LEVEL.L1`), then CorsixTH's extra settings for levels 5, 7, 8, 11 and 12
 (`Levels/original05.level` and so on, built into `LevelRulesLoader`). Only the original campaign has a difficulty (`--difficulty` in the client
-and server); every other map is medium. `LevelRules.Difficulty` also sets the price distortion at which patients
-find a price low or too high (−0.3/0.4, −0.4/0.3, −0.5/0.2) and the days between heating disasters (300, 200,
+and server); every other map is medium. `LevelRules.Difficulty` also sets the days between heating disasters (300, 200,
 150), as CorsixTH's `hospital.lua` does. The format (`#towns[1].StartCash.IllRate 40000 2`) is read by
 `LevelConfig`. Rooms find their price through their number in those files (`LevelConfigId`, 7
 for the GP's office), objects through their object type. Without level files everything is free.
@@ -397,14 +396,15 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   (`World:chooseHospitalForPatient` with the part CorsixTH comments out, settings in `LevelRules.Allocation`
   from `gbv.AllocDelay`, `AllocTotalRep`, `AllocIndRep`, `AllocRand`): for the first `AllocDelay` months the
   hospitals take turns by `SpawnAttempts`; then one patient in `AllocRand` goes to a hospital at random and
-  the others to one drawn by `PatientArrivals.Appeal` (reputation × `AllocTotalRep` + reputation for the
-  disease × `AllocIndRep`, times `Hospital:getDiseaseReputationPriceFactor`, 0.5 to 1.5). A patient sent to a
+  the others to one drawn by `PatientArrivals.Appeal`: ⌊`AllocIndRep` × reputation for the disease × k / 100⌋ with
+  k = ⌊expected price × 100 / price⌋ from 50 to 150, as the original weighs it (not CorsixTH's
+  `getDiseaseReputationPriceFactor`; `AllocTotalRep` is read but does not count). A patient sent to a
   hospital not yet open is lost. The level's computer opponents (`computer[n].Playing`, CorsixTH's
   `AIHospital`) are `Simulation.Competitors`: not on the map, they count the patients sent to them as
   visitors (`CompetitorHospital`). Unlike CorsixTH's they have a reputation, a model fitted to the computer
   hospitals of the original's saves since nothing describes it: from `StartRep` it moves each month half way
   to StartRep + 250 in the first three months, then to a standing drawn at the start (0 to +275 from
-  `StartRep`, ±50 for easy/hard), ±10 at random; they charge the standard price. Importing a save of the
+  `StartRep`, ±50 for easy/hard), ±10 at random; they charge the expected price. Importing a save of the
   original takes their reputations and patients from its computer players' blocks (by name, else in order). Each `Hospital` runs CorsixTH's opening
   watch (`UIWatch` "initial_opening"), 13 segments of 385 hours, and opens an hour after it has run
   down, 5006 hours (about 100 days) into the game. `OpenHospitalCommand` opens it early, as the watch's button does; the client's O
@@ -446,8 +446,9 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   (`visuals`, `non_visuals`; 0 leaves it out) and from which month it comes (`visuals_available`,
   `non_visuals_available`, `gbv.HoldVisualMonths`, `gbv.HoldVisualPeepCount`). A new patient gets one of the
   level's diseases at random (`World:getNewPatientDisease`), looks as it makes them (only bloaty heads differ
-  so far; the other visual diseases need humanoid types the client cannot draw yet) and pays through one of
-  three insurance companies one time in four.
+  so far; the other visual diseases need humanoid types the client cannot draw yet), brings $5,000 + rng % 95,000
+  (`PatientBehaviour.Wallet`, from `Simulation.MoneyRandom`, a stream of its own) and is insured by one of the
+  hospital's three companies one time in three on levels 1–2, in ten on level 3 and in five elsewhere.
 - **Diagnosis** (`PatientCare`, from `patient.lua` and `rooms/gp.lua`). Progress is in thousandths, worked
   out with decimals: each GP visit adds `0.4 * (1 - MaxDiagDiff)` plus `(attention / d + 0.4) * skill / d`
   times `1.5 − fatigue`, `d` a random 1 to 3, very skilled doctors up to five times as much.
@@ -487,13 +488,20 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   happiness`), reaches a random 1 to 100. A cured patient goes home and counts
   in the hospital's `Cured` and the disease's `Recoveries`; otherwise the patient dies (`Deaths`, `Fatalities`) and,
   as dying is not animated yet, vanishes outside the room. Either way the hospital pays for the drug.
-- **Payment** (`Hospital`, from `hospital.lua`). Before each room the patient agrees to pay its current price
-  (always at or below the standard price, with chance `e^(-4 * overprice)` above it) and pays it when the
-  staff is done: into the bank as a `Treatment` transaction, or, if insured, owed by the insurance company,
-  which pays two months later at a month's end. The price is the level's `StartPrice` (a pseudo disease's
-  own price) with 4.5 % inflation a year, times the player's percentage in the casebook (50–200 %, set with
-  `SetTreatmentPriceCommand` for a known disease or diagnosis; building a diagnosis room makes its diagnosis
-  known, as CorsixTH's `World:markRoomAsBuilt` does), and with a reputation above 500 times reputation / 500.
+- **Payment** (`Hospital`, `PatientCare`; as the community describes the original, not CorsixTH). The expected
+  price E is the level's `StartPrice` (a pseudo disease's own price), or with a reputation for the disease (the
+  hospital's for a diagnosis) above 500 ⌊StartPrice × reputation / 500⌋, with no inflation; the price P is
+  ⌊E × the player's percentage / 100⌋ (50–200 %, set with `SetTreatmentPriceCommand` for a known disease or
+  diagnosis; building a diagnosis room makes its diagnosis known, as CorsixTH's `World:markRoomAsBuilt` does).
+  After each room the patient agrees to the next if P ≤ E' + rng % (⌊P / 2⌋ + 1), where E' is E plus the
+  insurance company's bonus for the insured, 0 for a patient with less money than P, else E (+5 %: 90 % agree,
+  +20 %: 67 %, +100 %: none); a refusal sends them home with no reputation change (`NotPaying`). They pay the
+  agreed price when the staff is done: from their money into the bank as a `Treatment` transaction (left unpaid
+  if the money falls short, as in the original), or, if insured, owed by the company until the end of the month
+  its delay brings. A hospital deals with three of the eight companies (delays 3, 6, 8, 2, 9, 10, 4, 3 months,
+  bonuses 15, 10, 5, 8, 9, 40, 12, 3 %); the original gives an insured patient the next company's bonus, which
+  OpenWards does not copy. At each month's end `Hospital.PriceLevel` = Σ P × 100 / Σ E over what the hospital can
+  diagnose and treat now (100 if nothing, 0–300); above 150 the adviser says prices are high, below 60 low.
   A disease cured in the pharmacy has the level's drug rating as its cure effectiveness and costs the drug's
   price (`gbv.StartRating` and `gbv.StartCost`, both 100) for each cure (`TransactionKind.DrugCost`, paid to one
   of five drug companies at random); research improving them is not there yet. A payment shows a banknote with

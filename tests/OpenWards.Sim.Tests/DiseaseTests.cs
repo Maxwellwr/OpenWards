@@ -55,7 +55,7 @@ public class DiseaseTests
     }
 
     [Fact]
-    public void PricesFollowTheLevelThePlayerAndInflation()
+    public void PricesFollowTheLevelAndThePlayerButNotInflation()
     {
         var hospital = new Hospital(0, 0);
         var rules = DiseaseRules.Default;
@@ -68,16 +68,17 @@ public class DiseaseTests
         hospital.CaseOf(cold, rules).PricePercent = 150;
         Assert.Equal(450, hospital.TreatmentPrice(cold, rules));
 
+        // Unlike CorsixTH's, prices do not rise with the years.
         hospital.OnEndYear(0, new SimRandom(1), AwardRules.Default);
-        Assert.Equal(105, hospital.TreatmentPrice(gp, rules)); // ceil(100 * 1.045) = 105
-        hospital.OnEndYear(0, new SimRandom(1), AwardRules.Default);
-        Assert.Equal(110, hospital.TreatmentPrice(gp, rules)); // ceil(100 * 1.045²) = ceil(109.2025)
+        Assert.Equal(100, hospital.TreatmentPrice(gp, rules));
     }
 
     [Fact]
-    public void InsuranceCompaniesPayTwoMonthsLater()
+    public void AnInsuranceCompanyPaysAfterItsDelay()
     {
         var hospital = new Hospital(0, 1000);
+
+        // The hospital's second company is the first of the eight, which pays three months later.
         var gp = hospital.CaseOf(DiseaseCatalog.Find(DiseaseCatalog.GpDiagnosis)!, DiseaseRules.Default);
 
         hospital.ReceiveForTreatment(1, gp, 100, insuranceCompany: 0);
@@ -87,22 +88,17 @@ public class DiseaseTests
         Assert.Equal(200, gp.MoneyEarned);
         Assert.Equal(TransactionKind.Treatment, hospital.Transactions[0].Kind);
 
-        hospital.PayInsurance(3);
-        hospital.PayInsurance(4);
-        Assert.Equal(1100, hospital.Balance);
-        hospital.PayInsurance(5);
+        Assert.Equal(2, hospital.Insurers[1]);
+        Assert.Equal(6, Hospital.InsurerPaymentDelay(hospital.Insurers[1]));
+        for (var month = 0; month < 6; month++)
+        {
+            hospital.PayInsurance(3 + month);
+            Assert.Equal(1100, hospital.Balance);
+        }
+
+        hospital.PayInsurance(9);
         Assert.Equal(1200, hospital.Balance);
         Assert.Equal(0, hospital.InsuranceOwed(2));
-        Assert.Equal(new Transaction(5, TransactionKind.Insurance, "2", 100, 1200), hospital.Transactions[0]);
-    }
-
-    [Fact]
-    public void AQuarterOfPatientsPayThroughInsurance()
-    {
-        var random = new SimRandom(11);
-        var insured = Enumerable.Range(0, 4000).Select(_ => PatientCare.ChooseInsuranceCompany(random)).ToList();
-
-        Assert.InRange(insured.Count(c => c > 0), 850, 1150);
-        Assert.All(insured, c => Assert.InRange(c, 0, Hospital.InsuranceCompanies));
+        Assert.Equal(new Transaction(9, TransactionKind.Insurance, "2", 100, 1200), hospital.Transactions[0]);
     }
 }
