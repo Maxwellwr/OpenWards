@@ -1,9 +1,11 @@
 // Ported from CorsixTH CorsixTH/Lua/entities/humanoids/patient.lua (Patient:setDisease, completeDiagnosticStep,
-// modifyDiagnosisProgress, getTreatmentDiseaseId, agreesToPay, treatDisease, isTreatmentEffective), CorsixTH/Lua/room.lua
+// modifyDiagnosisProgress, getTreatmentDiseaseId, treatDisease, isTreatmentEffective), CorsixTH/Lua/room.lua
 // (Room:dealtWithPatient, getStaffServiceQuality), CorsixTH/Lua/rooms/gp.lua (GPRoom:dealtWithPatient,
 // sendPatientToNextDiagnosisRoom), CorsixTH/Lua/hospital.lua (Hospital:receiveMoneyForTreatment, paySupplierForDrug,
 // updateCuredCounts, humanoidDeath, the default policies), CorsixTH/Lua/entities/humanoids/staff.lua
-// (Staff:getServiceQuality) and CorsixTH/Lua/world.lua (World:getNewPatientDisease).
+// (Staff:getServiceQuality) and CorsixTH/Lua/world.lua (World:getNewPatientDisease). Who is insured, whether a
+// patient agrees to a price and how they pay are not CorsixTH's: they follow the community's description of the
+// original game (the game logic spec's price and payment section).
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 //
 // Diagnosis steps, guessing and the outcome of a treatment follow the community specification of the original game
@@ -75,36 +77,72 @@ public static class PatientCare
         return usable.Count == 0 ? null : usable[simulation.Random.Next(usable.Count)];
     }
 
-    /// <summary>The second half of <c>Patient:setDisease</c>: a quarter of patients pay through one of three insurance companies.</summary>
-    internal static int ChooseInsuranceCompany(SimRandom random)
+    /// <summary>
+    /// One patient in how many is insured on the campaign level: a third on levels 1 and 2, a tenth on level 3, a fifth
+    /// on the others, as in the original game (the level files do not set it).
+    /// </summary>
+    public static int InsuredOneIn(int? levelNumber) => levelNumber switch
     {
-        return random.NextInclusive(1, 4) == 1 ? random.NextInclusive(1, Hospital.InsuranceCompanies) : 0;
+        <= 2 => 3,
+        3 => 10,
+        _ => 5,
+    };
+
+    /// <summary>The second half of <c>Patient:setDisease</c>: whether the patient is insured (<see cref="InsuredOneIn"/>), and by which of the hospital's three companies.</summary>
+    internal static int ChooseInsuranceCompany(Simulation simulation)
+    {
+        var random = simulation.Random;
+        return random.Next(InsuredOneIn(simulation.Rules.LevelNumber)) == 0 ? random.NextInclusive(1, Hospital.InsuranceCompanies) : 0;
     }
 
+    /// <summary>The money a new patient brings: 5,000 + rng % 95,000 (not in CorsixTH).</summary>
+    internal static int NewPatientMoney(Simulation simulation) =>
+        PatientBehaviour.MinWallet + simulation.MoneyRandom.Next(PatientBehaviour.WalletRange);
+
     /// <summary>
-    /// <c>Patient:agreesToPay</c>: at or below the standard price a patient always agrees; above it, with chance
-    /// e^(−4 × overprice). If they agree, they will pay the price as it is now.
+    /// Whether the patient agrees to pay for the next diagnosis or treatment, which depends only on the price, their
+    /// money and their insurance: with P the price and E the price they expect (<see cref="Hospital.TreatmentPrice"/>,
+    /// <see cref="Hospital.ExpectedPrice"/>), an insured patient expects E + ⌊E × their company's bonus / 100⌋, one
+    /// paying themselves with less money than P expects 0, and they agree if P ≤ E + rng % (⌊P / 2⌋ + 1). If they
+    /// agree, they will pay P. Unlike CorsixTH's chance of e^(−4 × overprice), a patient may refuse a raised price
+    /// less often (10% over: about 82% agree) and one short of money refuses even the standard price.
     /// </summary>
     internal static bool AgreesToPay(Simulation simulation, Humanoid humanoid, PatientBehaviour patient, DiseaseDefinition disease)
     {
         var hospital = simulation.Hospitals[humanoid.HospitalPlayer];
         var rules = simulation.Rules.Diseases;
-        var percent = hospital.CaseOf(disease, rules).PricePercent;
-        var agrees = true;
-        if (percent > DiseaseCase.StandardPrice)
-        {
-            var overprice = (percent - DiseaseCase.StandardPrice) / (decimal)DiseaseCase.StandardPrice;
-            var chance = 1m / PatientArrivals.Exp(4 * overprice);
-            agrees = simulation.Random.Next(1_000_000) / 1_000_000m <= chance;
-        }
-
+        var price = hospital.TreatmentPrice(disease, rules);
+        var agrees = Agrees(simulation.Random, price, hospital.ExpectedPrice(disease, rules), patient.Wallet, InsurerOf(hospital, patient));
         if (agrees)
         {
-            patient.PayAmount = hospital.TreatmentPrice(disease, rules);
+            patient.PayAmount = price;
         }
 
         return agrees;
     }
+
+    /// <summary>The rule of <see cref="AgreesToPay"/> for a price, an expected price, the patient's money and their company (1 to 8), or 0.</summary>
+    public static bool Agrees(SimRandom random, int price, int expected, int wallet, int insurer)
+    {
+        long expects = expected;
+        if (insurer > 0)
+        {
+            // The original game takes the bonus of the next of the hospital's companies here, and none for the third;
+            // OpenWards takes the patient's own company's.
+            expects += expects * Hospital.InsurerPriceBonus(insurer) / 100;
+        }
+        else if (wallet < price)
+        {
+            expects = 0;
+        }
+
+        // Within what they expect they always agree, so no number needs drawing.
+        return price <= expects || price <= expects + random.Next((price / 2) + 1);
+    }
+
+    /// <summary>The patient's insurance company (1 to 8), or 0 when they pay themselves.</summary>
+    private static int InsurerOf(Hospital hospital, PatientBehaviour patient) =>
+        patient.InsuranceCompany is >= 1 and <= Hospital.InsuranceCompanies ? hospital.Insurers[patient.InsuranceCompany - 1] : 0;
 
     /// <summary>
     /// <c>Room:dealtWithPatient</c> (<c>GPRoom:dealtWithPatient</c> in the GP's office): what the patient pays and does
@@ -383,9 +421,11 @@ public static class PatientCare
 
     /// <summary>
     /// <c>Hospital:receiveMoneyForTreatment</c>: the patient pays what they agreed to for the disease, or before the
-    /// diagnosis for the room they are in, or else its current price.
+    /// diagnosis for the room they are in, or else its current price. An insured patient's company owes it; one paying
+    /// themselves pays from their money, and if it falls short, as in the original game, the procedure goes unpaid and
+    /// the patient carries on.
     /// </summary>
-    private static void ReceiveMoneyForTreatment(Simulation simulation, Humanoid humanoid, PatientBehaviour patient, string roomType)
+    internal static void ReceiveMoneyForTreatment(Simulation simulation, Humanoid humanoid, PatientBehaviour patient, string roomType)
     {
         // Nothing at all in free build mode, not even the patient's view of the price.
         if (simulation.Rules.FreeBuild)
@@ -403,15 +443,19 @@ public static class PatientCare
         var rules = simulation.Rules.Diseases;
         var amount = patient.PayAmount > 0 ? patient.PayAmount : hospital.TreatmentPrice(paidFor, rules);
         var entry = hospital.CaseOf(paidFor, rules);
+        patient.PayAmount = 0;
         if (patient.InsuranceCompany == 0)
         {
-            // A patient paying themselves may find the price too high or low.
-            hospital.ComputePriceLevelImpact(simulation, humanoid, entry);
+            if (patient.Wallet < amount)
+            {
+                return;
+            }
+
+            patient.Wallet -= amount;
         }
 
         hospital.ReceiveForTreatment(simulation.Hours, entry, amount, patient.InsuranceCompany);
         simulation.ShowFloatingDollarSign(humanoid, amount, patient.InsuranceCompany != 0);
-        patient.PayAmount = 0;
     }
 
     /// <summary>

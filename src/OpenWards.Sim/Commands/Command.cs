@@ -227,7 +227,8 @@ public sealed record MakeDebugPatientCommand(string DiseaseId, TilePosition Tile
 
         var patient = simulation.AddEntity(id => Humanoid.CreatePatient(id, Tile, simulation.Random, disease.Look, player));
         var behaviour = new PatientBehaviour { Health = simulation.Random.NextInclusive(80, 100) / 100m };
-        behaviour.SetDisease(disease, PatientCare.ChooseInsuranceCompany(simulation.Random), simulation.Random);
+        behaviour.SetDisease(disease, PatientCare.ChooseInsuranceCompany(simulation), simulation.Random);
+        behaviour.Wallet = PatientCare.NewPatientMoney(simulation);
         patient.Behaviour = behaviour;
         PatientCare.SetDiagnosed(simulation, patient, behaviour, disease);
     }

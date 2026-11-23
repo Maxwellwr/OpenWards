@@ -11,7 +11,10 @@ namespace OpenWards.Sim.Economy;
 /// first months in turn, then by reputation and price, now and then at random.
 /// </summary>
 /// <param name="Delay">Months during which the hospitals take turns (<c>gbv.AllocDelay</c>).</param>
-/// <param name="TotalReputation">How much a hospital's reputation weighs (<c>gbv.AllocTotalRep</c>).</param>
+/// <param name="TotalReputation">
+/// The level's <c>gbv.AllocTotalRep</c>, kept but unused: as in the original game, a hospital's overall reputation does
+/// not weigh in the choice (<see cref="People.PatientArrivals.Appeal"/>).
+/// </param>
 /// <param name="DiseaseReputation">How much its reputation for the patient's disease weighs (<c>gbv.AllocIndRep</c>).</param>
 /// <param name="RandomChance">
 /// One patient in this many goes to a hospital chosen at random (<c>gbv.AllocRand</c>); 0 for none.

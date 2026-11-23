@@ -99,7 +99,7 @@ Done and committed:
   then go home. Use animations of desk, cabinet and chair. Save format version 5.
 - Diseases, diagnosis and payment (see ARCHITECTURE.md, "Diseases", "Diagnosis", "Payment"): patients
   come with one of the level's diseases, the GP diagnoses them and they pay for the consultation (or
-  their insurance pays two months later); diagnosed patients wait for a treatment room, the others for a
+  their insurance pays later; prices and insurance since follow the original, see ARCHITECTURE.md "Payment"); diagnosed patients wait for a treatment room, the others for a
   diagnosis room or go home, as CorsixTH's default policies say. The demo's patient chair keeps off the
   front walls. Save format version 6.
 - Pharmacy and treatment (see ARCHITECTURE.md, "The pharmacy", "Treatment", "Two people using an

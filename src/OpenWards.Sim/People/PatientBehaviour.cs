@@ -377,6 +377,18 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     /// <summary>The insurance company (1 to 3) that pays for the patient, or 0 when they pay themselves.</summary>
     public int InsuranceCompany { get; private set; }
 
+    /// <summary>The least money a patient brings.</summary>
+    public const int MinWallet = 5000;
+
+    /// <summary>How much more than <see cref="MinWallet"/> a patient may bring, exclusive.</summary>
+    public const int WalletRange = 95_000;
+
+    /// <summary>
+    /// The money the patient brings to pay with themselves: 5,000 + rng % 95,000 when they come
+    /// (<see cref="PatientCare.NewPatientMoney"/>). A patient short of a price refuses it, unless insured.
+    /// </summary>
+    public int Wallet { get; internal set; } = MinWallet + (WalletRange / 2);
+
     /// <summary>What kind of room the patient looks for in <see cref="PatientPhase.SeekRoom"/>.</summary>
     public RoomSeek Seeking { get; private set; }
 
@@ -3616,6 +3628,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         writer.WriteByte((byte)HomeMood);
         writer.WriteBool(IsFedUp);
         writer.WriteBool(IsCountedInReputation);
+        writer.WriteInt32(Wallet);
         writer.WriteInt32(DiagnosisDifficulty);
         writer.WriteBool(IsWrongGuess);
         writer.WriteInt32(PendingHealthChange);
@@ -3771,7 +3784,14 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
 
         // Before version 105 visits counted at the end; a patient still about had not.
         patient.IsCountedInReputation = reader.Version is 0 or >= 105 && reader.ReadBool();
+
+        // Version 106 keeps the patient's money; older patients bring the middle of the range.
         if (reader.Version is 0 or >= 106)
+        {
+            patient.Wallet = Math.Max(0, reader.ReadInt32());
+        }
+
+        if (reader.Version is 0 or >= 107)
         {
             patient.DiagnosisDifficulty = reader.ReadInt32();
             patient.IsWrongGuess = reader.ReadBool();

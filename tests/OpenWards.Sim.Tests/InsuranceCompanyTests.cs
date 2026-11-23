@@ -3,7 +3,7 @@ using OpenWards.Sim.Economy;
 
 namespace OpenWards.Sim.Tests;
 
-/// <summary>The three insurance companies a hospital picks (<c>Hospital:Hospital</c>).</summary>
+/// <summary>The three insurance companies of the eight a hospital deals with.</summary>
 public class InsuranceCompanyTests
 {
     [Fact]
@@ -18,8 +18,8 @@ public class InsuranceCompanyTests
             seen.UnionWith(insurers);
         }
 
-        // Each is drawn from the first quarter of those left half the time, else from all of them.
-        Assert.True(seen.Count > 6);
+        // Each of the eight is as likely.
+        Assert.Equal(Hospital.InsuranceCompanyNames, seen.Count);
 
         var simulation = NewSimulation(7);
         using var stream = new MemoryStream();

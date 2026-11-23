@@ -82,12 +82,12 @@ public class PatientAllocationTests
         var rival = simulation.Competitors[0];
         rival.Reputation = Hospital.MaxReputation;
 
-        // 500 + 2 × 500 for the player; (1000 + 2 × 1000) × 1.5 for the opponent, whose reputation is worth its price.
-        Assert.Equal(1500, PatientArrivals.Appeal(simulation, 0, disease: null));
-        Assert.Equal(4500, PatientArrivals.Appeal(simulation, 1, disease: null));
+        // AllocIndRep 2 × reputation × 100 / 100: the overall reputation (AllocTotalRep) does not count.
+        Assert.Equal(1000, PatientArrivals.Appeal(simulation, 0, disease: null));
+        Assert.Equal(2000, PatientArrivals.Appeal(simulation, 1, disease: null));
 
         var toPlayer = Enumerable.Range(0, 4000).Count(_ => PatientArrivals.ChooseHospital(simulation) == 0);
-        Assert.InRange(toPlayer, 900, 1100);
+        Assert.InRange(toPlayer, 1233, 1433);
 
         // The same reputations share them evenly.
         rival.Reputation = simulation.Hospitals[0].Reputation;
@@ -103,15 +103,20 @@ public class PatientAllocationTests
         var rules = simulation.Rules.Diseases;
         var disease = rules.AvailableDiseases().First(d => hospital.PeekCase(d, rules).Reputation is not null);
 
+        Assert.Equal(1000, PatientArrivals.Appeal(simulation, 0, disease));
+
+        // k = expected price × 100 / price: twice the price is worth half...
+        hospital.CaseOf(disease, rules).PricePercent = 200;
+        Assert.Equal(500, PatientArrivals.Appeal(simulation, 0, disease));
+
+        // ...and half the price as much as half again, no more.
+        hospital.CaseOf(disease, rules).PricePercent = 50;
         Assert.Equal(1500, PatientArrivals.Appeal(simulation, 0, disease));
 
-        // Hospital:getDiseaseReputationPriceFactor: reputation 500 at twice the price is worth half...
+        // A better reputation for the disease raises both prices alike, so k stays.
         hospital.CaseOf(disease, rules).PricePercent = 200;
-        Assert.Equal(750, PatientArrivals.Appeal(simulation, 0, disease));
-
-        // ...and at a price of 50% as much as half again, no more.
-        hospital.CaseOf(disease, rules).PricePercent = 50;
-        Assert.Equal(2250, PatientArrivals.Appeal(simulation, 0, disease));
+        hospital.CaseOf(disease, rules).Reputation = 800;
+        Assert.Equal(800, PatientArrivals.Appeal(simulation, 0, disease)); // 2 × 800 × 50 / 100
 
         // Choosing a hospital only peeks at the casebook.
         var other = rules.AvailableDiseases().First(d => !hospital.Casebook.ContainsKey(d.Id));

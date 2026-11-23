@@ -683,7 +683,8 @@ public static class Emergencies
         var health = simulation.Random.NextInclusive(80, 100) / 100m;
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, tile, simulation.Random, disease.Look, hospital.Player));
         var patient = new PatientBehaviour { Health = health };
-        patient.SetDisease(disease, PatientCare.ChooseInsuranceCompany(simulation.Random), simulation.Random);
+        patient.SetDisease(disease, PatientCare.ChooseInsuranceCompany(simulation), simulation.Random);
+        patient.Wallet = PatientCare.NewPatientMoney(simulation);
         humanoid.Behaviour = patient;
         hospital.Visitors++;
         hospital.VisitorsThisYear++;
