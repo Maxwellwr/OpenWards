@@ -1,5 +1,5 @@
 // How staff tire, ported from CorsixTH CorsixTH/Lua/entities/humanoids/staff.lua (Staff:tick, tickDay, isTiring,
-// tire, checkIfNeedRest, isVeryTired, isCrackUpTired, updateSpeed) and base_config.lua (gbv.Tired, VeryTired, CrackUpTired).
+// tire, checkIfNeedRest, isVeryTired, isCrackUpTired, updateSpeed). The thresholds' defaults are the original game's.
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using OpenWards.Sim.Economy;
@@ -11,22 +11,36 @@ namespace OpenWards.Sim.Staff;
 
 /// <summary>
 /// The level's tiredness thresholds in thousandths of fatigue: tired enough to want the staff room (the hospital's
-/// <c>goto_staffroom</c> policy, <c>gbv.Tired</c>), very tired (<c>gbv.VeryTired</c>) and so tired they could crack up
-/// (<c>gbv.CrackUpTired</c>).
+/// <c>goto_staffroom</c> policy, <c>gbv.Tired</c>), very tired (<c>gbv.VeryTired</c>), so tired they could crack up
+/// (<c>gbv.CrackUpTired</c>), and below which a doctor counts as rested in a diagnosis step (<c>gbv.NotTired</c>).
 /// </summary>
-public sealed record TirednessRules(int Tired, int VeryTired, int CrackUpTired)
+/// <remarks>
+/// The difficulty files set them (easy, medium, hard): NotTired 400 / 300 / 200, Tired 700 / 600 / 600, VeryTired
+/// 800 / 700 / 700, CrackUpTired 900 / 800 / 800. <see cref="Default"/> is the medium one, for rules made without level
+/// files; <see cref="Unset"/> is what the original game uses for a threshold its files leave out, as the maintainer
+/// describes it.
+/// </remarks>
+public sealed record TirednessRules(int Tired, int VeryTired, int CrackUpTired, int NotTired = TirednessRules.UnsetNotTired)
 {
-    /// <summary>CorsixTH's base_config.lua: 600, 700 and 800.</summary>
-    public static readonly TirednessRules Default = new(600, 700, 800);
+    /// <summary>The original game's <c>gbv.NotTired</c> when the level files set none.</summary>
+    public const int UnsetNotTired = 400;
+
+    /// <summary>The medium difficulty's thresholds (<c>FULL00.SAM</c>): Tired 600, VeryTired 700, CrackUpTired 800, NotTired 300.</summary>
+    public static readonly TirednessRules Default = new(600, 700, 800, 300);
+
+    /// <summary>The original game's thresholds when the level files set none: Tired 800, VeryTired 1200, CrackUpTired 3000, NotTired 400.</summary>
+    public static readonly TirednessRules Unset = new(800, 1200, 3000, UnsetNotTired);
 
     internal void Write(SimWriter writer)
     {
         writer.WriteInt32(Tired);
         writer.WriteInt32(VeryTired);
         writer.WriteInt32(CrackUpTired);
+        writer.WriteInt32(NotTired);
     }
 
-    internal static TirednessRules Read(SimReader reader) => new(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32());
+    internal static TirednessRules Read(SimReader reader) =>
+        new(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.Version is 0 or >= 107 ? reader.ReadInt32() : Default.NotTired);
 }
 
 /// <summary>

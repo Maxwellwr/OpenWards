@@ -11,7 +11,7 @@ namespace OpenWards.Content.Tests;
 
 /// <summary>
 /// The faxes a waiting patient sends (CorsixTH's makeNoDiagnosisRoomFax, makeNoTreatmentRoomFax and UIFax:choice), in a
-/// hospital where broken wind is the only disease and the GP gets three quarters of the way to a diagnosis.
+/// hospital where broken wind is the only disease and the patient's case is hard enough to keep the GP short of a diagnosis.
 /// </summary>
 public class PatientFaxTests
 {
@@ -109,6 +109,10 @@ public class PatientFaxTests
         Run(simulation, new CheatCommand(CheatKind.CreatePatient));
         var humanoid = simulation.Entities.OfType<Humanoid>().Single(h => h.Behaviour is PatientBehaviour);
         var patient = (PatientBehaviour)humanoid.Behaviour!;
+
+        // A hard case keeps the GP's diagnosis short of 100 %, and never guessing leaves the decision to the player.
+        patient.DiagnosisDifficulty = 600;
+        Run(simulation, new SetPolicyCommand(PolicyKind.GuessCure, HospitalPolicies.MaxFraction));
         for (var tick = 0; tick < 20 * GameDate.HoursPerDay && patient.Question == PatientQuestion.None; tick++)
         {
             simulation.Step();

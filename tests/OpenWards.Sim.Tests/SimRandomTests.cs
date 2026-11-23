@@ -84,4 +84,42 @@ public class SimRandomTests
         Assert.Throws<ArgumentOutOfRangeException>(() => random.NextInclusive(2, 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => random.Chance(1, 0));
     }
+
+    [Fact]
+    public void TriangularAddsTwoUniformDrawsAndStopsShortOfAnOddRangesTop()
+    {
+        var random = new SimRandom(99, 3);
+        var counts = new int[6];
+        const int draws = 90_000;
+        for (var i = 0; i < draws; i++)
+        {
+            var value = random.Triangular(55, 60);
+            Assert.InRange(value, 55, 59);
+            counts[value - 55]++;
+        }
+
+        // Weights 1 : 2 : 3 : 2 : 1 out of 9.
+        int[] weights = [1, 2, 3, 2, 1];
+        for (var i = 0; i < weights.Length; i++)
+        {
+            Assert.InRange(counts[i], (draws * weights[i] / 9) - 600, (draws * weights[i] / 9) + 600);
+        }
+    }
+
+    [Fact]
+    public void TriangularOfAnEvenRangeReachesBothEnds()
+    {
+        var random = new SimRandom(5);
+        var seen = new HashSet<int>();
+        for (var i = 0; i < 10_000; i++)
+        {
+            var value = random.Triangular(0, 4);
+            Assert.InRange(value, 0, 4);
+            seen.Add(value);
+        }
+
+        Assert.Equal(5, seen.Count);
+        Assert.Equal(7, new SimRandom(1).Triangular(7, 7));
+        Assert.Throws<ArgumentOutOfRangeException>(() => random.Triangular(2, 1));
+    }
 }

@@ -258,12 +258,26 @@ public class LevelRulesLoaderTests
         var config = LevelConfig.Parse(Encoding.ASCII.GetBytes("""
             #gbv.Tired 500
             #gbv.CrackUpTired 900
+            #gbv.NotTired 200
             """));
 
         var rules = LevelRulesLoader.FromConfig(config, null, BaseGameContent.Create());
 
-        Assert.Equal(new TirednessRules(500, 700, 900), rules.Tiredness);
-        Assert.Equal(TirednessRules.Default, LevelRulesLoader.FromConfig(LevelConfig.Parse([]), null, BaseGameContent.Create()).Tiredness);
+        // A threshold the files leave out takes the original game's value for an unset one (VeryTired 1200).
+        Assert.Equal(new TirednessRules(500, 1200, 900, 200), rules.Tiredness);
+        Assert.Equal(TirednessRules.Unset, LevelRulesLoader.FromConfig(LevelConfig.Parse([]), null, BaseGameContent.Create()).Tiredness);
+    }
+
+    [Fact]
+    public void ReadsEachDifficultysTirednessThresholds()
+    {
+        var install = RealGameData.Require();
+        var content = BaseGameContent.Create();
+
+        // The difficulty files set all four thresholds: NotTired 400 / 300 / 200 for easy, medium and hard.
+        Assert.Equal(new TirednessRules(700, 800, 900, 400), LevelRulesLoader.LoadOriginal(install, "LEVEL.L1", content, Sim.Economy.Difficulty.Easy).Tiredness);
+        Assert.Equal(new TirednessRules(600, 700, 800, 300), LevelRulesLoader.LoadOriginal(install, "LEVEL.L1", content, Sim.Economy.Difficulty.Medium).Tiredness);
+        Assert.Equal(new TirednessRules(600, 700, 800, 200), LevelRulesLoader.LoadOriginal(install, "LEVEL.L1", content, Sim.Economy.Difficulty.Hard).Tiredness);
     }
 
     [Fact]

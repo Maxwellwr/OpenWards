@@ -23,6 +23,9 @@ public class InflationTests
     {
         var simulation = NewStaffedHospital(Rules());
         var room = BuildInflation(simulation);
+
+        // With the GP diagnosing most patients, the machine sees enough of them to wear out; this test is not about wear.
+        Run(simulation, new CheatCommand(CheatKind.ToggleInvulnerableMachines));
         var hospital = simulation.Hospitals[0];
         var treated = new HashSet<int>();
         var animations = new HashSet<int>();

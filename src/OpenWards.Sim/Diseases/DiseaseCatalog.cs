@@ -25,6 +25,7 @@ public static class DiseaseCatalog
     [
         new("alien_dna", 8, 2000)
         {
+            IsSpecial = true,
             EmergencyNumber = 16,
             VisualsId = 6,
             Look = PatientLook.Alien,
@@ -33,18 +34,20 @@ public static class DiseaseCatalog
         },
         new("baldness", 10, 950)
         {
+            IsSpecial = true,
             Look = PatientLook.Baldness,
             EmergencyNumber = 18,
             VisualsId = 8,
-            DiagnosisRooms = ["x_ray", "blood_machine", "scanner"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("baldness"),
             TreatmentRooms = ["hair_restoration"],
         },
         new("bloaty_head", 2, 850)
         {
+            IsSpecial = true,
             EmergencyNumber = 18,
             VisualsId = 0,
             Look = PatientLook.BloatyHead,
-            DiagnosisRooms = ["general_diag", "x_ray", "cardiogram", "scanner"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("bloaty_head"),
             TreatmentRooms = ["inflation"],
         },
         new("broken_heart", 20, 1900)
@@ -52,7 +55,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 6,
             NonVisualsId = 4,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("broken_heart"),
             TreatmentRooms = ["ward", "operating_theatre"],
         },
         new("broken_wind", 17, 1300)
@@ -60,7 +63,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 14,
             NonVisualsId = 1,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("broken_wind"),
             TreatmentRooms = ["pharmacy"],
         },
         new("chronic_nosehair", 25, 800)
@@ -68,7 +71,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 18,
             NonVisualsId = 9,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("chronic_nosehair"),
             TreatmentRooms = ["pharmacy"],
         },
         new("corrugated_ankles", 24, 800)
@@ -76,7 +79,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 18,
             NonVisualsId = 8,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("corrugated_ankles"),
             TreatmentRooms = ["pharmacy"],
         },
         new("discrete_itching", 11, 700)
@@ -84,7 +87,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 15,
             VisualsId = 9,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("discrete_itching"),
             TreatmentRooms = ["pharmacy"],
         },
         new("fake_blood", 27, 800)
@@ -92,15 +95,16 @@ public static class DiseaseCatalog
             EmergencyNumber = 18,
             NonVisualsId = 11,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("fake_blood"),
             TreatmentRooms = ["psych"],
         },
         new("fractured_bones", 9, 450)
         {
+            IsSpecial = true,
             Look = PatientLook.FracturedBones,
             EmergencyNumber = 16,
             VisualsId = 7,
-            DiagnosisRooms = ["scanner"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("fractured_bones"),
             TreatmentRooms = ["fracture_clinic"],
         },
         new("gastric_ejections", 28, 650)
@@ -108,7 +112,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 15,
             NonVisualsId = 12,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("gastric_ejections"),
             TreatmentRooms = ["pharmacy"],
         },
         new("golf_stones", 34, 1600)
@@ -116,7 +120,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 6,
             NonVisualsId = 18,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("golf_stones"),
             TreatmentRooms = ["ward", "operating_theatre"],
         },
         new("gut_rot", 33, 350)
@@ -125,15 +129,16 @@ public static class DiseaseCatalog
             NonVisualsId = 17,
             MoreLooUse = true,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("gut_rot"),
             TreatmentRooms = ["pharmacy"],
         },
         new("hairyitis", 3, 1150)
         {
+            IsSpecial = true,
             Look = PatientLook.Hairyitis,
             EmergencyNumber = 12,
             VisualsId = 1,
-            DiagnosisRooms = ["x_ray", "scanner"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("hairyitis"),
             TreatmentRooms = ["electrolysis"],
         },
         new("heaped_piles", 32, 400)
@@ -141,7 +146,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 14,
             NonVisualsId = 16,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("heaped_piles"),
             TreatmentRooms = ["pharmacy"],
         },
         new("infectious_laughter", 23, 1500)
@@ -149,15 +154,16 @@ public static class DiseaseCatalog
             EmergencyNumber = 18,
             NonVisualsId = 7,
             IsContagious = true,
-            DiagnosisRooms = ["cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("infectious_laughter"),
             TreatmentRooms = ["psych"],
         },
         new("invisibility", 5, 1400)
         {
+            IsSpecial = true,
             Look = PatientLook.Invisible,
             EmergencyNumber = 18,
             VisualsId = 3,
-            DiagnosisRooms = ["x_ray", "scanner"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("invisibility"),
             TreatmentRooms = ["pharmacy"],
         },
         new("iron_lungs", 30, 1700)
@@ -165,14 +171,14 @@ public static class DiseaseCatalog
             EmergencyNumber = 5,
             NonVisualsId = 14,
             IsContagious = true,
-            DiagnosisRooms = ["x_ray", "cardiogram", "blood_machine"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("iron_lungs"),
             TreatmentRooms = ["ward", "operating_theatre"],
         },
         new("jellyitis", 12, 1000)
         {
             EmergencyNumber = 12,
             VisualsId = 10,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("jellyitis"),
             TreatmentRooms = ["jelly_vat"],
         },
         new("kidney_beans", 19, 1050)
@@ -180,23 +186,25 @@ public static class DiseaseCatalog
             EmergencyNumber = 5,
             NonVisualsId = 3,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("kidney_beans"),
             TreatmentRooms = ["ward", "operating_theatre"],
         },
         new("king_complex", 4, 1600)
         {
+            IsSpecial = true,
             Look = PatientLook.Elvis,
             EmergencyNumber = 18,
             VisualsId = 2,
-            DiagnosisRooms = ["x_ray", "scanner"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("king_complex"),
             TreatmentRooms = ["psych"],
         },
         new("pregnant", 14, 200)
         {
+            IsSpecial = true,
             Look = PatientLook.Pregnant,
             EmergencyNumber = 8,
             VisualsId = 12,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("pregnant"),
             TreatmentRooms = ["ward", "operating_theatre"],
         },
         new("ruptured_nodules", 21, 1600)
@@ -204,22 +212,23 @@ public static class DiseaseCatalog
             EmergencyNumber = 6,
             NonVisualsId = 5,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("ruptured_nodules"),
             TreatmentRooms = ["ward", "operating_theatre"],
         },
         new("serious_radiation", 6, 1800)
         {
             EmergencyNumber = 18,
             VisualsId = 4,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("serious_radiation"),
             TreatmentRooms = ["decontamination"],
         },
         new("slack_tongue", 7, 900)
         {
+            IsSpecial = true,
             Look = PatientLook.SlackTongue,
             EmergencyNumber = 18,
             VisualsId = 5,
-            DiagnosisRooms = ["x_ray", "scanner"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("slack_tongue"),
             TreatmentRooms = ["slack_tongue"],
         },
         new("sleeping_illness", 13, 750)
@@ -227,7 +236,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 18,
             VisualsId = 11,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("sleeping_illness"),
             TreatmentRooms = ["pharmacy"],
         },
         new("spare_ribs", 18, 1100)
@@ -235,7 +244,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 4,
             NonVisualsId = 2,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("spare_ribs"),
             TreatmentRooms = ["ward", "operating_theatre"],
         },
         new("sweaty_palms", 31, 600)
@@ -243,7 +252,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 14,
             NonVisualsId = 15,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("sweaty_palms"),
             TreatmentRooms = ["psych"],
         },
         new("the_squits", 29, 400)
@@ -252,7 +261,7 @@ public static class DiseaseCatalog
             NonVisualsId = 13,
             MoreLooUse = true,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("the_squits"),
             TreatmentRooms = ["pharmacy"],
         },
         new("third_degree_sideburns", 26, 550)
@@ -260,15 +269,16 @@ public static class DiseaseCatalog
             EmergencyNumber = 13,
             NonVisualsId = 10,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("third_degree_sideburns"),
             TreatmentRooms = ["psych"],
         },
         new("transparency", 15, 800)
         {
+            IsSpecial = true,
             Look = PatientLook.Transparent,
             EmergencyNumber = 12,
             VisualsId = 13,
-            DiagnosisRooms = ["scanner"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("transparency"),
             TreatmentRooms = ["pharmacy"],
         },
         new("tv_personalities", 22, 800)
@@ -276,7 +286,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 14,
             NonVisualsId = 6,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("tv_personalities"),
             TreatmentRooms = ["psych"],
         },
         new("uncommon_cold", 16, 300)
@@ -284,7 +294,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 18,
             NonVisualsId = 0,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("uncommon_cold"),
             TreatmentRooms = ["pharmacy"],
         },
         new("unexpected_swelling", 35, 500)
@@ -292,7 +302,7 @@ public static class DiseaseCatalog
             EmergencyNumber = 5,
             NonVisualsId = 19,
             IsContagious = true,
-            DiagnosisRooms = ["general_diag", "cardiogram", "scanner", "ultrascan", "blood_machine", "x_ray", "psych", "ward"],
+            DiagnosisRooms = DiagnosisBonuses.Rooms("unexpected_swelling"),
             TreatmentRooms = ["ward", "operating_theatre"],
         },
         new("diag_blood_machine", 37, 250) { IsPseudo = true },

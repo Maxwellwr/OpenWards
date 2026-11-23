@@ -7,6 +7,9 @@
 // patient agrees to a price and how they pay are not CorsixTH's: they follow the community's description of the
 // original game (the game logic spec's price and payment section).
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
+//
+// Diagnosis steps, guessing and the outcome of a treatment follow the community specification of the original game
+// (the "Diagnosis" and "Treatment" sections), not CorsixTH.
 
 using OpenWards.Sim.Disasters;
 using OpenWards.Sim.Diseases;
@@ -21,8 +24,11 @@ namespace OpenWards.Sim.People;
 /// diagnosing it, where the patient goes next, and what they pay.
 /// </summary>
 /// <remarks>
-/// Diagnosis progress is kept in thousandths (1000 stands for CorsixTH's 1.0) and worked out with decimals,
-/// so that the simulation stays free of floating point.
+/// Diagnosis progress runs from 0 to 1000, and the disease is diagnosed at 1000. Each step at the GP's or in a
+/// diagnosis room adds the doctor's score plus the room's bonus for the disease (<see cref="DiagnosisBonuses"/>) less
+/// the patient's difficulty, when that is above 0. A treatment room always cures, a drug cures with the triangular
+/// chance of its effectiveness; neither depends on the doctor or on how sure the diagnosis is, only a wrong guess
+/// kills.
 /// </remarks>
 public static class PatientCare
 {
@@ -37,6 +43,12 @@ public static class PatientCare
 
     /// <summary>Reputation points of a death.</summary>
     public const int DeathPoints = -1;
+
+    /// <summary>A patient's full health, in thousandths.</summary>
+    public const int FullHealth = 1000;
+
+    /// <summary>Health in thousandths that a diagnosis room with a negative bonus for the disease costs.</summary>
+    public const int WrongRoomHealthLoss = 5;
 
     /// <summary>Days a patient waits for a missing room or the player's decision before going home.</summary>
     public const int WaitingDays = 60;
@@ -139,6 +151,7 @@ public static class PatientCare
     /// </summary>
     internal static void DealtWith(Simulation simulation, Room room, Humanoid humanoid, PatientBehaviour patient)
     {
+        GainProcedureSkill(simulation, room);
         if (string.Equals(room.RoomType, PatientBehaviour.FirstRoom, StringComparison.Ordinal))
         {
             GpDealtWith(simulation, room, humanoid, patient);
@@ -180,16 +193,43 @@ public static class PatientCare
     }
 
     /// <summary>
-    /// <c>Patient:treatDisease</c>: the patient pays for the cure; it works with a chance from the drug's effectiveness,
-    /// how sure the diagnosis is and how good the staff is, and then the patient goes home cured, or else dies. The drug
-    /// is paid for either way.
+    /// The treatment's last room is done (the community specification's "Treatment"; CorsixTH's
+    /// <c>Patient:treatDisease</c>). The patient pays. A treatment room always cures; a drug cures when
+    /// <c>rnd(0, 99)</c> is below its effectiveness, and is paid for either way. A failed drug costs
+    /// <c>1000 − 10 × effectiveness</c> health and sends the patient back to the GP; for a special disease
+    /// (<see cref="DiseaseDefinition.IsSpecial"/>), an emergency patient or after a wrong guess it costs 1000, as any
+    /// treatment after a wrong guess does. Health changes count once the patient is out of the room; a patient left below 1 dies.
     /// </summary>
+    /// <remarks>
+    /// CorsixTH cures with a chance from the cure's effectiveness, the diagnosis progress and the staff's quality, for
+    /// every treatment, and a failed treatment always kills.
+    /// </remarks>
     internal static void TreatDisease(Simulation simulation, Room room, Humanoid humanoid, PatientBehaviour patient, DiseaseDefinition disease)
     {
         var hospital = simulation.Hospitals[humanoid.HospitalPlayer];
         var entry = hospital.CaseOf(disease, simulation.Rules.Diseases);
         ReceiveMoneyForTreatment(simulation, humanoid, patient, room.RoomType);
-        if (IsTreatmentEffective(simulation, room, patient, entry))
+        var isDrug = string.Equals(room.RoomType, RoomVisits.PharmacyRoom, StringComparison.Ordinal);
+        bool cured;
+        var healthLoss = FullHealth;
+        if (isDrug)
+        {
+            cured = !patient.IsWrongGuess && simulation.Random.Triangular(0, 99) < entry.CureEffectiveness;
+
+            // A special disease's drug, an emergency's or one after a wrong guess kills when it fails.
+            if (!patient.IsWrongGuess && !disease.IsSpecial && patient.EmergencyIndex == 0)
+            {
+                healthLoss = FullHealth - (10 * entry.CureEffectiveness);
+            }
+
+            hospital.PayForDrug(simulation.Hours, entry, simulation.Random.NextInclusive(1, 5));
+        }
+        else
+        {
+            cured = !patient.IsWrongGuess;
+        }
+
+        if (cured)
         {
             // Patient:cure and goHome("cured") with Hospital:updateCuredCounts.
             CountForReputation(simulation, humanoid, patient, CurePoints);
@@ -202,37 +242,26 @@ public static class PatientCare
         }
         else
         {
-            // Patient:die with Hospital:humanoidDeath.
-            RecordDeath(simulation, humanoid, patient);
-            patient.SetNextDie();
+            patient.PendingHealthChange -= healthLoss;
+            if (patient.HealthThousandths + patient.PendingHealthChange < 1)
+            {
+                // Patient:die with Hospital:humanoidDeath.
+                RecordDeath(simulation, humanoid, patient);
+                patient.SetNextDie();
+            }
+            else
+            {
+                // The drug did not work: back to the GP, who sends the patient on to the treatment again.
+                patient.CureRoomsVisited = 0;
+                patient.SetNextGp();
+                return;
+            }
         }
 
-        hospital.PayForDrug(simulation.Hours, entry, simulation.Random.NextInclusive(1, 5));
         if (patient.EmergencyIndex > 0)
         {
             Emergencies.PatientDone(simulation, hospital, patient.IsCured);
         }
-    }
-
-    /// <summary>
-    /// <c>Patient:isTreatmentEffective</c>: the chance in percent is the cure's effectiveness times the diagnosis progress,
-    /// moved by up to a tenth of what is left to 100 (at least 20) by the staff's service quality, which is
-    /// <c>0.7 × skill + 0.2 × (1 − fatigue) + 0.1 × happiness</c>.
-    /// </summary>
-    private static bool IsTreatmentEffective(Simulation simulation, Room room, PatientBehaviour patient, DiseaseCase entry)
-    {
-        var cureChance = entry.CureEffectiveness * (patient.DiagnosisProgress / 1000m);
-        var quality = 0.5m;
-        if (simulation.FindEntity(room.StaffId) is Humanoid { Profile: { } profile } staff)
-        {
-            quality = (0.7m * profile.Skill / StaffProfile.MaxSkill) + (0.2m * (1 - staff.Fatigue)) + (0.1m * staff.Happiness);
-        }
-
-        const int minImpact = 20;
-        const decimal scale = 0.2m;
-        var serviceBase = Math.Max(100 - cureChance, minImpact);
-        cureChance += serviceBase * (quality - 0.5m) * scale;
-        return cureChance >= simulation.Random.NextInclusive(1, 100);
     }
 
     /// <summary>
@@ -242,16 +271,32 @@ public static class PatientCare
     /// </summary>
     internal static void GpDealtWith(Simulation simulation, Room room, Humanoid humanoid, PatientBehaviour patient)
     {
-        if (patient.Disease is not { } disease || patient.IsDiagnosed)
+        if (patient.Disease is not { } disease || patient.IsCured)
         {
             // CorsixTH lets such a patient meander about; they only come in debugging, so here they go home.
             patient.SetNextGoHome();
             return;
         }
 
+        if (patient.IsDiagnosed)
+        {
+            // Back after a drug that did not work: on to the treatment again, if they agree to pay for it.
+            if (AgreesToPay(simulation, humanoid, patient, disease))
+            {
+                patient.SetNextTreatment();
+            }
+            else
+            {
+                NotCured(simulation, humanoid, patient, ReputationChange.OverPriced);
+                patient.SetNextGoHome();
+            }
+
+            return;
+        }
+
         ReceiveMoneyForTreatment(simulation, humanoid, patient, room.RoomType);
         CompleteDiagnosticStep(simulation, room, humanoid, patient, disease);
-        if (patient.DiagnosisProgress >= Policies(simulation, humanoid).StopProcedure || (patient.DiagnosisProgress >= FullDiagnosis && patient.AvailableDiagnosisRooms.Count == 0))
+        if (patient.DiagnosisProgress >= FullDiagnosis)
         {
             SetDiagnosed(simulation, humanoid, patient, disease);
             if (AgreesToPay(simulation, humanoid, patient, disease))
@@ -271,8 +316,8 @@ public static class PatientCare
         var rooms = patient.AvailableDiagnosisRooms;
         if (rooms.Count == 0)
         {
-            NotCured(simulation, humanoid, patient, ReputationChange.Kicked);
-            patient.SetNextGoHome();
+            // No diagnosis room left: once out, the hospital's policy decides (PatientBehaviour.NoDiagnosisRoomFound).
+            patient.SetNextDiagnosis(-1);
             return;
         }
 
@@ -417,31 +462,96 @@ public static class PatientCare
     }
 
     /// <summary>
-    /// <c>Patient:completeDiagnosticStep</c>: a base that the harder the disease is to diagnose the smaller it is,
-    /// plus a bonus from the doctor's skill and attention to detail, both divided by a random 1 to 3; very skilled
-    /// doctors may get up to five times the bonus.
+    /// A diagnosis step at the GP's or in a diagnosis room (the community specification's "Diagnosis"): progress grows by
+    /// <c>doctor's score + room's bonus − difficulty</c> when that is above 0, up to <see cref="FullDiagnosis"/>. The
+    /// patient's difficulty is rolled at the first step as <c>rnd(1, MaxDiagDiff)</c>. A room with a negative bonus for
+    /// the disease costs the patient 5 health.
     /// </summary>
+    /// <remarks>
+    /// CorsixTH adds a base that shrinks with the disease's difficulty and a bonus from the doctor's skill and attention
+    /// to detail, and lets the stop procedure policy take progress above 1000; here that policy no longer matters.
+    /// </remarks>
     private static void CompleteDiagnosticStep(Simulation simulation, Room room, Humanoid humanoid, PatientBehaviour patient, DiseaseDefinition disease)
     {
-        var difficulty = simulation.Rules.Diseases.MaxDiagDiff(disease.ExpertiseId) / 1000m;
-        var diagnosisBase = 0.4m * (1 - difficulty);
-        var bonus = 0.4m;
-        var multiplier = 1m;
-
-        if (room.StaffPresent && simulation.FindEntity(room.StaffId) is Humanoid { Profile: { } profile } staff)
+        if (patient.DiagnosisDifficulty < 0)
         {
-            // multiplier = (skilled ? random(1, 5) : 1) * (1 - (fatigue - 0.5)).
-            var fatigueFactor = 1 - (staff.Fatigue - 0.5m);
-            multiplier = profile.Skill >= 900 ? simulation.Random.NextInclusive(1, 5) * fatigueFactor : fatigueFactor;
-            var divisor = simulation.Random.NextInclusive(1, 3);
-            var attention = profile.AttentionToDetail / (decimal)StaffProfile.MaxSkill / divisor;
-            var skill = profile.Skill / (decimal)StaffProfile.MaxSkill / divisor;
-            bonus = (attention + 0.4m) * skill;
+            var maxDifficulty = simulation.Rules.Diseases.MaxDiagDiff(disease.ExpertiseId);
+            patient.DiagnosisDifficulty = maxDifficulty >= 1 ? simulation.Random.Triangular(1, maxDifficulty) : 0;
         }
 
-        var progress = (patient.DiagnosisProgress / 1000m) + diagnosisBase + (bonus * multiplier);
-        // Patient:modifyDiagnosisProgress: no further than the stop_procedure policy.
-        progress = Math.Clamp(progress, 0, Policies(simulation, humanoid).StopProcedure / 1000m);
-        SetDiagnosisProgress(simulation, humanoid, patient, (int)decimal.Floor(progress * 1000));
+        var bonus = string.Equals(room.RoomType, PatientBehaviour.FirstRoom, StringComparison.Ordinal) ? 0 : DiagnosisBonuses.Bonus(disease.Id, room.RoomType);
+        var staff = room.StaffPresent ? simulation.FindEntity(room.StaffId) as Humanoid : null;
+        var gain = DoctorScore(simulation, staff) + bonus - patient.DiagnosisDifficulty;
+        if (gain > 0)
+        {
+            SetDiagnosisProgress(simulation, humanoid, patient, Math.Min(patient.DiagnosisProgress + gain, FullDiagnosis));
+        }
+
+        if (bonus < 0)
+        {
+            patient.PendingHealthChange -= WrongRoomHealthLoss;
+        }
+    }
+
+    /// <summary>
+    /// The doctor's score in a diagnosis step: skill (0 to 1000) <c>+ 250 − rnd(0, 500)</c>, +200 for a consultant, −100
+    /// for a junior, +100 when not tired (fatigue below the level's <c>NotTired</c>), −100 when tired (at or above
+    /// <c>Tired</c>). Without a doctor only the random part counts.
+    /// </summary>
+    /// <remarks>The specification adds a correction from the room that it leaves open; it is 0 here.</remarks>
+    internal static int DoctorScore(Simulation simulation, Humanoid? staff)
+    {
+        var score = 250 - simulation.Random.Triangular(0, 500);
+        if (staff is not { Profile: { } profile })
+        {
+            return score;
+        }
+
+        score += profile.Skill;
+        if (profile.IsConsultant)
+        {
+            score += 200;
+        }
+        else if (profile.IsJunior)
+        {
+            score -= 100;
+        }
+
+        var tiredness = simulation.Rules.Tiredness;
+        var fatigue = (int)decimal.Floor(staff.Fatigue * 1000);
+        if (fatigue >= tiredness.Tired)
+        {
+            score -= 100;
+        }
+        else if (fatigue < tiredness.NotTired)
+        {
+            score += 100;
+        }
+
+        return score;
+    }
+
+    /// <summary>
+    /// A doctor who finishes any procedure gains 1 skill, within 30 to 1000 (the community specification's experience
+    /// rule; CorsixTH lets doctors learn by the hour of work instead).
+    /// </summary>
+    private static void GainProcedureSkill(Simulation simulation, Room room)
+    {
+        if (simulation.FindEntity(room.StaffId) is Humanoid { Profile: { Class: StaffClass.Doctor } profile })
+        {
+            profile.GainProcedureSkill(simulation.Rules.Staff);
+        }
+    }
+
+    /// <summary>
+    /// A guessed diagnosis (the hospital's guess cure policy or the player's guess): the patient counts as diagnosed, but
+    /// the guess is wrong when <c>rng % 100 &gt; min(p, 99)</c> with <c>p = progress × 100 / 1000</c>, which makes any
+    /// treatment kill them.
+    /// </summary>
+    internal static void GuessDiagnosis(Simulation simulation, Humanoid humanoid, PatientBehaviour patient, DiseaseDefinition disease)
+    {
+        var percent = patient.DiagnosisProgress * 100 / FullDiagnosis;
+        patient.IsWrongGuess = simulation.Random.Next(100) > Math.Min(percent, 99);
+        SetDiagnosed(simulation, humanoid, patient, disease);
     }
 }

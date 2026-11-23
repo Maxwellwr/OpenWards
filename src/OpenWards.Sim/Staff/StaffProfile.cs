@@ -63,6 +63,9 @@ public sealed class StaffProfile
     /// <summary>Skill is in thousandths: 1000 stands for CorsixTH's 1.0.</summary>
     public const int MaxSkill = 1000;
 
+    /// <summary>The least skill a doctor has after a procedure (<see cref="GainProcedureSkill"/>).</summary>
+    public const int MinProcedureSkill = 30;
+
     public StaffProfile(StaffClass staffClass)
     {
         Class = staffClass;
@@ -142,6 +145,16 @@ public sealed class StaffProfile
         total = Math.Min(total, (long)MaxSkill * 1000);
         Skill = (int)(total / 1000);
         _skillMillionths = (int)(total % 1000);
+        ParseSkillLevel(rules);
+    }
+
+    /// <summary>
+    /// The community specification's experience rule: each procedure a doctor finishes adds 1 to the skill, kept within
+    /// <see cref="MinProcedureSkill"/> to <see cref="MaxSkill"/>; whether the doctor is a junior or a consultant follows it.
+    /// </summary>
+    internal void GainProcedureSkill(StaffRules rules)
+    {
+        Skill = Math.Clamp(Skill + 1, MinProcedureSkill, MaxSkill);
         ParseSkillLevel(rules);
     }
 

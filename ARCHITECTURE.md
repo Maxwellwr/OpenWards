@@ -449,18 +449,20 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   so far; the other visual diseases need humanoid types the client cannot draw yet), brings $5,000 + rng % 95,000
   (`PatientBehaviour.Wallet`, from `Simulation.MoneyRandom`, a stream of its own) and is insured by one of the
   hospital's three companies one time in three on levels 1–2, in ten on level 3 and in five elsewhere.
-- **Diagnosis** (`PatientCare`, from `patient.lua` and `rooms/gp.lua`). Progress is in thousandths, worked
-  out with decimals: each GP visit adds `0.4 * (1 - MaxDiagDiff)` plus `(attention / d + 0.4) * skill / d`
-  times `1.5 − fatigue`, `d` a random 1 to 3, very skilled doctors up to five times as much.
-  At the hospital's `stop_procedure` policy (1.0 by default; progress goes no further) the patient is diagnosed, the hospital knows the disease, and
-  they look for its treatment rooms; otherwise the GP sends them to one of the disease's diagnosis rooms.
-  Only the GP's office, general diagnosis and the pharmacy work so far (`RoomVisits.IsSupported`), so other diagnosis rooms are never
-  found: as in CorsixTH's `seek_room.lua`, a patient below the `send_home` policy (0.1) goes home, one below
-  `guess_cure` (0.9) or with a disease the hospital does not know waits, and one above has the disease guessed. Waiting
-  patients step off to a free spot and give up after 60 days; when a room of the kind they wait for starts
-  working, they go to it (`RoomVisits.OnRoomActivated`). CorsixTH's faxes asking the player what to do are not
-  there yet. A doctor of middling skill and little attention to detail gets level one's patients only about
-  three quarters of the way, so without general diagnosis many of them wait.
+- **Diagnosis and treatment** (`PatientCare`, by the community specification of the original game, not CorsixTH).
+  Progress runs from 0 to 1000 and the disease is diagnosed at 1000. Each step at the GP's and in a diagnosis room
+  adds `doctor's score + room's bonus − difficulty` when that is above 0. The score is skill `+ 250 − rnd(0, 500)`,
+  +200 for a consultant, −100 for a junior, +100 when not tired (below `gbv.NotTired`), −100 when tired; the
+  room's bonus comes from the maintainer's disease × room table (`DiagnosisBonuses`, which also gives each disease its
+  diagnosis rooms; a negative bonus costs 5 health); the difficulty is `rnd(1, MaxDiagDiff)`, rolled at the first
+  step. `rnd` is `SimRandom.Triangular`, the sum of two uniform draws. With no diagnosis room left, `p = progress / 10`:
+  at or above the `guess_cure` policy (with `p > 0` and every treatment room built) the cure is guessed, and the guess
+  is wrong when `rng % 100 > min(p, 99)`; at or below `send_home` the patient goes home; in between they wait for a
+  room or the player's fax answer, and give up after 60 days. The `stop_procedure` policy no longer matters. A
+  treatment room always cures; a drug cures when `rnd(0, 99) <` its effectiveness and is paid for either way, and a
+  failed drug costs `1000 − 10 × effectiveness` health (1000 for a special disease or an emergency) and sends the patient back to the GP. After a wrong guess any
+  treatment costs 1000 health. Health changes made in a room count once the patient is out of it; a patient left
+  below 1 of 1000 dies. Every procedure a doctor finishes adds 1 to their skill (within 30 to 1000).
 - **The patient window's buttons** (`PatientBehaviour.SendHome`, `GuessCure`, from `dialogs/patient.lua`).
   `SendPatientHomeCommand` sends a patient home, counted as kicked out; `GuessPatientCureCommand` diagnoses a
   patient whose diagnosis has begun and whose disease the hospital knows, who then goes for treatment if they
