@@ -203,7 +203,8 @@ internal static class StaffEmployment
         humanoid.RaiseRequest = 0;
         humanoid.RaiseTimer = -1;
         humanoid.QuittingIn = -1;
-        hospital.ChangeReputation(simulation.Random, ReputationChange.Kicked);
+
+        // Unlike CorsixTH, firing does not cost reputation (the original game's, as the community describes it).
         LeaveWhenFree(simulation, humanoid);
     }
 

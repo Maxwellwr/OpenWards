@@ -356,7 +356,7 @@ CorsixTH's free build mode.
 Free build mode itself (CorsixTH's `free_build_mode`) is `LevelRules.WithFreeBuild()`, saved with the rules: the
 hospital starts with nothing, rooms, objects and land cost nothing, staff work for nothing and never ask for a raise,
 `Hospital.Spend` and `Receive` do nothing, the bank lends nothing, there are no goals, no dollar signs float up, and
-every VIP brings 20 reputation. The level's own figures are kept, so the save holds them.
+every VIP adds 20 to the reputation. The level's own figures are kept, so the save holds them.
 
 - A doctor's abilities are rolled "one in n" from the entry for the month; a junior's skill is put
   below the junior threshold, a consultant's above the consultant threshold, everyone else's between.
@@ -499,12 +499,20 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   of five drug companies at random); research improving them is not there yet. A payment shows a banknote with
   the amount floating up from the patient for 100 ticks (`Simulation.FloatingDollarSigns`, from
   `World:newFloatingDollarSign`; not saved), drawn by the client from `DATA/Money01V`, blue for insurance.
-- **Reputation** (`Hospital`, from `hospital.lua`). The hospital starts at the level's `StartRep` (500) and each
-  non-pseudo disease at 500. A cure adds 1, a death takes 4, a patient sent home or giving up waiting 3
-  (`Kicked`, also counted in the disease's `TurnedAway`), one refusing a price 2 (`OverPriced`); both count in
-  `NotCured`. The disease's reputation always changes; the hospital's always for a move towards 500 and
-  otherwise with a chance that falls to 0 at 0 and 1000. A patient paying themselves now and then finds a price
-  far below or above what they expect from the reputation and the cure's effectiveness (+1 or −2).
+- **Reputation** (`Hospital`; not CorsixTH's, but the original game's as the community describes it). The
+  reputation is the average outcome of the patients, `⌊points × 500 / visits⌋` held to 0–1000
+  (`ReputationScore` / `ReputationVisits`, the score kept as points × 500 and not held). A level starts with 20
+  visits at its `StartRep` (500: 20 points); each non-pseudo disease keeps the same counts of its own from 500. A
+  patient's visit counts once, at the first of a complete diagnosis (progress reaching 1000), a cure, death,
+  refusing to pay or going home (`PatientBehaviour.IsCountedInReputation`); a complete diagnosis and a cure add a
+  point each, a death takes one (`PatientCare.CountForReputation`). Nothing wears off; one-off events add
+  ±k % of the visits in points, cut toward zero (`ChangeReputationPercent`, about ±5k): emergency +2 / −4 per
+  patient not cured, epidemic declared −2, inspector finding the infected −10, VIP report +4 / +2 / −4, autopsy
+  coming out −20, explosion −10. Firing, litter, rats, queues and the price do not change it directly. The year
+  end's awards (still CorsixTH's amounts) and free build VIPs move it by their amount (`ShiftReputation`).
+  Patients sent home or giving up (`Kicked`, also the disease's `TurnedAway`) and those refusing a price
+  (`OverPriced`) count in `NotCured`. Saves before version 105 and imported saves of the original keep only the
+  reputation; it is weighed against the patients who came to an end (the save's visitors for the original).
 - **Value and year end** (`Hospital`, from `hospital.lua` and `annual_report.lua`). The hospital is worth its
   parcel's tiles at `gbv.LandCostPerTile` (25) and 20,000 at the start; what is paid for rooms and objects adds
   to it and what objects are sold for comes off it. At each year end the year is judged as CorsixTH's annual

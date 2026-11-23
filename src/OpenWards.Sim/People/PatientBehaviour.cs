@@ -340,6 +340,15 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     /// <summary>How far the disease is diagnosed, in thousandths (CorsixTH's <c>diagnosis_progress</c>).</summary>
     public int DiagnosisProgress { get; internal set; }
 
+    /// <summary>
+    /// Whether the patient's visit has counted in the reputation (<see cref="PatientCare.CountForReputation"/>): once, at
+    /// the first of a complete diagnosis, a cure, death, refusing to pay or going home.
+    /// </summary>
+    public bool IsCountedInReputation { get; internal set; }
+
+    /// <summary>An autopsy that came out costs this many percent of the visits in reputation points (about −100).</summary>
+    public const int AutopsyReputationPercent = -20;
+
     public bool IsDiagnosed { get; internal set; }
 
     /// <summary>The disease's diagnosis rooms the patient has not been to yet (CorsixTH's <c>available_diagnosis_rooms</c>).</summary>
@@ -797,7 +806,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     internal void StartEmergency(Simulation simulation, Humanoid humanoid, int index)
     {
         EmergencyIndex = index;
-        DiagnosisProgress = 1000;
+        PatientCare.SetDiagnosisProgress(simulation, humanoid, this, PatientCare.FullDiagnosis);
         var disease = Disease!;
         PatientCare.SetDiagnosed(simulation, humanoid, this, disease);
         CureRoomsVisited = Math.Max(disease.TreatmentRooms.Count - 1, 0);
@@ -2835,7 +2844,9 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     /// <summary>
     /// <c>after_use_autopsy</c>: the patient is dead; the research toward the last room of their treatment gets
     /// <c>AutopsyRschPercent</c> of it, and the autopsy may come out (one in three, two in three when the staff are unhappy),
-    /// costing <c>AutopsyRepHitPercent</c> of the hospital's reputation; the researcher goes back to research.
+    /// costing <see cref="AutopsyReputationPercent"/> % of the visits in reputation points (as the community describes the
+    /// original game; CorsixTH takes the level's <c>AutopsyRepHitPercent</c> of the reputation); the researcher goes back to
+    /// research.
     /// </summary>
     private void Autopsied(Simulation simulation, Humanoid humanoid, Room room)
     {
@@ -2853,9 +2864,9 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
 
         var happiness = EndConditions.AverageHappiness(simulation, hospital, staff: true, minCount: 0);
         var discovered = happiness < 0.25m ? simulation.Random.NextInclusive(1, 3) != 1 : simulation.Random.NextInclusive(1, 3) == 1;
-        if (discovered && hospital.Reputation is var reputation)
+        if (discovered)
         {
-            hospital.ChangeReputation(simulation.Random, (int)Math.Floor(-reputation * simulation.Rules.Research.AutopsyReputationHitPercent / 100m), null);
+            hospital.ChangeReputationPercent(AutopsyReputationPercent);
             hospital.AutopsiesDiscovered++;
         }
 
@@ -3132,7 +3143,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         }
 
         var hospital = simulation.Hospitals[humanoid.HospitalPlayer];
-        PatientCare.RecordDeath(simulation, hospital, Disease is { } disease ? hospital.CaseOf(disease, simulation.Rules.Diseases) : null);
+        PatientCare.RecordDeath(simulation, humanoid, this);
         if (EmergencyIndex > 0)
         {
             Emergencies.PatientDone(simulation, hospital, cured: false);
@@ -3435,6 +3446,12 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
             HomeMood = why == ReputationChange.OverPriced ? PatientHomeMood.SadMoney : PatientHomeMood.Exit;
         }
 
+        // Going home for any reason ends the visit, which counts in the reputation if nothing counted it before.
+        if (!IsCountedInReputation)
+        {
+            PatientCare.CountForReputation(simulation, humanoid, this, 0);
+        }
+
         Phase = PatientPhase.GoingHome;
         TargetId = 0;
         var points = simulation.Arrivals.SpawnPointsOf(simulation.Map);
@@ -3551,6 +3568,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         writer.WriteBool(_kingChange);
         writer.WriteByte((byte)HomeMood);
         writer.WriteBool(IsFedUp);
+        writer.WriteBool(IsCountedInReputation);
     }
 
     internal static PatientBehaviour ReadState(SimReader reader)
@@ -3701,6 +3719,8 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
             patient.IsFedUp = reader.ReadBool();
         }
 
+        // Before version 105 visits counted at the end; a patient still about had not.
+        patient.IsCountedInReputation = reader.Version is 0 or >= 105 && reader.ReadBool();
         return patient;
     }
 }

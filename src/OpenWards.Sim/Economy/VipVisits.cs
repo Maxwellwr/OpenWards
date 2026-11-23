@@ -27,6 +27,26 @@ public sealed class VipVisits
     /// <summary>The fax asking accepts the VIP after this many days (<c>Date.hoursPerDay() * 20</c>).</summary>
     public const int InvitationDays = 20;
 
+    /// <summary>A good VIP report brings this many percent of the visits in reputation points (about +20).</summary>
+    public const int GoodReputationPercent = 4;
+
+    /// <summary>A middling VIP report brings this many percent of the visits (about +10).</summary>
+    public const int MiddlingReputationPercent = 2;
+
+    /// <summary>A bad VIP report costs this many percent of the visits (about −20).</summary>
+    public const int BadReputationPercent = -4;
+
+    /// <summary>The worst rating that still counts as a middling report rather than a bad one.</summary>
+    public const int MiddlingRating = 10;
+
+    /// <summary>
+    /// The reputation of a VIP's report in percent of the visits, as the community describes the original game: good for a
+    /// pleased VIP (CorsixTH's ratings up to <see cref="VipBehaviour.PleasedRating"/>), middling for those CorsixTH still
+    /// gains reputation by, bad for the rest. CorsixTH instead adds 50 down to −25 by the rating.
+    /// </summary>
+    public static int ReputationPercent(int rating) =>
+        rating <= VipBehaviour.PleasedRating ? GoodReputationPercent : rating <= MiddlingRating ? MiddlingReputationPercent : BadReputationPercent;
+
     /// <summary>What every VIP visit brings in free build mode (<c>Vip:onDestroy</c>).</summary>
     public const int FreeBuildReputationReward = 20;
 
@@ -274,17 +294,17 @@ public sealed class VipVisits
     {
         if (simulation.Rules.FreeBuild)
         {
-            hospital.UnconditionalChangeReputation(FreeBuildReputationReward);
+            hospital.ShiftReputation(FreeBuildReputationReward);
         }
         else if (vip.Rating <= VipBehaviour.PleasedRating)
         {
             hospital.Receive(simulation.Hours, vip.CashReward, TransactionKind.VipAward, string.Empty);
-            hospital.UnconditionalChangeReputation(vip.ReputationReward);
+            hospital.ChangeReputationPercent(ReputationPercent(vip.Rating));
             hospital.Vips.PleasedThisYear++;
         }
         else
         {
-            hospital.UnconditionalChangeReputation(vip.ReputationReward);
+            hospital.ChangeReputationPercent(ReputationPercent(vip.Rating));
         }
 
         hospital.Vips.Report = new VipReport(vip.Name, vip.Rating, vip.CashReward, simulation.Tick + (InvitationDays * GameDate.HoursPerDay));

@@ -123,13 +123,13 @@ public class PatientAllocationTests
     public void NowAndThenAPatientGoesToAHospitalAtRandom()
     {
         var simulation = NewSimulation(players: 1, ByReputation(randomChance: 0));
-        simulation.Hospitals[0].UnconditionalChangeReputation(-Hospital.MaxReputation);
+        simulation.Hospitals[0].SetReputation(Hospital.MinReputation);
         Assert.Equal(0, simulation.Hospitals[0].Reputation);
         Assert.DoesNotContain(0, Enumerable.Range(0, 200).Select(_ => PatientArrivals.ChooseHospital(simulation)));
 
         // gbv.AllocRand 4: a quarter go at random, half of those to the player of two hospitals.
         simulation = NewSimulation(players: 1, ByReputation(randomChance: 4));
-        simulation.Hospitals[0].UnconditionalChangeReputation(-Hospital.MaxReputation);
+        simulation.Hospitals[0].SetReputation(Hospital.MinReputation);
         var toPlayer = Enumerable.Range(0, 4000).Count(_ => PatientArrivals.ChooseHospital(simulation) == 0);
         Assert.InRange(toPlayer, 400, 600);
     }
@@ -149,7 +149,7 @@ public class PatientAllocationTests
             simulation.Step();
         }
 
-        simulation.Hospitals[0].UnconditionalChangeReputation(-Hospital.MaxReputation);
+        simulation.Hospitals[0].SetReputation(Hospital.MinReputation);
         var before = simulation.Competitors[0].Visitors;
         var toPlayer = Enumerable.Range(0, 400).Count(_ => Send(simulation) == 0);
         Assert.InRange(toPlayer, 20, 80);

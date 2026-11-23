@@ -268,11 +268,11 @@ public sealed class HospitalEmergencies
 /// </summary>
 public static class Emergencies
 {
-    /// <summary>Reputation for an emergency handled well (<c>reputation_changes.emergency_success</c>).</summary>
-    public const int SuccessReputation = 15;
+    /// <summary>An emergency handled well brings this many percent of the visits in reputation points (about +10).</summary>
+    public const int SuccessReputationPercent = 2;
 
-    /// <summary>Reputation for an emergency handled badly (<c>reputation_changes.emergency_failed</c>).</summary>
-    public const int FailureReputation = -20;
+    /// <summary>An emergency handled badly costs this many percent of the visits for each patient not cured (about −20 each).</summary>
+    public const int FailureReputationPercent = -4;
 
     /// <summary>The planned emergencies' bonus when the level does not say (a random emergency's).</summary>
     private const int RandomBonus = 1000;
@@ -620,12 +620,11 @@ public static class Emergencies
         }
 
         var success = emergency.Cured * 100 >= emergency.Percentage * emergency.Victims;
-        var entry = hospital.CaseOf(DiseaseCatalog.Find(emergency.DiseaseId)!, simulation.Rules.Diseases);
         var earned = success ? emergency.Bonus * emergency.Cured : 0;
         state.Report = new EmergencyReport(emergency.Cured, emergency.Victims, emergency.Bonus * emergency.Victims, earned, simulation.Tick + (HospitalEmergencies.ReportDays * GameDate.HoursPerDay));
         if (success)
         {
-            hospital.ChangeReputation(simulation.Random, SuccessReputation, entry);
+            hospital.ChangeReputationPercent(SuccessReputationPercent);
             if (earned != 0)
             {
                 hospital.Receive(simulation.Hours, earned, TransactionKind.EmergencyBonus, string.Empty);
@@ -633,7 +632,8 @@ public static class Emergencies
         }
         else
         {
-            hospital.ChangeReputation(simulation.Random, FailureReputation, entry);
+            // Unlike CorsixTH's fixed −20, the loss grows with the patients not cured.
+            hospital.ChangeReputationPercent(FailureReputationPercent * (emergency.Victims - emergency.Cured));
         }
 
         NextEmergency(simulation, hospital);

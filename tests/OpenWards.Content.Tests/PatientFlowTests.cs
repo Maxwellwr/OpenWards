@@ -159,10 +159,12 @@ public class PatientFlowTests
         // Each diagnosed disease is now known to the hospital.
         Assert.All(diagnosed, id => Assert.True(hospital.Casebook[id].Discovered));
 
-        // Nobody is cured without treatment rooms. Each patient sent home costs 3 reputation, each put off by the price 2.
-        var turnedAway = hospital.Casebook.Values.Sum(c => c.TurnedAway);
+        // Nobody is cured without treatment rooms. Each patient who went home counts once in the reputation, with a point
+        // if fully diagnosed first; the reputation is their average.
         Assert.True(hospital.NotCured > 0);
-        Assert.Equal(Hospital.AverageReputation - (3 * turnedAway) - (2 * (hospital.NotCured - turnedAway)), hospital.Reputation);
+        Assert.True(hospital.ReputationVisits >= Hospital.StartReputationVisits + hospital.NotCured);
+        Assert.True(hospital.Reputation < Hospital.AverageReputation, $"Reputation {hospital.Reputation}.");
+        Assert.Equal((int)(hospital.ReputationScore / hospital.ReputationVisits), hospital.Reputation);
     }
 
     [Fact]

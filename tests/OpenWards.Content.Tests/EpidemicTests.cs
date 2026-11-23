@@ -101,13 +101,16 @@ public class EpidemicTests
         Assert.True(hospital.Epidemics.IsFaxPending);
         Assert.Equal(2000, epidemic.DeclareFine);
         var reputation = hospital.Reputation;
+        var change = (int)((long)hospital.ReputationVisits * Epidemics.DeclaredReputationPercent / 100) * Hospital.ReputationPerPoint;
+        var expected = (int)Math.Clamp((hospital.ReputationScore + change) / hospital.ReputationVisits, 0, 1000);
 
         Run(simulation, new AnswerEpidemicCommand(CoverUp: false));
 
         Assert.Null(hospital.Epidemics.Current);
         Assert.Equal(EpidemicOutcome.Declared, hospital.Epidemics.LastOutcome);
         Assert.Contains(hospital.Transactions, t => t.Kind == TransactionKind.EpidemicFine && t.Amount == -2000);
-        Assert.Equal(reputation - 20, hospital.Reputation);
+        Assert.Equal(expected, hospital.Reputation);
+        Assert.Equal(reputation - expected, epidemic.ReputationHit);
         foreach (var id in epidemic.InfectedIds)
         {
             if (simulation.FindEntity(id) is Humanoid { Behaviour: PatientBehaviour patient })
