@@ -1,12 +1,14 @@
 # OpenWards architecture
 
-OpenWards is a reimplementation of Bullfrog's Theme Hospital (1997) in C# on .NET,
-modelled on [CorsixTH](https://github.com/CorsixTH/CorsixTH). It plays with the
+OpenWards is a reimplementation of Bullfrog's Theme Hospital (1997) in C# on .NET.
+It started from [CorsixTH](https://github.com/CorsixTH/CorsixTH), which stays the reference
+for drawing, but its game logic is free to depart from CorsixTH. It plays with the
 graphics, sounds and levels of an original copy of the game, which the player supplies.
 
 ## Goals
 
-- **Faithful reimplementation.** Behaviour matches the original game. Original assets
+- **Faithful to the original.** Mechanics and balance aim at the original game, as public
+  descriptions of it tell, not at CorsixTH where the two differ. Original assets
   are read at runtime from the player's copy and never distributed.
 - **Multiplayer.** Several hospitals share one town, as in the original network game
   (player-owned plots, land auctions). This requires a deterministic simulation from the start.

@@ -1,6 +1,6 @@
 # OpenWards
 
-A reimplementation of Theme Hospital in C# / .NET, modelled on
+A reimplementation of Theme Hospital in C# / .NET, built on the base of
 [CorsixTH](https://github.com/CorsixTH/CorsixTH), with deterministic lockstep
 multiplayer and mod support as design goals. It needs the data files from an
 original copy of the game (CD, GOG or EA).

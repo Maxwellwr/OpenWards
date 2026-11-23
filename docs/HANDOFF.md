@@ -18,9 +18,12 @@ the new session has absorbed it.
   commas; ignore that, the repository style (enforced by `dotnet format`) keeps them.
 - Downloads need the user's explicit yes. Don't spend money or make irreversible moves in the
   user's own copy of the original game.
-- Faithfulness to the original matters. When unsure how the original behaves, look at CorsixTH
-  (reference checkout `C:\repos\github\CorsixTH`, MIT) and say what it does. The user corrects
-  wrong guesses about the original, so record their observations.
+- OpenWards is not a port of CorsixTH. CorsixTH (reference checkout `C:\repos\github\CorsixTH`, MIT)
+  is the base and the reference for drawing; game logic follows the original game, as public
+  descriptions of it tell, and the user may change any logic as they see fit. When unsure how the
+  original behaves, search for descriptions of it and compare with what CorsixTH does. The user
+  corrects wrong guesses about the original, so record their observations. Never use disassembly
+  of the original game binaries.
 
 ## Environment
 
