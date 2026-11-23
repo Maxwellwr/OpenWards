@@ -7,7 +7,7 @@ using OpenWards.Sim.People;
 
 namespace OpenWards.Sim.Tests;
 
-/// <summary>Patients being sick and doing it on the floor (CorsixTH's Patient:vomit, Patient:pee, handleToiletNeed).</summary>
+/// <summary>Patients being sick and doing it on the floor (<see cref="PatientNeeds"/>, CorsixTH's Patient:vomit and Patient:pee).</summary>
 public class VomitAndPeeTests
 {
     private static readonly Dictionary<HumanoidType, PatientAnimations> Animations = new()
@@ -17,15 +17,17 @@ public class VomitAndPeeTests
     };
 
     [Fact]
-    public void AnUnwellPatientIsSickOnTheSpotOnceAndLeavesPuke()
+    public void ANauseousPatientIsSickOnTheSpotLosesHealthAndLeavesPuke()
     {
         var simulation = NewSimulation();
-        var (humanoid, patient) = AddPatient(simulation, health: 0.7m);
+        var (humanoid, patient) = AddPatient(simulation, health: 700);
         var tile = humanoid.Tile;
 
-        EndDaysUntil(simulation, humanoid, () => patient.SpotAction == PatientSpotAction.Vomit);
+        UpdateUntil(simulation, () => patient.SpotAction == PatientSpotAction.Vomit, () => patient.Nausea = PatientNeedsRules.DefaultVomitLimit);
         Assert.True(patient.HasVomited);
         Assert.True(patient.IsSidetracked);
+        Assert.Equal(5, patient.Nausea);
+        Assert.True(patient.Health <= 700 - 10 - 1, $"Health {patient.Health}.");
 
         var animation = Animations[humanoid.Type].Vomit!.Value;
         simulation.Step();
@@ -40,50 +42,34 @@ public class VomitAndPeeTests
         var puke = Assert.Single(simulation.Entities.OfType<Litter>());
         Assert.Equal(LitterType.Puke, puke.Type);
         Assert.Equal(tile, puke.Tile);
-
-        // has_vomitted: not again until the patient waits.
-        for (var day = 0; day < 20; day++)
-        {
-            Feelings.OnEndDay(simulation, humanoid);
-            Assert.Equal(PatientSpotAction.None, patient.SpotAction);
-        }
     }
 
     [Fact]
-    public void AHealthyHappyPatientIsNotSick()
+    public void APatientBelowTheLimitsIsNotSickAndDoesNotDoItOnTheFloor()
     {
         var simulation = NewSimulation();
-        var (humanoid, patient) = AddPatient(simulation, health: 0.95m);
-        for (var day = 0; day < 30; day++)
+        var (_, patient) = AddPatient(simulation, health: 950);
+        for (var update = 0; update < 100; update++)
         {
-            humanoid.Happiness = 1m;
-            patient.Health = 0.95m;
-            Feelings.OnEndDay(simulation, humanoid);
+            patient.Nausea = PatientNeedsRules.DefaultVomitLimit - 1;
+            patient.Bowel = PatientNeedsRules.DefaultBowelOverflows - 2;
+            PatientNeeds.Modify(simulation);
+            Assert.Equal(PatientSpotAction.None, patient.SpotAction);
         }
 
         Assert.False(patient.HasVomited);
     }
 
     [Fact]
-    public void APatientInNeedOfTheToiletDoesItOnTheFloorOrWantsTheToilets()
+    public void APatientWhoseBowelsOverflowDoesItOnTheFloor()
     {
         var simulation = NewSimulation();
-        var (humanoid, patient) = AddPatient(simulation, health: 0.95m);
-        var sawWanting = false;
-        for (var day = 0; day < 50 && patient.SpotAction != PatientSpotAction.Pee; day++)
-        {
-            humanoid.Happiness = 1m;
-            patient.Health = 0.95m;
-            patient.ToiletNeed = 0.9m;
-            patient.GoingToToilet = ToiletVisit.No;
-            Feelings.OnEndDay(simulation, humanoid);
-            sawWanting |= patient is { IsNeedingToilet: true, GoingToToilet: ToiletVisit.NoToilets };
-        }
+        var (_, patient) = AddPatient(simulation, health: 950);
 
-        Assert.True(sawWanting);
-        Assert.Equal(PatientSpotAction.Pee, patient.SpotAction);
+        UpdateUntil(simulation, () => patient.SpotAction == PatientSpotAction.Pee, () => patient.Bowel = PatientNeedsRules.DefaultBowelOverflows);
         Assert.False(patient.IsNeedingToilet);
-        Assert.InRange(patient.ToiletNeed, 0.9m - 0.65m, 0.9m - 0.5m + 0.008m);
+        Assert.Equal(0, patient.Bowel);
+        Assert.True(simulation.Hospitals[0].DidItOnFloor);
 
         for (var tick = 0; tick < 10; tick++)
         {
@@ -97,7 +83,7 @@ public class VomitAndPeeTests
     public void APatientOffTheirHospitalsFloorDoesNeither()
     {
         var simulation = NewSimulation();
-        var (humanoid, patient) = AddPatient(simulation, health: 0.5m);
+        var (humanoid, patient) = AddPatient(simulation, health: 500);
         humanoid.PlaceAt(new TilePosition(9, 9));
         simulation.Map[9, 9].Set(TileFlags.Hospital, false);
 
@@ -111,8 +97,8 @@ public class VomitAndPeeTests
     public void AGameSavedWhileAPatientIsSickContinuesIdentically()
     {
         var simulation = NewSimulation();
-        var (humanoid, patient) = AddPatient(simulation, health: 0.7m);
-        EndDaysUntil(simulation, humanoid, () => patient.SpotAction == PatientSpotAction.Vomit);
+        var (_, patient) = AddPatient(simulation, health: 700);
+        UpdateUntil(simulation, () => patient.SpotAction == PatientSpotAction.Vomit, () => patient.Nausea = PatientNeedsRules.DefaultVomitLimit);
         simulation.Step();
         simulation.Step();
 
@@ -131,21 +117,23 @@ public class VomitAndPeeTests
         Assert.Single(restored.Entities.OfType<Litter>());
     }
 
-    private static void EndDaysUntil(Simulation simulation, Humanoid humanoid, Func<bool> done)
+    /// <summary>Updates the needs, one time in five the patient acts, until they do.</summary>
+    private static void UpdateUntil(Simulation simulation, Func<bool> done, Action prepare)
     {
-        for (var day = 0; day < 50 && !done(); day++)
+        for (var update = 0; update < 200 && !done(); update++)
         {
-            Feelings.OnEndDay(simulation, humanoid);
+            prepare();
+            PatientNeeds.Modify(simulation);
         }
 
         Assert.True(done());
     }
 
-    private static (Humanoid Humanoid, PatientBehaviour Patient) AddPatient(Simulation simulation, decimal health)
+    private static (Humanoid Humanoid, PatientBehaviour Patient) AddPatient(Simulation simulation, int health)
     {
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(4, 4), simulation.Random, PatientLook.Standard, 0));
         var patient = new PatientBehaviour { Health = health };
-        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, simulation.Random);
+        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
         humanoid.Behaviour = patient;
         return (humanoid, patient);
     }

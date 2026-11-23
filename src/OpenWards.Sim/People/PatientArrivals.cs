@@ -271,13 +271,13 @@ public sealed class PatientArrivals
             : _spawnPoints[simulation.Random.Next(_spawnPoints.Count)];
         var look = disease?.Look ?? PatientLook.Standard;
 
-        // Humanoid:Humanoid: patients are not fully well when they come, from 0.8 to 1.
-        var health = simulation.Random.NextInclusive(80, 100) / 100m;
+        // Patients come with 200 to 1000 health, 600 on average (the specification's rnd(200, 1000)).
+        var health = simulation.Random.Triangular(200, PatientNeeds.MaxHealth);
         var patient = simulation.AddEntity(id => Humanoid.CreatePatient(id, spawn, simulation.Random, look, player));
         var behaviour = new PatientBehaviour { Health = health };
         if (disease is not null)
         {
-            behaviour.SetDisease(disease, PatientCare.ChooseInsuranceCompany(simulation), simulation.Random);
+            behaviour.SetDisease(disease, PatientCare.ChooseInsuranceCompany(simulation), simulation.Rules.Needs);
             behaviour.Wallet = PatientCare.NewPatientMoney(simulation);
         }
 

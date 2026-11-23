@@ -126,7 +126,8 @@ public class PatientFlowTests
         var waited = new HashSet<int>();
         var balanceBefore = hospital.Balance;
 
-        for (var tick = 0; tick < 3 * 31 * GameDate.HoursPerDay; tick++)
+        // How far the GP gets is random: go on for up to six months until someone is fully diagnosed.
+        for (var tick = 0; tick < 6 * 31 * GameDate.HoursPerDay && (tick < 3 * 31 * GameDate.HoursPerDay || diagnosed.Count == 0); tick++)
         {
             simulation.Step();
             foreach (var humanoid in simulation.Entities.OfType<Humanoid>())

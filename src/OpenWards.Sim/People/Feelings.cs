@@ -63,16 +63,25 @@ internal static class Feelings
     /// <summary>One person's day, from <see cref="Simulation"/>'s end of the day.</summary>
     internal static void OnEndDay(Simulation simulation, Humanoid humanoid)
     {
-        // Patient:tickDay begins with the sad mood, before it knows whether the patient is still in the hospital.
-        if (humanoid.Behaviour is PatientBehaviour sadOrNot)
+        if (humanoid.Behaviour is PatientBehaviour fallen)
         {
-            sadOrNot.IsSad = humanoid.Happiness < 0.3m;
-            sadOrNot.OnEndDayFall();
+            fallen.OnEndDayFall();
         }
 
         // No use for those going home.
         if (humanoid.IsDespawning || humanoid.IsFired || humanoid.Behaviour is PatientBehaviour { Phase: PatientPhase.GoingHome or PatientPhase.Dying })
         {
+            return;
+        }
+
+        // A patient's warmth and mood follow PatientNeeds; the day only adds a point to their health graph.
+        if (humanoid.Behaviour is PatientBehaviour patient)
+        {
+            if (humanoid.HospitalPlayer >= 0)
+            {
+                OnEndDayPatient(simulation, humanoid, patient);
+            }
+
             return;
         }
 
@@ -108,65 +117,16 @@ internal static class Feelings
                 Tiredness.CheckCrazy(simulation, humanoid);
             }
         }
-        else if (humanoid.Behaviour is PatientBehaviour patient)
-        {
-            OnEndDayPatient(simulation, humanoid, patient);
-        }
     }
 
     /// <summary>
-    /// The rest of <c>Patient:tickDay</c> after <c>Humanoid:tickDay</c>: the health checks, what the patient sees
-    /// outside rooms, and the day's loss of health.
+    /// A patient's day: today's health goes into their graph and a waiting patient may yawn (<c>Patient:tickDay</c>'s
+    /// <c>_dailyHealthHistoryRefresh</c>).
     /// </summary>
     private static void OnEndDayPatient(Simulation simulation, Humanoid humanoid, PatientBehaviour patient)
     {
-        // Patient:tickDay: a waiting patient may be sick again.
-        if (patient.Phase == PatientPhase.Waiting)
-        {
-            patient.HasVomited = false;
-        }
-
-        if (!patient.OnEndDayHealth(simulation, humanoid))
-        {
-            return;
-        }
-
         patient.RecordHealth();
-
-        // In the corridor (not in a room, nor going in or out), plants, extinguishers and standing about count.
-        if (patient.Phase is < PatientPhase.EnteringRoom or > PatientPhase.LeavingRoom
-            && simulation.Map[humanoid.Tile.X, humanoid.Tile.Y].RoomId == 0)
-        {
-            var plants = ObjectsInSight(simulation, humanoid, "plant");
-            if (plants.Count > 0)
-            {
-                var plant = RandomEntry(simulation, plants);
-                ChangeHappiness(simulation, humanoid, -0.0003m + ((plant.Plant?.PleasingFactor ?? PlantState.Phases) * 0.0001m));
-            }
-
-            // It always makes you happy to see you are in a safe place.
-            var extinguishers = ObjectsInSight(simulation, humanoid, "extinguisher");
-            if (extinguishers.Count > 0)
-            {
-                RandomEntry(simulation, extinguishers);
-                ChangeHappiness(simulation, humanoid, 0.0002m);
-            }
-
-            // Sitting makes happy, standing and walking do not (goingToUseObject("bench")).
-            ChangeHappiness(simulation, humanoid, patient.BenchId != 0 ? 0.00002m : -0.00002m);
-
-            // Seeing litter makes unhappy, pee and puke more so, and they may make you sick.
-            var vomitInducing = SeeLitter(simulation, humanoid);
-            if (patient.EmergencyIndex == 0 && simulation.Content.FindPatientAnimations(humanoid.Type)?.Vomit is not null
-                && Nausea(humanoid, patient, vomitInducing) is { } nausea && Needs.Random(simulation.Random) < nausea + 0.5m)
-            {
-                patient.Vomit(simulation, humanoid);
-            }
-        }
-
-        patient.Health = Math.Max(patient.Health - PatientBehaviour.DailyHealthLoss, 0m);
         patient.MaybeYawn(simulation, humanoid);
-        Needs.OnEndDay(simulation, humanoid, patient);
     }
 
     /// <summary><c>getRandomEntryFromArray</c>, which draws only when there is more than one.</summary>
@@ -225,14 +185,13 @@ internal static class Feelings
     }
 
     /// <summary>
-    /// The litter part of <c>Patient:tickDay</c> and <c>Staff:tickDay</c>: each piece in sight costs 0.0002 happiness if it is
+    /// The litter part of <c>Staff:tickDay</c>: each piece in sight costs 0.0002 happiness if it is
     /// rubbish (<c>anyLitter</c>), otherwise 0.0004.
     /// </summary>
-    private static int SeeLitter(Simulation simulation, Humanoid humanoid)
+    private static void SeeLitter(Simulation simulation, Humanoid humanoid)
     {
         var map = simulation.Map;
         var roomId = map[humanoid.Tile.X, humanoid.Tile.Y].RoomId;
-        var vomitInducing = 0;
         foreach (var entity in simulation.Entities)
         {
             if (entity is Litter { IsRemoved: false } litter
@@ -242,27 +201,8 @@ internal static class Feelings
                 && map[litter.Tile.X, litter.Tile.Y].RoomId == roomId)
             {
                 ChangeHappiness(simulation, humanoid, litter.IsRubbish ? -0.0002m : -0.0004m);
-                if (litter.IsVomitInducing)
-                {
-                    vomitInducing++;
-                }
             }
         }
-
-        return vomitInducing;
-    }
-
-    /// <summary>
-    /// <c>Patient:_calculateNausea</c>: none unless the patient's health is at most 0.8, vomit-inducing litter is near or
-    /// they are unhappy (below 0.6); then a five-hundredth of their lost health, half again for each piece of it and once
-    /// more. CorsixTH then adds 0.5 to the chance, as a stand-in for causes it lacks.
-    /// </summary>
-    private static decimal? Nausea(Humanoid humanoid, PatientBehaviour patient, int vomitInducing)
-    {
-        var nausea = (1m - patient.Health) * 0.002m;
-        return patient.Health <= 0.8m || vomitInducing > 0 || humanoid.Happiness < 0.6m
-            ? nausea * ((vomitInducing + 1) * 1.5m)
-            : null;
     }
 
     /// <summary>

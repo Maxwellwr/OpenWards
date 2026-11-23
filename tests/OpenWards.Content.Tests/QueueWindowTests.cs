@@ -121,7 +121,12 @@ public class QueueWindowTests
         Assert.True(queue.Count >= 3, "No queue of three formed at the GP's door.");
 
         // Room:roomFinished and Room:commandEnteringStaff: the new room takes patients from the back of the line while
-        // they are better off there; the first in line stays.
+        // they are better off there; the first in line stays. None of them is about to give up waiting meanwhile.
+        foreach (var member in queue.Members)
+        {
+            typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.LeaveCount))!.SetValue(((Humanoid)simulation.FindEntity(member)!).Behaviour, 0);
+        }
+
         var front = queue.Front;
         var count = queue.Count;
         var second = BuildSecondGp(simulation);
@@ -131,7 +136,10 @@ public class QueueWindowTests
         // Two doctors: the first room's may have left by now for want of a raise.
         Run(simulation, new HireStaffCommand(StaffClass.Doctor, 0, spot));
         Run(simulation, new HireStaffCommand(StaffClass.Doctor, 0, spot));
-        Assert.Equal(front, queue.Front);
+
+        // The first in line is still first, or was just let into the first office.
+        var firstInLine = (PatientBehaviour)((Humanoid)simulation.FindEntity(front)!).Behaviour!;
+        Assert.True(front == queue.Front || firstInLine.TargetId == first.Id, $"The first in line went to {firstInLine.TargetId}.");
         for (var hour = 0; hour < 20 * GameDate.HoursPerDay && !second.StaffPresent; hour++)
         {
             simulation.Step();

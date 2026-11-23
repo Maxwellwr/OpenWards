@@ -92,8 +92,8 @@ public class PatientWindowTests
     private static (Humanoid Humanoid, PatientBehaviour Patient) AddPatient(Simulation simulation, TilePosition tile)
     {
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, tile, simulation.Random, PatientLook.Standard, 0));
-        var patient = new PatientBehaviour { Health = 0.9m };
-        patient.SetDisease(Cold, 0, simulation.Random);
+        var patient = new PatientBehaviour { Health = 900 };
+        patient.SetDisease(Cold, 0);
         humanoid.Behaviour = patient;
         return (humanoid, patient);
     }

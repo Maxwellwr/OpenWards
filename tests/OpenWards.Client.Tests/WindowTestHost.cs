@@ -90,8 +90,8 @@ internal sealed class WindowTestHost : IWindowHost
     public Humanoid AddPatient(int x = 6, int y = 6)
     {
         var humanoid = Simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(x, y), Simulation.Random, PatientLook.Standard, 0));
-        var patient = new PatientBehaviour { Health = 0.9m };
-        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, Simulation.Random);
+        var patient = new PatientBehaviour { Health = 900 };
+        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
         humanoid.Behaviour = patient;
         return humanoid;
     }

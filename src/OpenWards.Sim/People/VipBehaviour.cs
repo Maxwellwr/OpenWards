@@ -465,7 +465,7 @@ public sealed class VipBehaviour : HumanoidBehaviour, IQueueMember
         if (patientsThisVisit > 0)
         {
             var patients = PatientsOf(simulation, player);
-            Rating += Average(simulation, player, patients, patient => ((PatientBehaviour)patient.Behaviour!).Health, 0.19m, 4) >= 0.2m ? -1 : 1;
+            Rating += Average(simulation, player, patients, patient => ((PatientBehaviour)patient.Behaviour!).Health / (decimal)PatientNeeds.MaxHealth, 0.19m, 4) >= 0.2m ? -1 : 1;
 
             if (Average(simulation, player, patients, patient => patient.Warmth, null, 4) is { } warmth)
             {

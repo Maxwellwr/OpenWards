@@ -146,6 +146,9 @@ public sealed class Humanoid : Entity
     /// <summary>How warm the person feels at first (CorsixTH's <c>attributes["warmth"]</c>).</summary>
     public const decimal StartWarmth = 0.29m;
 
+    /// <summary>How warm a patient feels at first: 50 of 100 (see <see cref="People.PatientNeeds"/>).</summary>
+    public const decimal PatientStartWarmth = 0.5m;
+
     /// <summary>How warm the person feels, 0 to 1 like a tile's temperature over 50 °C (<c>attributes["warmth"]</c>).</summary>
     public decimal Warmth { get; internal set; } = StartWarmth;
 
@@ -582,12 +585,6 @@ public sealed class Humanoid : Entity
         simulation.NotifyOccupantChange(next, 1);
         simulation.NotifyOccupantChange(Tile, -1);
 
-        // CorsixTH's walk action moves the humanoid to the next tile when the step starts (Patient:setTile).
-        if (Behaviour is PatientBehaviour patient)
-        {
-            Littering.OnTileEntered(simulation, this, patient, next);
-        }
-
         if (door is not null && doorAnimations is not null)
         {
             CrossDoor(simulation, door, doorAnimations, direction, next);
@@ -938,7 +935,7 @@ public sealed class Humanoid : Entity
             }
 
             layers[1] = (byte)(random.NextInclusive(0, 3) * 2);
-            return new Humanoid(id, tile, type, layers) { HospitalPlayer = hospitalPlayer };
+            return new Humanoid(id, tile, type, layers) { HospitalPlayer = hospitalPlayer, Warmth = PatientStartWarmth };
         }
 
         if (look == PatientLook.FracturedBones)
@@ -955,14 +952,14 @@ public sealed class Humanoid : Entity
             third = third == 3 ? 4 : third;
             layers[4] = (byte)((first == 0 && second == 0 ? 1 : third) * 2);
             layers[1] = (byte)(random.NextInclusive(0, 3) * 2);
-            return new Humanoid(id, tile, HumanoidType.AlternateMalePatient, layers) { HospitalPlayer = hospitalPlayer };
+            return new Humanoid(id, tile, HumanoidType.AlternateMalePatient, layers) { HospitalPlayer = hospitalPlayer, Warmth = PatientStartWarmth };
         }
 
         if (look == PatientLook.Elvis)
         {
             // king_complex.lua: one of three heads in layer 0, the rest bare.
             layers[0] = (byte)(random.NextInclusive(1, 3) * 2);
-            return new Humanoid(id, tile, HumanoidType.ElvisPatient, layers) { HospitalPlayer = hospitalPlayer };
+            return new Humanoid(id, tile, HumanoidType.ElvisPatient, layers) { HospitalPlayer = hospitalPlayer, Warmth = PatientStartWarmth };
         }
 
         if (look == PatientLook.Invisible)
@@ -970,7 +967,7 @@ public sealed class Humanoid : Entity
             // invisibility.lua: the clothes in layers 0 to 2; the man seen once cured (cured_layers) is picked then.
             layers[0] = 2;
             layers[2] = 4;
-            return new Humanoid(id, tile, HumanoidType.InvisiblePatient, layers) { HospitalPlayer = hospitalPlayer };
+            return new Humanoid(id, tile, HumanoidType.InvisiblePatient, layers) { HospitalPlayer = hospitalPlayer, Warmth = PatientStartWarmth };
         }
 
         if (look == PatientLook.Transparent)
@@ -990,7 +987,7 @@ public sealed class Humanoid : Entity
             }
 
             layers[1] = (byte)(random.NextInclusive(0, 3) * 2);
-            return new Humanoid(id, tile, transparent, layers) { HospitalPlayer = hospitalPlayer };
+            return new Humanoid(id, tile, transparent, layers) { HospitalPlayer = hospitalPlayer, Warmth = PatientStartWarmth };
         }
 
         if (look == PatientLook.Hairyitis)
@@ -999,7 +996,7 @@ public sealed class Humanoid : Entity
             layers[0] = (byte)(random.NextInclusive(1, 5) * 2);
             layers[1] = (byte)(random.NextInclusive(0, 3) * 2);
             layers[2] = (byte)(random.NextInclusive(0, 1) * 2);
-            return new Humanoid(id, tile, HumanoidType.ChewbaccaPatient, layers) { HospitalPlayer = hospitalPlayer };
+            return new Humanoid(id, tile, HumanoidType.ChewbaccaPatient, layers) { HospitalPlayer = hospitalPlayer, Warmth = PatientStartWarmth };
         }
 
         if (look == PatientLook.Baldness)
@@ -1007,7 +1004,7 @@ public sealed class Humanoid : Entity
             // baldness.lua: a slack man with the bald head (layer 0 at 12).
             layers[0] = 12;
             layers[1] = (byte)(random.NextInclusive(0, 3) * 2);
-            return new Humanoid(id, tile, HumanoidType.SlackMalePatient, layers) { HospitalPlayer = hospitalPlayer };
+            return new Humanoid(id, tile, HumanoidType.SlackMalePatient, layers) { HospitalPlayer = hospitalPlayer, Warmth = PatientStartWarmth };
         }
 
         if (look == PatientLook.Pregnant)
@@ -1015,7 +1012,7 @@ public sealed class Humanoid : Entity
             // pregnant.lua: a standard woman with one of heads 1 to 4 and a random body, the other layers at 0.
             layers[0] = (byte)(random.NextInclusive(1, 4) * 2);
             layers[1] = (byte)(random.NextInclusive(0, 3) * 2);
-            return new Humanoid(id, tile, HumanoidType.StandardFemalePatient, layers) { HospitalPlayer = hospitalPlayer };
+            return new Humanoid(id, tile, HumanoidType.StandardFemalePatient, layers) { HospitalPlayer = hospitalPlayer, Warmth = PatientStartWarmth };
         }
 
         if (look == PatientLook.Alien)
@@ -1034,7 +1031,7 @@ public sealed class Humanoid : Entity
             }
 
             layers[1] = (byte)(random.NextInclusive(0, 3) * 2);
-            return new Humanoid(id, tile, type, layers) { HospitalPlayer = hospitalPlayer };
+            return new Humanoid(id, tile, type, layers) { HospitalPlayer = hospitalPlayer, Warmth = PatientStartWarmth };
         }
 
         if (look == PatientLook.BloatyHead)
@@ -1042,7 +1039,7 @@ public sealed class Humanoid : Entity
             layers[0] = (byte)(random.NextInclusive(6, 8) * 2);
             layers[1] = (byte)(random.NextInclusive(0, 3) * 2);
             layers[2] = (byte)(random.NextInclusive(0, 1) * 2);
-            return new Humanoid(id, tile, HumanoidType.StandardMalePatient, layers) { HospitalPlayer = hospitalPlayer };
+            return new Humanoid(id, tile, HumanoidType.StandardMalePatient, layers) { HospitalPlayer = hospitalPlayer, Warmth = PatientStartWarmth };
         }
 
         if (random.Next(2) == 0)
@@ -1058,7 +1055,7 @@ public sealed class Humanoid : Entity
         }
 
         layers[1] = (byte)(random.NextInclusive(0, 3) * 2);
-        return new Humanoid(id, tile, type, layers) { HospitalPlayer = hospitalPlayer };
+        return new Humanoid(id, tile, type, layers) { HospitalPlayer = hospitalPlayer, Warmth = PatientStartWarmth };
     }
 
     /// <summary>A VIP visiting <paramref name="hospitalPlayer"/>'s hospital, who walks slowly (<c>World:spawnVIP</c>).</summary>

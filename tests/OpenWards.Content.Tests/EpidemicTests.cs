@@ -276,14 +276,24 @@ public class EpidemicTests
         Assert.Fail("Found no place for the nurse.");
     }
 
-    /// <summary>Brings a contagious patient by the cheat and steps until they are diagnosed and the fax asks.</summary>
+    /// <summary>
+    /// Brings a contagious patient by the cheat and steps until one of the infected is diagnosed and the fax asks. How far
+    /// the GP gets is random: with an unknown disease the infected may all give up first, and then the cheat comes again.
+    /// </summary>
     private static Epidemic RevealEpidemic(Simulation simulation)
     {
         var epidemics = simulation.Hospitals[0].Epidemics;
-        Run(simulation, new CheatCommand(CheatKind.Epidemic));
-        for (var tick = 0; tick < 30 * GameDate.HoursPerDay && !epidemics.IsFaxPending; tick++)
+        for (var attempt = 0; attempt < 10 && !epidemics.IsFaxPending; attempt++)
         {
-            simulation.Step();
+            if (epidemics.Count == 0)
+            {
+                Run(simulation, new CheatCommand(CheatKind.Epidemic));
+            }
+
+            for (var tick = 0; tick < 30 * GameDate.HoursPerDay && !epidemics.IsFaxPending && epidemics.Count > 0; tick++)
+            {
+                simulation.Step();
+            }
         }
 
         return Assert.IsType<Epidemic>(epidemics.Current);

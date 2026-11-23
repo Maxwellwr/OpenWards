@@ -201,9 +201,9 @@ public class CheatTests
     {
         var simulation = NewSimulation();
         var queue = new HumanoidQueue(new TilePosition(2, 1), new TilePosition(2, 0), 20);
-        var healthy = Patient(simulation, 0.5m);
+        var healthy = Patient(simulation, 500);
         queue.Push(simulation, healthy);
-        var dying = Patient(simulation, 0.05m);
+        var dying = Patient(simulation, 50);
         queue.Push(simulation, dying);
         Assert.Equal([healthy.Id, dying.Id], queue.Members);
 
@@ -214,7 +214,7 @@ public class CheatTests
         Assert.Equal([dying.Id, healthy.Id], other.Members);
     }
 
-    private static Humanoid Patient(Simulation simulation, decimal health)
+    private static Humanoid Patient(Simulation simulation, int health)
     {
         var patient = simulation.AddEntity(id => Humanoid.CreateRandomPatient(id, new TilePosition(1, 1), simulation.Random, 0));
         patient.Behaviour = new PatientBehaviour { Health = health };

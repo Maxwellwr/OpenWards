@@ -21,8 +21,8 @@ public class DyingTests
         var simulation = host.Simulation;
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(10, 10), simulation.Random, PatientLook.Standard, 0));
         humanoid.Type = type;
-        var patient = new PatientBehaviour { Health = 0m };
-        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, simulation.Random);
+        var patient = new PatientBehaviour { Health = 0 };
+        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
         humanoid.Behaviour = patient;
         patient.Die(simulation, humanoid);
         Assert.Equal(PatientPhase.Dying, patient.Phase);
@@ -74,8 +74,8 @@ public class DyingTests
         for (var attempt = 0; attempt < 20 && man is null; attempt++)
         {
             var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(8, 6), simulation.Random, PatientLook.Hairyitis, 0));
-            var patient = new PatientBehaviour { Health = 0m };
-            patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, simulation.Random);
+            var patient = new PatientBehaviour { Health = 0 };
+            patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
             humanoid.Behaviour = patient;
             patient.Die(simulation, humanoid);
             for (var tick = 0; tick < 200 && patient.ReaperId == 0 && !humanoid.IsDespawning; tick++)
@@ -150,8 +150,8 @@ public class FallingTests
         var simulation = host.Simulation;
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(10, 10), simulation.Random, PatientLook.Standard, 0));
         humanoid.Type = HumanoidType.StandardMalePatient;
-        var patient = new PatientBehaviour { Health = 0.9m };
-        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, simulation.Random);
+        var patient = new PatientBehaviour { Health = 900 };
+        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
         humanoid.Behaviour = patient;
         var happiness = humanoid.Happiness;
 

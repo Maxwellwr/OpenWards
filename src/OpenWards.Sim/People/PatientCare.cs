@@ -45,13 +45,10 @@ public static class PatientCare
     public const int DeathPoints = -1;
 
     /// <summary>A patient's full health, in thousandths.</summary>
-    public const int FullHealth = 1000;
+    public const int FullHealth = PatientNeeds.MaxHealth;
 
     /// <summary>Health in thousandths that a diagnosis room with a negative bonus for the disease costs.</summary>
     public const int WrongRoomHealthLoss = 5;
-
-    /// <summary>Days a patient waits for a missing room or the player's decision before going home.</summary>
-    public const int WaitingDays = 60;
 
     /// <summary>
     /// <c>World:getNewPatientDisease</c>: one of the level's diseases at random; if it may not come yet, one at
@@ -243,7 +240,7 @@ public static class PatientCare
         else
         {
             patient.PendingHealthChange -= healthLoss;
-            if (patient.HealthThousandths + patient.PendingHealthChange < 1)
+            if (patient.Health + patient.PendingHealthChange < 1)
             {
                 // Patient:die with Hospital:humanoidDeath.
                 RecordDeath(simulation, humanoid, patient);

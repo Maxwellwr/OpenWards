@@ -46,7 +46,13 @@ public class RoomRebuildTests
         hospital = simulation.Hospitals[0];
         Assert.NotNull(hospital.Rebuild);
 
-        // Built again with the door moved: only its objects are bought again. A patient may pay meanwhile.
+        // Built again with the door moved: only its objects are bought again. A patient may pay meanwhile, but the month's
+        // wages and insurers' money would blur the sum, so not on its last day.
+        while (simulation.Date.IsLastDayOfMonth)
+        {
+            simulation.Step();
+        }
+
         balance = hospital.Balance;
         var moneyIn = hospital.MoneyInThisMonth;
         Run(simulation, new BuildRoomCommand(new RoomPlan("inflation", area, new DoorPlacement(new(area.X + 1, area.Y), EdgeOrientation.North))));

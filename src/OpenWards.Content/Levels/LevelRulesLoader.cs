@@ -226,7 +226,29 @@ public static partial class LevelRulesLoader
             difficulty,
             config.GetInt("gbv.SodaPrice") ?? LevelRules.DefaultSodaPrice,
             ResearchFromConfig(config),
-            AllocationFromConfig(config));
+            AllocationFromConfig(config),
+            NeedsFromConfig(config, difficulty));
+    }
+
+    /// <summary>
+    /// What patients put up with: <c>gbv.LeaveMax</c>, <c>Unhappy</c>, <c>BowelFull</c>, <c>BowelOverflows</c>,
+    /// <c>VomitLimit</c>, <c>DrinkHappy</c>, <c>ToiletHappy</c>, <c>LitterDrop</c> and <c>LitterRandom</c>, by default
+    /// <see cref="PatientNeedsRules.ForDifficulty"/>.
+    /// </summary>
+    public static PatientNeedsRules NeedsFromConfig(LevelConfig config, Difficulty difficulty = Difficulty.Medium)
+    {
+        var defaults = PatientNeedsRules.ForDifficulty(difficulty);
+        int Read(string name, int fallback) => Math.Max(0, config.GetInt($"gbv.{name}") ?? fallback);
+        return new PatientNeedsRules(
+            Read("LeaveMax", defaults.LeaveMax),
+            Read("Unhappy", defaults.Unhappy),
+            Read("BowelFull", defaults.BowelFull),
+            Read("BowelOverflows", defaults.BowelOverflows),
+            Read("VomitLimit", defaults.VomitLimit),
+            Read("DrinkHappy", defaults.DrinkHappy),
+            Read("ToiletHappy", defaults.ToiletHappy),
+            Read("LitterDrop", defaults.LitterDrop),
+            Read("LitterRandom", defaults.LitterRandom));
     }
 
     /// <summary>

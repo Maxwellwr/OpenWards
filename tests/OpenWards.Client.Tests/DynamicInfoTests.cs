@@ -18,7 +18,7 @@ public class DynamicInfoTests
         var simulation = host.Simulation;
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(10, 10), simulation.Random, PatientLook.Standard, 0));
         var patient = new PatientBehaviour();
-        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, simulation.Random);
+        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
         patient.DiagnosisProgress = 420;
         humanoid.Behaviour = patient;
         Assert.Equal("Diagnosis progress 42 %", DynamicInfo.Of(simulation, humanoid, null));
@@ -40,7 +40,7 @@ public class DynamicInfoTests
         var simulation = host.Simulation;
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(10, 10), simulation.Random, PatientLook.Standard, 0));
         var patient = new PatientBehaviour();
-        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, simulation.Random);
+        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
         patient.DiagnosisProgress = 420;
         humanoid.Behaviour = patient;
         var info = Assert.IsType<DynamicInfoLines>(DynamicInfo.Panel(simulation, humanoid, null));

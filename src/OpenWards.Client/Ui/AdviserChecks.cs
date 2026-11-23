@@ -542,13 +542,14 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
 
                 break;
             case 15 when !_temperatureAdvice && !hospital.IsHeatingBroken:
-                var patientWarmth = Average(Patients(simulation, player), h => h.Warmth, 0.3m);
-                if (patientWarmth < 0.22m)
+                // Patients' warmth runs from 0 to 1, cold below 0.2 and hot above 0.8 (PatientNeeds).
+                var patientWarmth = Average(Patients(simulation, player), h => h.Warmth, 0.5m);
+                if (patientWarmth < PatientNeeds.Cold / (decimal)PatientNeeds.MaxPoints)
                 {
                     Give([IncreaseHeating, PatientsVeryCold, PeopleFreezing]);
                     _temperatureAdvice = true;
                 }
-                else if (patientWarmth >= 0.36m)
+                else if (patientWarmth > PatientNeeds.Hot / (decimal)PatientNeeds.MaxPoints)
                 {
                     Give([DecreaseHeating, PatientsTooHot, PatientsGettingHot]);
                     _temperatureAdvice = true;

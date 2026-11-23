@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 107;
+    private const int FormatVersion = 108;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -282,6 +282,12 @@ public sealed class Simulation
         for (var i = 0; i < count && i < _entities.Count; i++)
         {
             _entities[i].Update(this);
+        }
+
+        // Every ModifyFreq ticks the patients' needs are worked out, after everyone has moved.
+        if (PatientNeeds.IsDue(Hours))
+        {
+            PatientNeeds.Modify(this);
         }
 
         // The opening watch counts down after the entities, as CorsixTH's UI windows tick after them.

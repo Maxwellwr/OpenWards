@@ -101,7 +101,7 @@ internal sealed class PatientScreen(int patientId)
         Button("home", Home, 331, home, new Rectangle(107, 217, 67, 67));
         Button("guess", Guess, 413, guess, new Rectangle(129, 117, 45, 45));
 
-        foreach (var (sprite, share, y) in new[] { (348, humanoid.Happiness, 126), (351, 1 - patient.Thirst, 154), (349, ProgressReportScreen.NormaliseWarmth(humanoid.Warmth), 183) })
+        foreach (var (sprite, share, y) in new[] { (348, humanoid.Happiness, 126), (351, 1 - patient.Thirst, 154), (349, humanoid.Warmth, 183) })
         {
             for (var dx = 0; dx < StaffScreen.Bar(share); dx++)
             {
@@ -127,7 +127,7 @@ internal sealed class PatientScreen(int patientId)
         }
 
         // drawHealthHistory: a red line of their health over the last days.
-        var points = GraphPoints(patient.HealthHistory, PatientBehaviour.HealthHistorySize);
+        var points = GraphPoints([.. patient.HealthHistory.Select(health => health / (decimal)PatientNeeds.MaxHealth)], PatientBehaviour.HealthHistorySize);
         for (var i = 1; i < points.Count; i++)
         {
             var from = origin.ToVector2() + points[i - 1];

@@ -66,6 +66,7 @@ public class ToiletsTests
         SendToToilets(simulation, humanoid, patient);
         Assert.Equal(ToiletVisit.Yes, patient.GoingToToilet);
         Assert.True(patient.IsNeedingToilet);
+        patient.LeaveCount = 100;
 
         var phases = new HashSet<PatientPhase>();
         var animations = new HashSet<int>();
@@ -83,7 +84,8 @@ public class ToiletsTests
         Assert.Superset(new HashSet<int> { LooBegin, 1716, LooInUse, 1744, SinkInUse }, animations);
         Assert.Equal(ToiletVisit.No, patient.GoingToToilet);
         Assert.False(patient.IsNeedingToilet);
-        Assert.True(patient.ToiletNeed <= 0.05m, $"Toilet need {patient.ToiletNeed}.");
+        Assert.True(patient.Bowel <= 2, $"Bowel {patient.Bowel}.");
+        Assert.True(patient.LeaveCount < 100, $"Leave count {patient.LeaveCount}.");
         Assert.Equal(0, patient.ToiletObjectId);
 
         // Back to looking for the reception desk, out of the room.
@@ -125,12 +127,11 @@ public class ToiletsTests
     {
         var simulation = NewSimulation();
         var (humanoid, patient) = AddPatient(simulation, new TilePosition(9, 9));
-        for (var day = 0; day < 50 && patient.GoingToToilet != ToiletVisit.NoToilets; day++)
-        {
-            Prepare(humanoid, patient);
-            Feelings.OnEndDay(simulation, humanoid);
-            FinishSpotAction(simulation, patient);
-        }
+        Prepare(humanoid, patient);
+
+        // Waiting for a room: the need sends a waiting patient to the toilets, which are not there.
+        typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.Phase))!.SetValue(patient, PatientPhase.Waiting);
+        PatientNeeds.Modify(simulation);
 
         Assert.Equal(ToiletVisit.NoToilets, patient.GoingToToilet);
         Assert.True(patient.IsNeedingToilet);
@@ -166,24 +167,21 @@ public class ToiletsTests
         Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
     }
 
-    /// <summary>A patient in need whose daily check sends them to the toilets (four days in ten they do it on the floor).</summary>
+    /// <summary>A patient in need of the toilet goes to the toilets.</summary>
     private static void SendToToilets(Simulation simulation, Humanoid humanoid, PatientBehaviour patient)
     {
-        for (var day = 0; day < 50 && patient.GoingToToilet != ToiletVisit.Yes; day++)
-        {
-            Prepare(humanoid, patient);
-            Feelings.OnEndDay(simulation, humanoid);
-            FinishSpotAction(simulation, patient);
-        }
-
+        Prepare(humanoid, patient);
+        PatientNeeds.Modify(simulation);
+        FinishSpotAction(simulation, patient);
+        Assert.True(patient.GoToToilets(simulation, humanoid));
         Assert.Equal(ToiletVisit.Yes, patient.GoingToToilet);
     }
 
     private static void Prepare(Humanoid humanoid, PatientBehaviour patient)
     {
         humanoid.Happiness = 1m;
-        patient.Health = 0.95m;
-        patient.ToiletNeed = 0.9m;
+        patient.Health = 950;
+        patient.Bowel = PatientNeedsRules.DefaultBowelFull + 10;
     }
 
     private static void FinishSpotAction(Simulation simulation, PatientBehaviour patient)
@@ -219,8 +217,8 @@ public class ToiletsTests
     private static (Humanoid Humanoid, PatientBehaviour Patient) AddPatient(Simulation simulation, TilePosition tile)
     {
         var humanoid = simulation.AddEntity(id => Humanoid.CreatePatient(id, tile, simulation.Random, PatientLook.Standard, 0));
-        var patient = new PatientBehaviour { Health = 0.95m };
-        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0, simulation.Random);
+        var patient = new PatientBehaviour { Health = 950 };
+        patient.SetDisease(DiseaseCatalog.Find("uncommon_cold")!, 0);
         humanoid.Behaviour = patient;
         return (humanoid, patient);
     }

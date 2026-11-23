@@ -218,7 +218,7 @@ internal sealed class ProgressReportScreen
 
         var happiness = patients.Average(h => h.Happiness);
         var thirst = 1 - patients.Average(h => ((PatientBehaviour)h.Behaviour!).Thirst);
-        var warmth = NormaliseWarmth(patients.Average(h => h.Warmth));
+        var warmth = patients.Average(h => h.Warmth);
         return (happiness, thirst, warmth);
     }
 

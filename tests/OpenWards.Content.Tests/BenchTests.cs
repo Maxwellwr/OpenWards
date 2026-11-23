@@ -105,8 +105,7 @@ public class BenchTests
 
         Assert.NotNull(sitter);
         var patient = (PatientBehaviour)sitter.Behaviour!;
-        typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.Thirst))!.SetValue(patient, 0.9m);
-        typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.DrinkTimeout))!.SetValue(patient, 0);
+        typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.DrinkStock))!.SetValue(patient, 10);
         var drank = false;
         var satAgain = false;
         for (var tick = 0; tick < 20 * GameDate.HoursPerDay && !satAgain && simulation.FindEntity(sitter.Id) is not null; tick++)

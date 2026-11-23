@@ -52,7 +52,7 @@ public sealed class FaxScreenTests
     {
         var host = new WindowTestHost();
         var patient = new OpenWards.Sim.People.PatientBehaviour();
-        patient.SetDisease(OpenWards.Sim.Diseases.DiseaseCatalog.Find("bloaty_head")!, 0, host.Simulation.Random);
+        patient.SetDisease(OpenWards.Sim.Diseases.DiseaseCatalog.Find("bloaty_head")!, 0);
         var lines = FaxWindow.NoTreatmentRoomLines(host, patient).ToList();
         Assert.Equal(4, lines.Count);
         Assert.StartsWith("If you build a ", lines[2], StringComparison.Ordinal);
@@ -74,7 +74,7 @@ public sealed class FaxScreenTests
         Assert.Equal("Аптека", pharmacy);
 
         var patient = new OpenWards.Sim.People.PatientBehaviour();
-        patient.SetDisease(OpenWards.Sim.Diseases.DiseaseCatalog.Find("the_squits")!, 0, host.Simulation.Random);
+        patient.SetDisease(OpenWards.Sim.Diseases.DiseaseCatalog.Find("the_squits")!, 0);
         var missing = FaxWindow.NoTreatmentRoomLines(host, patient).ToList()[2];
         Assert.Contains(pharmacy, missing, StringComparison.Ordinal);
         Assert.DoesNotContain("Pharmacy", missing, StringComparison.Ordinal);

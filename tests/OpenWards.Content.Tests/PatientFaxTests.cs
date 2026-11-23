@@ -20,8 +20,7 @@ public class PatientFaxTests
     {
         var simulation = NewStaffedHospital(Rules());
         BuildPharmacy(simulation);
-        var (humanoid, patient) = WaitForQuestion(simulation);
-        Assert.Equal(PatientQuestion.NoDiagnosisRoom, patient.Question);
+        var (humanoid, patient) = WaitForQuestion(simulation, PatientQuestion.NoDiagnosisRoom);
         Assert.False(patient.IsDiagnosed);
 
         Run(simulation, new AnswerPatientCommand(humanoid.Id, PatientAnswer.GuessCure));
@@ -36,7 +35,7 @@ public class PatientFaxTests
     public void WithoutTheTreatmentRoomTheGuessedPatientAsksAgainAndCanBeSentHome()
     {
         var simulation = NewStaffedHospital(Rules());
-        var (humanoid, patient) = WaitForQuestion(simulation);
+        var (humanoid, patient) = WaitForQuestion(simulation, PatientQuestion.NoDiagnosisRoom);
         Run(simulation, new AnswerPatientCommand(humanoid.Id, PatientAnswer.GuessCure));
         Assert.Equal(PatientQuestion.NoTreatmentRoom, patient.Question);
 
@@ -69,9 +68,17 @@ public class PatientFaxTests
         var restored = Simulation.Load(stream, BaseGameContent.Create());
         Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
 
-        // Another 60 days from now, not from when they first asked.
-        StepFor(simulation, (PatientCare.WaitingDays * GameDate.HoursPerDay) - 10);
+        // Told to wait, their wait starts again: they stay until the leave count runs over LeaveMax (150 here).
+        Assert.Equal(0, patient.LeaveCount);
+        StepFor(simulation, 20 * GameDate.HoursPerDay);
         Assert.Equal(PatientPhase.Waiting, patient.Phase);
+        Assert.Equal(PatientQuestion.None, patient.Question);
+        for (var tick = 0; tick < 100 * GameDate.HoursPerDay && patient.Phase == PatientPhase.Waiting; tick++)
+        {
+            simulation.Step();
+        }
+
+        Assert.Equal(PatientPhase.GoingHome, patient.Phase);
     }
 
     [Fact]
@@ -81,10 +88,10 @@ public class PatientFaxTests
         var (humanoid, patient) = WaitForQuestion(simulation);
         Run(simulation, new AnswerPatientCommand(humanoid.Id, PatientAnswer.Wait));
 
-        // Patient:_dailyWaitChecks: with 30, 20 and 10 days of waiting left.
+        // Impatience: as the leave count passes a half, five eighths and three quarters of LeaveMax.
         var seen = new List<PatientSpotAction>();
         var animations = new HashSet<int>();
-        for (var tick = 0; tick < PatientCare.WaitingDays * GameDate.HoursPerDay && patient.Phase == PatientPhase.Waiting; tick++)
+        for (var tick = 0; tick < 100 * GameDate.HoursPerDay && patient.Phase == PatientPhase.Waiting; tick++)
         {
             simulation.Step();
             if (patient.SpotAction is PatientSpotAction.CheckWatch or PatientSpotAction.Yawn or PatientSpotAction.TapFoot
@@ -104,22 +111,37 @@ public class PatientFaxTests
         Assert.Equal(new[] { expected.CheckWatch!.Value.Id, expected.Yawn!.Value.Id, expected.TapFoot!.Value.Id }.ToHashSet(), animations);
     }
 
-    private static (Humanoid Humanoid, PatientBehaviour Patient) WaitForQuestion(Simulation simulation)
+    /// <summary>
+    /// Creates patients one at a time until one asks (the question asked, if given): how far the GP gets is random, and a
+    /// patient fully diagnosed asks no diagnosis question.
+    /// </summary>
+    private static (Humanoid Humanoid, PatientBehaviour Patient) WaitForQuestion(Simulation simulation, PatientQuestion? wanted = null)
     {
-        Run(simulation, new CheatCommand(CheatKind.CreatePatient));
-        var humanoid = simulation.Entities.OfType<Humanoid>().Single(h => h.Behaviour is PatientBehaviour);
-        var patient = (PatientBehaviour)humanoid.Behaviour!;
-
-        // A hard case keeps the GP's diagnosis short of 100 %, and never guessing leaves the decision to the player.
-        patient.DiagnosisDifficulty = 600;
+        // Never guessing leaves the decision to the player.
         Run(simulation, new SetPolicyCommand(PolicyKind.GuessCure, HospitalPolicies.MaxFraction));
-        for (var tick = 0; tick < 20 * GameDate.HoursPerDay && patient.Question == PatientQuestion.None; tick++)
+        for (var attempt = 0; attempt < 20; attempt++)
         {
-            simulation.Step();
+            var before = simulation.Entities.OfType<Humanoid>().Select(h => h.Id).ToHashSet();
+            Run(simulation, new CheatCommand(CheatKind.CreatePatient));
+            var humanoid = simulation.Entities.OfType<Humanoid>().Single(h => h.Behaviour is PatientBehaviour && !before.Contains(h.Id));
+            var patient = (PatientBehaviour)humanoid.Behaviour!;
+
+            // A hard case keeps the GP's diagnosis short of 100 %.
+            patient.DiagnosisDifficulty = 600;
+            for (var tick = 0; tick < 20 * GameDate.HoursPerDay && patient.Question == PatientQuestion.None && patient.Phase != PatientPhase.GoingHome; tick++)
+            {
+                simulation.Step();
+            }
+
+            if (patient.Question != PatientQuestion.None && (wanted is null || patient.Question == wanted))
+            {
+                return (humanoid, patient);
+            }
+
+            patient.SendHome(simulation, humanoid);
         }
 
-        Assert.NotEqual(PatientQuestion.None, patient.Question);
-        return (humanoid, patient);
+        throw new Xunit.Sdk.XunitException("No patient asked.");
     }
 
     private static LevelRules Rules()
