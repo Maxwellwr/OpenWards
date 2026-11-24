@@ -14,14 +14,14 @@ public class PoachingTests
     {
         var simulation = NewSimulation();
         var doctor = Hire(simulation);
-        doctor.Happiness = 0.9m;
+        doctor.Discontent = 36; // Below a quarter of ResignMax (150).
 
         Run(simulation, new PoachStaffCommand(doctor.Id), player: 1);
         Assert.Equal((doctor.Id, false), (simulation.Hospitals[1].LastPoach!.StaffId, simulation.Hospitals[1].LastPoach!.Listened));
         Assert.Equal(-1, doctor.PoachedBy);
 
         // Their own hospital cannot poach them.
-        doctor.Happiness = 0.2m;
+        doctor.Discontent = 37;
         Run(simulation, new PoachStaffCommand(doctor.Id), player: 0);
         Assert.Equal(0, doctor.RaiseRequest);
 
@@ -29,6 +29,7 @@ public class PoachingTests
         Assert.True(simulation.Hospitals[1].LastPoach!.Listened);
         Assert.Equal(1, doctor.PoachedBy);
         Assert.Equal(doctor.Profile!.Wage, doctor.RaiseRequest);
+        Assert.Equal(RaiseReason.Poached, doctor.RaiseReason);
     }
 
     [Fact]
@@ -36,7 +37,7 @@ public class PoachingTests
     {
         var simulation = NewSimulation();
         var doctor = Hire(simulation);
-        doctor.Happiness = 0.2m;
+        doctor.Discontent = 37;
         var wage = doctor.Profile!.Wage;
         Run(simulation, new PoachStaffCommand(doctor.Id), player: 1);
 
@@ -44,7 +45,7 @@ public class PoachingTests
         Assert.Equal((0, -1, 2 * wage), (doctor.Employer, doctor.PoachedBy, doctor.Profile.Wage));
 
         var nurse = Hire(simulation, StaffClass.Nurse);
-        nurse.Happiness = 0.2m;
+        nurse.Discontent = 37;
         Run(simulation, new PoachStaffCommand(nurse.Id), player: 1);
         Run(simulation, new AnswerRaiseCommand(nurse.Id, Grant: false), player: 0);
 
@@ -57,7 +58,7 @@ public class PoachingTests
     {
         var simulation = NewSimulation();
         var doctor = Hire(simulation);
-        doctor.Happiness = 0.2m;
+        doctor.Discontent = 37;
         Run(simulation, new PoachStaffCommand(doctor.Id), player: 1);
 
         using var stream = new MemoryStream();

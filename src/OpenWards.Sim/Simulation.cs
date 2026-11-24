@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 108;
+    private const int FormatVersion = 109;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -912,6 +912,9 @@ public sealed class Simulation
         {
             return;
         }
+
+        // The end of the month for every member of staff: promotion and how the pay sits with them, before the wages.
+        StaffEmployment.OnEndMonth(this);
 
         var wages = new int[_hospitals.Length];
         foreach (var entity in _entities)

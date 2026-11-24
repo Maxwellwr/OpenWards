@@ -9,40 +9,44 @@ using OpenWards.Sim.Staff;
 
 namespace OpenWards.Sim.Tests;
 
-/// <summary>Warmth and happiness day by day (CorsixTH's Humanoid:tickDay and Staff:tickDay).</summary>
+/// <summary>Warmth and happiness day by day (CorsixTH's Humanoid:tickDay and Staff:tickDay), and staff warmth by the radiators.</summary>
 public class FeelingsTests
 {
     private static readonly RoomDefinition Office = new("office", "Office", 3, 18, new WallSet(82, 83, 90, 91));
     private static readonly RoomDefinition StaffRoom = new("staff_room", "Staff Room", 3, 18, new WallSet(82, 83, 90, 91));
 
     [Fact]
-    public void WarmthMovesAQuarterTowardsTheTileAndComfortCheersUp()
+    public void TheDayLeavesStaffWarmthToTheRadiators()
     {
         var simulation = NewSimulation();
         var doctor = Hire(simulation, StaffClass.Doctor, new TilePosition(2, 2));
         doctor.Happiness = 0.5m;
-        var temperature = simulation.Temperatures[2, 2] / 65535m;
+        doctor.Warmth = 0.5m;
 
         Feelings.OnEndDay(simulation, doctor);
 
-        // 0.29 × 0.75 + about 0.125 × 0.25, within the comfortable 0.22–0.36; the wage is fair.
-        Assert.Equal((0.29m * 0.75m) + (temperature * 0.25m), doctor.Warmth);
-        Assert.Equal(0.505m, doctor.Happiness);
+        // No temperature of the tile, no comfort and no daily weighing of the wage.
+        Assert.Equal(0.5m, doctor.Warmth);
+        Assert.Equal(0.5m, doctor.Happiness);
     }
 
     [Fact]
-    public void TheColdMakesUnhappy()
+    public void TheColdMakesStaffUnhappyEveryNeedsUpdate()
     {
         var simulation = NewSimulation();
         var nurse = Hire(simulation, StaffClass.Nurse, new TilePosition(2, 2));
-        nurse.Warmth = 0m;
+        nurse.Warmth = 0.2m;
         nurse.Happiness = 0.5m;
-        var warmth = simulation.Temperatures[2, 2] / 65535m * 0.25m;
 
-        Feelings.OnEndDay(simulation, nurse);
+        // Without radiators the warmth heads for 0, a point at a time; below 20 it costs a point of mood.
+        PatientNeeds.Modify(simulation);
+        Assert.Equal(0.19m, nurse.Warmth);
+        Assert.Equal(0.49m, nurse.Happiness);
 
-        Assert.Equal(warmth, nurse.Warmth);
-        Assert.Equal(0.5m - (0.1m * (0.22m - warmth)), nurse.Happiness);
+        nurse.Warmth = 0.5m;
+        PatientNeeds.Modify(simulation);
+        Assert.Equal(0.49m, nurse.Warmth);
+        Assert.Equal(0.49m, nurse.Happiness);
     }
 
     [Fact]
@@ -52,13 +56,14 @@ public class FeelingsTests
         var receptionist = Hire(simulation, StaffClass.Receptionist, new TilePosition(2, 2));
         receptionist.Warmth = 0m;
         receptionist.Happiness = 0.5m;
-        Feelings.OnEndDay(simulation, receptionist);
+        PatientNeeds.Modify(simulation);
         Assert.Equal(1m, receptionist.Happiness);
 
         var rich = NewSimulation(maxSalary: 1);
         var doctor = Hire(rich, StaffClass.Doctor, new TilePosition(2, 2));
         doctor.Warmth = 0m;
-        Feelings.OnEndDay(rich, doctor);
+        doctor.Happiness = 0.5m;
+        PatientNeeds.Modify(rich);
         Assert.Equal(1m, doctor.Happiness);
     }
 
@@ -77,8 +82,8 @@ public class FeelingsTests
 
         Feelings.OnEndDay(simulation, handyman);
 
-        // Comfortable 0.005, a healthy plant −0.003 + 0.005, an extinguisher 0.002 and a bookcase 0.003.
-        Assert.Equal(0.5m + 0.005m + 0.002m + 0.002m + 0.003m, handyman.Happiness);
+        // A healthy plant −0.003 + 0.005, an extinguisher 0.002 and a bookcase 0.003.
+        Assert.Equal(0.5m + 0.002m + 0.002m + 0.003m, handyman.Happiness);
     }
 
     [Fact]

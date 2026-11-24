@@ -17,24 +17,28 @@ using OpenWards.Sim.Staff;
 namespace OpenWards.Client.Ui.Windows;
 
 /// <summary>
-/// A raise request (<c>UIStaffRise</c>), opened from its icon on the bottom panel: the member of staff's name, portrait,
-/// the hospital round them, wage, ability and a doctor's rank and skills, their complaint (one of the original's
-/// <c>pay_rise.regular</c> texts, picked at random) and two buttons, give the rise or refuse it and see them go. Esc
-/// does not close it and the game stands still while it is open. It goes by itself when the request is settled
-/// otherwise (the member of staff gave up waiting, the raise was given in staff management).
+/// A request for money (<c>UIStaffRise</c>), opened from its icon on the bottom panel: the member of staff's name,
+/// portrait, the hospital round them, wage, ability and a doctor's rank and skills, their complaint (one of the
+/// original's <c>pay_rise</c> texts, by the reason they ask) followed by what agreeing gives them, a rise or a one-off
+/// payment (the original's texts all speak of a rise), and two buttons, agree or refuse. Esc does not close it and the
+/// game stands still while it is open. It goes by itself when the request is settled otherwise (the member of staff
+/// gave up waiting, the raise was given in staff management).
 /// </summary>
 internal sealed partial class StaffRiseWindow : UiWindow
 {
     private readonly StaffRiseScreen _screen = new();
 
-    /// <summary>Which of <c>pay_rise.regular</c>'s six texts (S[3][4] to S[3][9]) the complaint is.</summary>
-    private readonly int _text;
+    /// <summary>
+    /// Which of <c>pay_rise.regular</c>'s six texts (S[3][4] to S[3][9]) the complaint is, or −1 to pick one by the
+    /// reason the first time it is shown.
+    /// </summary>
+    private int _text;
 
     public StaffRiseWindow(int staffId, int amount, int text = -1)
     {
         StaffId = staffId;
         Amount = amount;
-        _text = text is >= 0 and < 6 ? text : Random.Shared.Next(6);
+        _text = text is >= 0 and < 6 ? text : -1;
     }
 
     public int StaffId { get; }
@@ -67,12 +71,51 @@ internal sealed partial class StaffRiseWindow : UiWindow
 
     public override Vector2? FullscreenPosition => new(0.5f, 0.5f);
 
-    /// <summary>The complaint: <c>_S.pay_rise.regular.__random:format(rise_amount, final_wage)</c>.</summary>
-    public string Complaint(IWindowHost host, int wage)
+    /// <summary>
+    /// The complaint, by the reason: nothing will keep them (<c>pay_rise.definite_quit</c>); another hospital's offer
+    /// (<c>pay_rise.poached</c>); very tired, the text about needing a rest; otherwise one of the other
+    /// <c>pay_rise.regular</c> texts (for a one-off payment only those that name no new total). Then what agreeing gives.
+    /// </summary>
+    public string Complaint(IWindowHost host, Humanoid staff)
     {
-        var text = host.Texts?.String(3, 4 + _text) ?? "I'm totally frazzled. I need a good rest, plus a rise of %d if you don't want to see me jack in this poxy job.";
-        return FormatLua(text, Amount, wage + Amount);
+        var wage = staff.Profile!.Wage;
+        string complaint;
+        switch (staff.RaiseReason)
+        {
+            case RaiseReason.DefiniteQuit:
+                complaint = host.Texts?.String(3, 3) ?? "That's it, I'm leaving. I've had enough of this place.";
+                break;
+            case RaiseReason.Poached:
+                var poacher = staff.PoachedBy >= 0 && staff.PoachedBy < host.Simulation.Hospitals.Count ? host.Simulation.Hospitals[staff.PoachedBy].Name : string.Empty;
+                complaint = FormatLua(host.Texts?.String(3, 10) ?? "I've been offered %d by %s. Match it or I'm off.", wage + Amount, poacher);
+                break;
+            default:
+                if (_text < 0)
+                {
+                    int[] choices = staff.RaiseReason switch
+                    {
+                        RaiseReason.TiredRise or RaiseReason.TiredPayment => [0],
+                        RaiseReason.Payment => [2, 4, 5],
+                        _ => [1, 2, 3, 4, 5],
+                    };
+                    _text = choices[Random.Shared.Next(choices.Length)];
+                }
+
+                var text = host.Texts?.String(3, 4 + _text) ?? "I'm worn out. I need a proper rest, and %d more, or I'm walking out of this job.";
+                complaint = FormatLua(text, Amount, wage + Amount);
+                break;
+        }
+
+        return $"{complaint} {Offer(staff)}";
     }
+
+    /// <summary>What agreeing gives: a rise, a one-off payment, or nothing at all.</summary>
+    public static string Offer(Humanoid staff) => staff.RaiseReason switch
+    {
+        RaiseReason.DefiniteQuit => UiText.Get("openwards.staff.will_quit", "Will quit whatever the answer"),
+        RaiseReason.TiredPayment or RaiseReason.Payment => UiText.Format("openwards.staff.asks_payment", "Asks for a one-off payment of %1%", MoneyText.Format(staff.RaiseRequest)),
+        _ => UiText.Format("openwards.staff.asks_rise", "Asks for a rise of %1%", MoneyText.Format(staff.RaiseRequest)),
+    };
 
     /// <summary>Lua's <c>string.format</c> for the original's %d and %s: each takes the next argument.</summary>
     internal static string FormatLua(string text, params object[] arguments)
@@ -90,7 +133,7 @@ internal sealed partial class StaffRiseWindow : UiWindow
     {
         if (Staff(host) is { } staff)
         {
-            _screen.Draw(batch, host, origin, mouse, staff, Complaint(host, staff.Profile!.Wage));
+            _screen.Draw(batch, host, origin, mouse, staff, Complaint(host, staff));
         }
     }
 
@@ -123,11 +166,11 @@ internal sealed partial class StaffRiseWindow : UiWindow
         yield return WindowRow.Of(UiText.Get("openwards.staff.wage", "Wage"), WindowCell.Number(MoneyText.Format(profile.Wage)));
         yield return WindowRow.Of(UiText.Get("openwards.staff.skill", "Skill"), WindowCell.Number(StaffLabels.Skill(profile)));
         yield return WindowRow.Gap;
-        yield return WindowCell.Line(Complaint(host, profile.Wage));
+        yield return WindowCell.Line(Complaint(host, staff));
         yield return WindowRow.Gap;
         yield return WindowRow.Of(
             WindowCell.Button(UiText.Get("openwards.staff.grant", "Grant"), () => Answer(host, grant: true)).WithTooltip(OriginalTooltips.Get(host, 236, "Give the pay rise")),
-            WindowCell.Button(UiText.Get("openwards.staff.refuse", "Refuse (fires)"), () => Answer(host, grant: false)).WithTooltip(OriginalTooltips.Get(host, 237, "Refuse the pay rise: the person leaves")));
+            WindowCell.Button(UiText.Get("openwards.staff.refuse", "Refuse"), () => Answer(host, grant: false)).WithTooltip(OriginalTooltips.Get(host, 237, "Refuse the pay rise: the person leaves")));
     }
 
     /// <summary>
@@ -142,7 +185,7 @@ internal sealed partial class StaffRiseWindow : UiWindow
 
     /// <summary>The member of staff while their request is still waiting, or null.</summary>
     private Humanoid? Staff(IWindowHost host) =>
-        host.Simulation.FindEntity(StaffId) is Humanoid { Profile: not null, IsFired: false, RaiseRequest: > 0 } staff && staff.Employer == host.Player ? staff : null;
+        host.Simulation.FindEntity(StaffId) is Humanoid { Profile: not null, IsFired: false, HasRaiseRequest: true } staff && staff.Employer == host.Player ? staff : null;
 }
 
 /// <summary>
