@@ -12,88 +12,88 @@ using OpenWards.Sim.Staff;
 namespace OpenWards.Sim.Economy;
 
 /// <summary>
-/// A computer opponent a level names (<c>computer[n].Playing</c> and <c>.Name</c> in the level files).
+/// A computer opponent a level names (<c>computer[i].Playing</c> 1 in the level files), with its name and traits.
 /// </summary>
-/// <param name="Number">CorsixTH's competitor number: the level files' index plus one, which picks the default name in
-/// <c>competitor_names</c>.</param>
-/// <param name="Name">The name the level gives it, which in CorsixTH's base_config.lua every index has.</param>
-public readonly record struct PlannedCompetitor(int Number, string Name);
+/// <param name="Number">The level files' index plus one.</param>
+/// <param name="Name">Its name: the level's <c>computer[i].Name</c>, else the i-th of the original's names.</param>
+/// <param name="Personality">Its traits, from <c>computer[i]</c>; the defaults where the level does not say.</param>
+public readonly record struct PlannedCompetitor(int Number, string Name, CompetitorPersonality? Personality = null);
 
 /// <summary>
-/// How a computer opponent plays: how skilled and quick it is at deciding, how many staff it keeps for its patients,
-/// how much it cares for their comfort and how sure of a diagnosis it wants to be before it guesses the treatment.
+/// How a computer opponent plays, as the level files give it (<c>computer[i].Skill</c> and so on): the difficulty's
+/// base file has a table of twelve, which a level's own file replaces for the three that play.
 /// </summary>
-/// <param name="Skill">The spread of the time between its decisions (<c>rng % Skill</c>), at least 1.</param>
+/// <param name="Skill">The spread of the time between its actions (<c>rng % Skill</c>), 1 to 5.</param>
 /// <param name="StaffLevels">Which column of the staff tables it hires by, 0 (fewest staff) to 9 (most).</param>
-/// <param name="Speed">How long it takes over a decision, 1 to 100: the lower, the quicker.</param>
-/// <param name="Comfort">Which divisor of its patients it keeps benches, drinks machines, plants and extinguishers for, 0 (fewest) to 4 (most).</param>
+/// <param name="Speed">How long it takes over an action, 1 to 100: the lower, the quicker.</param>
+/// <param name="Comfort">Which column of the comfort objects' divisors it buys by, 0 (fewest) to 9 (most).</param>
 /// <param name="GuessAt">The percentage of a diagnosis from which it guesses the treatment rather than send the patient home.</param>
-/// <remarks>
-/// The specification names a sixth trait, <c>Luck</c>, which none of its rules use, so it is left out. The level files
-/// give the opponents only names, so the traits are drawn when the level starts (<see cref="Draw"/>).
-/// </remarks>
+/// <remarks>The level files' <c>Luck</c> is used by none of the rules, so it is not kept.</remarks>
 public readonly record struct CompetitorPersonality(int Skill, int StaffLevels, int Speed, int Comfort, int GuessAt)
 {
-    /// <summary>The traits of an opponent at random, within the ranges this game chose.</summary>
-    internal static CompetitorPersonality Draw(SimRandom random) => new(
-        Skill: random.NextInclusive(10, 40),
-        StaffLevels: random.NextInclusive(2, 7),
-        Speed: random.NextInclusive(30, 70),
-        Comfort: random.NextInclusive(0, 4),
-        GuessAt: random.NextInclusive(60, 90));
+    /// <summary>The traits of an opponent whose level does not give them.</summary>
+    public static CompetitorPersonality Default { get; } = new(3, 5, 50, 5, 75);
 
     /// <summary>The same traits held to what the rules can use.</summary>
     internal CompetitorPersonality Held() => new(
         Math.Max(1, Skill),
         Math.Clamp(StaffLevels, 0, 9),
         Math.Clamp(Speed, 1, 100),
-        Math.Clamp(Comfort, 0, CompetitorHospital.ComfortDivisors.Length - 1),
+        Math.Clamp(Comfort, 0, 9),
         Math.Clamp(GuessAt, 0, 100));
 }
 
-/// <summary>What a computer opponent does next.</summary>
+/// <summary>What a computer opponent does.</summary>
 public enum CompetitorActionKind : byte
 {
-    /// <summary>Hire a member of staff: of the class given, or the first class it has too few of.</summary>
+    /// <summary>Hire a member of staff of a class, with an ability if one is asked for.</summary>
     Hire = 0,
 
-    /// <summary>Build a room: the one given, or the first one missing that it can pay for.</summary>
+    /// <summary>Build a room.</summary>
     Build = 1,
 
-    /// <summary>Buy objects: those given, or the benches, drinks machines, plants and extinguishers (and land) it lacks.</summary>
+    /// <summary>Buy objects, one at a time.</summary>
     Buy = 2,
 
-    /// <summary>Borrow when short of money, or pay back when it has plenty.</summary>
+    /// <summary>The request for a loan, which takes its time and does nothing.</summary>
     Loan = 3,
-
-    /// <summary>Open the hospital to patients.</summary>
-    Open = 4,
 }
 
-/// <summary>One action of a computer opponent's scenario.</summary>
+/// <summary>An action of a computer opponent, or a task waiting in its queue (a hire for a room or a loan request).</summary>
 /// <param name="Kind">What it is.</param>
-/// <param name="Target">The staff class (as a number), room or object it is about; empty for the general ones.</param>
-/// <param name="Count">How many objects to buy.</param>
-public readonly record struct CompetitorAction(CompetitorActionKind Kind, string Target = "", int Count = 0);
+/// <param name="Target">The staff class (as a number), room or object it is about.</param>
+/// <param name="Count">How many objects are left to buy.</param>
+/// <param name="Ability">For a hire, the ability the candidate must have, if any.</param>
+/// <param name="Slot">For a task from the queue, its place there; otherwise -1.</param>
+/// <param name="FromStart">Whether the start of the scenario gave it, which lengthens its wait.</param>
+public readonly record struct CompetitorAction(CompetitorActionKind Kind, string Target = "", int Count = 0, Specialism? Ability = null, int Slot = -1, bool FromStart = false)
+{
+    /// <summary>A hire of the class.</summary>
+    public static CompetitorAction HireOf(StaffClass staffClass, Specialism? ability = null) =>
+        new(CompetitorActionKind.Hire, ((int)staffClass).ToString(System.Globalization.CultureInfo.InvariantCulture), Ability: ability);
+
+    /// <summary>The class of a hire.</summary>
+    public StaffClass StaffClass =>
+        (StaffClass)Math.Clamp(int.TryParse(Target, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : 0, 0, (int)StaffClass.Receptionist);
+}
 
 /// <summary>A member of a computer opponent's staff, who has no place on the map: their class, skill and wage.</summary>
 public readonly record struct CompetitorStaff(StaffClass Class, int Skill, int Wage);
 
 /// <summary>
 /// A computer opponent's hospital (CorsixTH's <c>AIHospital</c>), as the community's description of the original game has
-/// it: it plays a scenario and has no map. Every so often it decides on an action and then carries it out: it hires
-/// staff from the candidates every hospital hires from, builds rooms, buys benches and the like, buys land and borrows.
-/// Its patients live through a quick simulation of their stay as they come (<see cref="Admit"/>), whose outcomes go into
-/// the month they happen in and reach the hospital every five days. Its reputation, value and the year's raise of its
-/// owner's salary go by the same rules as the player's.
+/// it: it plays a scenario and has no map. Every so often it decides on an action and, after a while, carries it out: it
+/// hires staff from the candidates every hospital hires from, builds rooms and buys benches and the like. Its patients live
+/// through a quick simulation of their stay as they come (<see cref="Admit"/>), whose outcomes go into the month they
+/// happen in and reach the hospital every five days. Its reputation, value and the year's raise of its owner's salary go
+/// by the same rules as the player's.
 /// </summary>
 /// <remarks>
 /// Departs from CorsixTH, whose opponents build nothing, hire no one and only count the patients sent to them. Departs
-/// from the original as the specification describes it in three ways: an opponent is paid for treatments too (in the
-/// original only for diagnoses, which leaves the opponents implausibly poor on the year's charts), its land is compared
-/// with the player's every time it buys objects (the original never looks again), and it borrows and pays back by the
-/// player's rules (which the specification leaves open). The traits are drawn at random (<see cref="CompetitorPersonality"/>),
-/// rooms are built from the lists of diagnosis and treatment rooms in turn, and staff need no specialities.
+/// from the original as the specification describes it in two ways: an opponent is paid for treatments too (in the
+/// original only for diagnoses, which leaves the opponents implausibly poor on the year's charts), and an ordinary hire
+/// looks for no ability (in the original it keeps the ability the last hire for a room asked for, which can leave an
+/// opponent without handymen for years). It never borrows and never buys land, as in the original.
 /// </remarks>
 public sealed class CompetitorHospital
 {
@@ -103,11 +103,11 @@ public sealed class CompetitorHospital
     /// <summary>The most staff, rooms, objects and months read back from a save.</summary>
     private const int MaxEntries = 1 << 16;
 
-    /// <summary>The opponents decide once in this many ticks.</summary>
+    /// <summary>The opponents act once in this many ticks, and a decision that gave nothing to do waits this long.</summary>
     public const int DecisionInterval = 25;
 
-    /// <summary>How many failed actions wait to be tried again.</summary>
-    public const int RetryPlaces = 8;
+    /// <summary>The places of the queue of tasks.</summary>
+    public const int QueuePlaces = 8;
 
     /// <summary>The days of the simulated stay between two rooms, and between two transfers of the month's outcomes.</summary>
     public const int StepDays = 5;
@@ -117,6 +117,9 @@ public sealed class CompetitorHospital
 
     /// <summary>One patient in this many buys a drink when there are machines enough.</summary>
     public const int DrinkChance = 5;
+
+    /// <summary>A drinks machine is enough for fewer than this many patients in the hospital.</summary>
+    public const int DrinksPerPatients = 10;
 
     /// <summary>The care divisor while there are fewer patients than <see cref="FewPatients"/>.</summary>
     public const int FewPatientsCare = 20;
@@ -133,41 +136,33 @@ public sealed class CompetitorHospital
     /// <summary>The benches its scenario starts with.</summary>
     public const int StartBenches = 4;
 
-    /// <summary>The objects it keeps one of for so many patients, by <see cref="CompetitorPersonality.Comfort"/>.</summary>
-    internal static readonly int[] ComfortDivisors = [20, 15, 10, 7, 5];
+    /// <summary>The most objects of a type bought for one step of the scenario.</summary>
+    public const int MostObjects = 4;
 
-    /// <summary>The objects it keeps for its patients' comfort, in the order it buys them.</summary>
-    public static readonly IReadOnlyList<string> ComfortObjects = [DrinksMachine, Bench, Plant, Extinguisher];
+    /// <summary>The steps of the start of the scenario; the cycle comes after them.</summary>
+    public const int StartSteps = 9;
+
+    /// <summary>The steps of the cycle: staff, a room, objects and the loan.</summary>
+    public const int CycleSteps = 4;
 
     /// <summary>The diagnosis rooms it builds, in order.</summary>
     public static readonly IReadOnlyList<string> DiagnosisRooms =
         ["general_diag", "x_ray", "cardiogram", "scanner", "psych", "blood_machine", "ultrascan", "ward"];
 
-    /// <summary>The treatment rooms it builds, in order.</summary>
+    /// <summary>The treatment rooms it builds, in order, once there is no diagnosis room left to build.</summary>
     public static readonly IReadOnlyList<string> TreatmentRooms =
     [
         "pharmacy", "psych", "ward", "operating_theatre", "inflation", "electrolysis", "slack_tongue", "fracture_clinic",
         "hair_restoration", "jelly_vat", "decontamination", "dna_fixer",
     ];
 
-    /// <summary>What it does first, once.</summary>
-    public static readonly IReadOnlyList<CompetitorAction> StartScenario =
+    /// <summary>The objects it keeps for its patients, in the order it looks at them, each one for so many patients by <see cref="CompetitorPersonality.Comfort"/>.</summary>
+    public static readonly IReadOnlyList<(string ObjectType, int[] PatientsPer)> ComfortObjects =
     [
-        new(CompetitorActionKind.Hire, StaffClassName(StaffClass.Receptionist)),
-        new(CompetitorActionKind.Buy, ReceptionDesk, 1),
-        new(CompetitorActionKind.Buy, Bench, StartBenches),
-        new(CompetitorActionKind.Build, PatientBehaviour.FirstRoom),
-        new(CompetitorActionKind.Open),
-        new(CompetitorActionKind.Hire, StaffClassName(StaffClass.Doctor)),
-    ];
-
-    /// <summary>What it does over and over after <see cref="StartScenario"/>.</summary>
-    public static readonly IReadOnlyList<CompetitorAction> Cycle =
-    [
-        new(CompetitorActionKind.Hire),
-        new(CompetitorActionKind.Build),
-        new(CompetitorActionKind.Buy),
-        new(CompetitorActionKind.Loan),
+        (DrinksMachine, [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]),
+        (Bench, [5, 4, 4, 3, 3, 2, 2, 2, 1, 1]),
+        (Plant, [32, 28, 24, 20, 16, 10, 7, 4, 2, 1]),
+        (Extinguisher, [32, 28, 24, 20, 16, 10, 7, 4, 2, 1]),
     ];
 
     private const string ReceptionDesk = "reception_desk";
@@ -183,21 +178,24 @@ public sealed class CompetitorHospital
 
     private static readonly int[] ReceptionistsPer = [40, 36, 32, 28, 24, 20, 16, 12, 8, 4];
 
-    /// <summary>The decision and the four kinds of action take this long, in tenths of the opponent's pace.</summary>
+    /// <summary>The classes it looks for staff it lacks in, in order.</summary>
+    private static readonly StaffClass[] StaffOrder = [StaffClass.Nurse, StaffClass.Doctor, StaffClass.Handyman, StaffClass.Receptionist];
+
+    /// <summary>The wait after an action, before the next decision, in tenths of the opponent's pace.</summary>
     private const int DecideDelay = 33;
 
     private readonly List<CompetitorStaff> _staff = [];
     private readonly List<string> _rooms = [];
     private readonly SortedDictionary<string, int> _objects = new(StringComparer.Ordinal);
-    private readonly List<CompetitorAction> _retries = [];
+    private readonly CompetitorAction?[] _queue = new CompetitorAction?[QueuePlaces];
     private readonly List<MonthOutcomes> _months = [];
 
-    /// <param name="number">CorsixTH's competitor number (the level files' index plus one).</param>
+    /// <param name="number">The level files' index plus one.</param>
     /// <param name="name">Its name.</param>
     /// <param name="reputation">Its reputation at the start.</param>
     /// <param name="balance">Its money at the start.</param>
     /// <param name="tiles">The tiles of its plot, as big as the one the players start on.</param>
-    /// <param name="personality">How it plays; by default in the middle of every range.</param>
+    /// <param name="personality">How it plays; by default <see cref="CompetitorPersonality.Default"/>.</param>
     public CompetitorHospital(int number, string name, int reputation = Hospital.AverageReputation, long balance = 0, int tiles = 0, CompetitorPersonality? personality = null)
     {
         Number = number;
@@ -206,13 +204,13 @@ public sealed class CompetitorHospital
         ReputationScore = (long)Math.Clamp(reputation, Hospital.MinReputation, Hospital.MaxReputation) * ReputationVisits;
         Balance = balance;
         Tiles = Math.Max(0, tiles);
-        Personality = (personality ?? new CompetitorPersonality(25, 5, 50, 2, 75)).Held();
+        Personality = (personality ?? CompetitorPersonality.Default).Held();
     }
 
-    /// <summary>CorsixTH's competitor number (the level files' index plus one).</summary>
+    /// <summary>The level files' index plus one.</summary>
     public int Number { get; }
 
-    /// <summary>Its name, as the level gives it.</summary>
+    /// <summary>Its name.</summary>
     public string Name { get; }
 
     /// <summary>How it plays.</summary>
@@ -236,11 +234,8 @@ public sealed class CompetitorHospital
     /// <summary>Patients this year (<c>num_visitors_ty</c>), reset at the end of each year.</summary>
     public int VisitorsThisYear { get; internal set; }
 
-    /// <summary>Its money.</summary>
+    /// <summary>Its money; it never borrows.</summary>
     public long Balance { get; private set; }
-
-    /// <summary>What it has borrowed.</summary>
-    public long Loan { get; private set; }
 
     /// <summary>Its value, as the player's (<see cref="HospitalValue"/>): land, equipment, rooms, reputation and 10,000.</summary>
     public long Value { get; private set; }
@@ -269,7 +264,7 @@ public sealed class CompetitorHospital
     /// <summary>Its owner's salary, the "Salary" of the year's charts.</summary>
     public long PlayerSalary { get; private set; } = StartSalary;
 
-    /// <summary>The tiles of its plot.</summary>
+    /// <summary>The tiles of its plot, as big as the players' at the start; it buys no more.</summary>
     public int Tiles { get; private set; }
 
     /// <summary>Whether it has opened to patients.</summary>
@@ -287,8 +282,8 @@ public sealed class CompetitorHospital
     /// <summary>Its objects outside the rooms' own, by type.</summary>
     public IReadOnlyDictionary<string, int> Objects => _objects;
 
-    /// <summary>The failed actions waiting to be tried again, first first.</summary>
-    public IReadOnlyList<CompetitorAction> Retries => _retries;
+    /// <summary>The queue's places, empty or with a task: a hire for a room or a loan request.</summary>
+    public IReadOnlyList<CompetitorAction?> Queue => _queue;
 
     /// <summary>The tick of its next decision or action.</summary>
     public long NextActionTick { get; private set; }
@@ -296,14 +291,8 @@ public sealed class CompetitorHospital
     /// <summary>The action decided on, carried out at <see cref="NextActionTick"/>; null while it is to decide.</summary>
     public CompetitorAction? Pending { get; private set; }
 
-    /// <summary>How far its scenario has got: the actions of <see cref="StartScenario"/>, then of <see cref="Cycle"/> over and over.</summary>
+    /// <summary>How far its scenario has got: the <see cref="StartSteps"/> steps of the start, then the <see cref="CycleSteps"/> of the cycle over and over.</summary>
     public int ScenarioStep { get; private set; }
-
-    /// <summary>Whether the last decision was the scenario's, so that the next one tries again a failed action, if any.</summary>
-    private bool _retryNext;
-
-    /// <summary>Whether the last room it looked for was a diagnosis room, so that it looks for a treatment room next.</summary>
-    private bool _treatmentNext;
 
     /// <summary>What its rooms' equipment cost, for its value.</summary>
     private long _equipmentValue;
@@ -332,6 +321,12 @@ public sealed class CompetitorHospital
 
     /// <summary>Builds a room without paying for it (tests).</summary>
     internal void AddRoom(string roomType) => _rooms.Add(roomType);
+
+    /// <summary>Puts the scenario at a step (tests).</summary>
+    internal void SetScenarioStep(int step) => ScenarioStep = Math.Clamp(step, 0, StartSteps + CycleSteps - 1);
+
+    /// <summary>Counts a patient in the hospital without a stay (tests).</summary>
+    internal void AddPatientsInHospital(int patients) => PatientsInHospital += patients;
 
     /// <summary>Opens the hospital (tests).</summary>
     internal void Open() => IsOpen = true;
@@ -379,26 +374,33 @@ public sealed class CompetitorHospital
     }
 
     /// <summary>The objects of a comfort type it wants: one for every so many patients, by its <see cref="CompetitorPersonality.Comfort"/>.</summary>
-    public int WantedObjects() => PatientsInHospital / ComfortDivisors[Personality.Comfort];
-
-    /// <summary>A new opponent with the level's money, the players' plot and traits drawn for it.</summary>
-    /// <param name="planned">The level's opponent.</param>
-    /// <param name="rules">The level's settings.</param>
-    /// <param name="random">The opponents' random numbers.</param>
-    /// <param name="tiles">The tiles of the plot the players start on.</param>
-    internal static CompetitorHospital Create(PlannedCompetitor planned, LevelRules rules, SimRandom random, int tiles)
+    public int WantedObjects(string objectType)
     {
-        var competitor = new CompetitorHospital(planned.Number, planned.Name, rules.StartReputation, rules.StartCash, tiles, CompetitorPersonality.Draw(random));
-        competitor.NextActionTick = competitor.Delay(random, DecideDelay);
-        return competitor;
+        foreach (var (type, per) in ComfortObjects)
+        {
+            if (string.Equals(type, objectType, StringComparison.Ordinal))
+            {
+                return PatientsInHospital / per[Personality.Comfort];
+            }
+        }
+
+        return 0;
     }
 
+    /// <summary>A new opponent with the level's money, the players' plot and the level's traits for it.</summary>
+    /// <param name="planned">The level's opponent.</param>
+    /// <param name="rules">The level's settings.</param>
+    /// <param name="tiles">The tiles of the plot the players start on.</param>
+    internal static CompetitorHospital Create(PlannedCompetitor planned, LevelRules rules, int tiles) =>
+        new(planned.Number, planned.Name, rules.StartReputation, rules.StartCash, tiles, planned.Personality);
+
     /// <summary>
-    /// Once every <see cref="DecisionInterval"/> ticks: when the time has come, it decides on its next action, or carries
-    /// out the one it decided on. A decision takes the next action of its scenario, or every other time a failed one
-    /// waiting to be tried again. An action that fails waits to be tried again, in one of <see cref="RetryPlaces"/>
-    /// places. The time until the next is <c>⌊clamp(Speed − rng % Skill, 1, 100) × delay / 10⌋</c> ticks, the delay
-    /// 33 for a decision and 25, 37, 10 and 50 for hiring, building, buying and borrowing.
+    /// Once every <see cref="DecisionInterval"/> ticks, when the time has come: a decision takes the scenario's next step,
+    /// which may give it an action; the action is carried out after a wait by its kind, and the next decision comes 33
+    /// tenths of its pace later. A step that gives nothing to do is followed by the next one in
+    /// <see cref="DecisionInterval"/> ticks. A wait is <c>⌊clamp(Speed − rng % Skill, 1, 100) × delay / 10⌋</c> ticks, with
+    /// another <c>rng % 5</c> before the clamp for an action of the start; the delay is 25 for a hire, 37 for a room, 10
+    /// for an object and 50 for a loan request. Objects are bought one at a time, each an action of its own.
     /// </summary>
     internal void Think(Simulation simulation)
     {
@@ -410,34 +412,207 @@ public sealed class CompetitorHospital
         var random = simulation.CompetitorRandom;
         if (Pending is not { } action)
         {
-            Pending = Decide();
-            NextActionTick = simulation.Tick + Delay(random, DecideDelay);
+            if (Decide(simulation) is { } decided)
+            {
+                Pending = decided;
+                NextActionTick = simulation.Tick + Delay(random, ActionDelay(decided.Kind), decided.FromStart);
+            }
+            else
+            {
+                NextActionTick = simulation.Tick + DecisionInterval;
+            }
+
             return;
         }
 
-        if (!Carry(simulation, action) && _retries.Count < RetryPlaces && !_retries.Contains(action))
+        Carry(simulation, action);
+        if (action is { Kind: CompetitorActionKind.Buy, Count: > 1 })
         {
-            _retries.Add(action);
+            Pending = action with { Count = action.Count - 1 };
+            NextActionTick = simulation.Tick + Delay(random, ActionDelay(action.Kind), action.FromStart);
+            return;
         }
 
         Pending = null;
-        NextActionTick = simulation.Tick + Delay(random, ActionDelay(action.Kind));
+        NextActionTick = simulation.Tick + Delay(random, DecideDelay, fromStart: false);
     }
 
-    private CompetitorAction Decide()
+    /// <summary>
+    /// The scenario's next step. The start: a receptionist, the reception desk, four benches, the receptionist again if
+    /// that hire failed, the GP's office, opening, a doctor, the first diagnosis room it can build, then until it has
+    /// both a receptionist and a doctor the hire of whichever is missing. Then over and over: staff, a room, objects and
+    /// the loan.
+    /// </summary>
+    internal CompetitorAction? Decide(Simulation simulation)
     {
-        if (_retryNext && _retries.Count > 0)
+        var step = ScenarioStep;
+        if (step < StartSteps)
         {
-            _retryNext = false;
-            var retry = _retries[0];
-            _retries.RemoveAt(0);
-            return retry;
+            if (step != StartSteps - 1)
+            {
+                ScenarioStep++;
+            }
+
+            return step switch
+            {
+                0 => Start(CompetitorAction.HireOf(StaffClass.Receptionist)),
+                1 => Start(new(CompetitorActionKind.Buy, ReceptionDesk, 1)),
+                2 => Start(new(CompetitorActionKind.Buy, Bench, StartBenches)),
+                3 => StaffCount(StaffClass.Receptionist) == 0 ? Start(CompetitorAction.HireOf(StaffClass.Receptionist)) : null,
+                4 => Start(new(CompetitorActionKind.Build, PatientBehaviour.FirstRoom)),
+                5 => OpenHospital(),
+                6 => Start(CompetitorAction.HireOf(StaffClass.Doctor)),
+                7 => ChooseRoom(simulation, DiagnosisRooms, forTheCycle: false) is { } room ? Start(room) : null,
+                _ => WaitForStartStaff(),
+            };
         }
 
-        _retryNext = true;
-        var step = ScenarioStep;
-        ScenarioStep = step + 1 < StartScenario.Count + Cycle.Count ? step + 1 : StartScenario.Count;
-        return step < StartScenario.Count ? StartScenario[step] : Cycle[step - StartScenario.Count];
+        ScenarioStep = StartSteps + ((step - StartSteps + 1) % CycleSteps);
+        return (step - StartSteps) switch
+        {
+            0 => ChooseStaff(),
+            1 => ChooseRoom(simulation, DiagnosisRooms, forTheCycle: true) ?? (NothingToBuild(simulation, DiagnosisRooms) ? ChooseRoom(simulation, TreatmentRooms, forTheCycle: true) : null),
+            2 => ChooseObjects(),
+            _ => TakeQueued(CompetitorActionKind.Loan),
+        };
+
+        static CompetitorAction Start(CompetitorAction action) => action with { FromStart = true };
+    }
+
+    private CompetitorAction? OpenHospital()
+    {
+        IsOpen = true;
+        return null;
+    }
+
+    private CompetitorAction? WaitForStartStaff()
+    {
+        if (StaffCount(StaffClass.Receptionist) == 0)
+        {
+            return CompetitorAction.HireOf(StaffClass.Receptionist) with { FromStart = true };
+        }
+
+        if (StaffCount(StaffClass.Doctor) == 0)
+        {
+            return CompetitorAction.HireOf(StaffClass.Doctor) with { FromStart = true };
+        }
+
+        ScenarioStep = StartSteps;
+        return null;
+    }
+
+    /// <summary>
+    /// The staff step: a hire for a room from the queue (the one in the lowest place), else one of the first class it has
+    /// fewer of than it wants (nurses, doctors, handymen, receptionists).
+    /// </summary>
+    private CompetitorAction? ChooseStaff()
+    {
+        if (TakeQueued(CompetitorActionKind.Hire) is { } queued)
+        {
+            return queued;
+        }
+
+        foreach (var staffClass in StaffOrder)
+        {
+            if (StaffCount(staffClass) < WantedStaff(staffClass))
+            {
+                return CompetitorAction.HireOf(staffClass);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The task of the kind in the lowest place of the queue, as an action that knows its place.</summary>
+    private CompetitorAction? TakeQueued(CompetitorActionKind kind)
+    {
+        for (var slot = 0; slot < QueuePlaces; slot++)
+        {
+            if (_queue[slot] is { } task && task.Kind == kind)
+            {
+                if (kind == CompetitorActionKind.Loan)
+                {
+                    _queue[slot] = null;
+                    return task with { Slot = -1 };
+                }
+
+                return task with { Slot = slot };
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Puts a task in the lowest free place of the queue; dropped when the queue is full.</summary>
+    private void Enqueue(CompetitorAction task)
+    {
+        for (var slot = 0; slot < QueuePlaces; slot++)
+        {
+            if (_queue[slot] is null)
+            {
+                _queue[slot] = task with { Slot = -1, FromStart = false };
+                return;
+            }
+        }
+    }
+
+    /// <summary>The rooms of a list it has not got whose objects research has made available to the player.</summary>
+    private IEnumerable<string> Buildable(Simulation simulation, IReadOnlyList<string> rooms) =>
+        rooms.Where(room => !HasRoom(room) && simulation.Hospitals.Count > 0 && simulation.Hospitals[0].IsRoomDiscovered(room));
+
+    private bool NothingToBuild(Simulation simulation, IReadOnlyList<string> rooms) => !Buildable(simulation, rooms).Any();
+
+    /// <summary>
+    /// The first room of the list it has not got, can build and can pay for. In the cycle the hire for it goes into the
+    /// queue (a nurse for the pharmacy, ward and fracture clinic, a psychiatrist for psychiatry, a surgeon for the operating
+    /// theatre, any doctor for the rest); and when there were rooms to build but all too dear, a loan request does.
+    /// </summary>
+    private CompetitorAction? ChooseRoom(Simulation simulation, IReadOnlyList<string> rooms, bool forTheCycle)
+    {
+        var any = false;
+        foreach (var room in Buildable(simulation, rooms))
+        {
+            any = true;
+            if (RoomPrice(simulation, room).Price > Balance)
+            {
+                continue;
+            }
+
+            if (forTheCycle)
+            {
+                Enqueue(room switch
+                {
+                    "pharmacy" or "ward" or "fracture_clinic" => CompetitorAction.HireOf(StaffClass.Nurse),
+                    "psych" => CompetitorAction.HireOf(StaffClass.Doctor, Specialism.Psychiatrist),
+                    "operating_theatre" => CompetitorAction.HireOf(StaffClass.Doctor, Specialism.Surgeon),
+                    _ => CompetitorAction.HireOf(StaffClass.Doctor),
+                });
+            }
+
+            return new CompetitorAction(CompetitorActionKind.Build, room);
+        }
+
+        if (any && forTheCycle)
+        {
+            Enqueue(new CompetitorAction(CompetitorActionKind.Loan));
+        }
+
+        return null;
+    }
+
+    /// <summary>The first comfort object it has fewer of than it wants: as many as it lacks, at most four.</summary>
+    private CompetitorAction? ChooseObjects()
+    {
+        foreach (var (objectType, _) in ComfortObjects)
+        {
+            var lacking = WantedObjects(objectType) - ObjectCount(objectType);
+            if (lacking > 0)
+            {
+                return new CompetitorAction(CompetitorActionKind.Buy, objectType, Math.Min(MostObjects, lacking));
+            }
+        }
+
+        return null;
     }
 
     private static int ActionDelay(CompetitorActionKind kind) => kind switch
@@ -445,96 +620,106 @@ public sealed class CompetitorHospital
         CompetitorActionKind.Hire => 25,
         CompetitorActionKind.Build => 37,
         CompetitorActionKind.Buy => 10,
-        CompetitorActionKind.Loan => 50,
-        _ => DecideDelay,
+        _ => 50,
     };
 
-    private int Delay(SimRandom random, int delay) =>
-        Math.Clamp(Personality.Speed - random.Next(Personality.Skill), 1, 100) * delay / 10;
+    private int Delay(SimRandom random, int delay, bool fromStart)
+    {
+        var pace = Personality.Speed - random.Next(Personality.Skill);
+        if (fromStart)
+        {
+            pace += random.Next(5);
+        }
+
+        return Math.Clamp(pace, 1, 100) * delay / 10;
+    }
 
     /// <summary>Carries out an action; false when it could not.</summary>
-    internal bool Carry(Simulation simulation, CompetitorAction action) => action.Kind switch
+    internal bool Carry(Simulation simulation, CompetitorAction action)
     {
-        CompetitorActionKind.Hire => action.Target.Length == 0 ? HireWanted(simulation) : Hire(simulation, ParseClass(action.Target)),
-        CompetitorActionKind.Build => action.Target.Length == 0 ? BuildNext(simulation) : Build(simulation, action.Target),
-        CompetitorActionKind.Buy => action.Target.Length == 0 ? BuyComfort(simulation) : Buy(simulation, action.Target, action.Count),
-        CompetitorActionKind.Loan => Borrow(simulation),
-        CompetitorActionKind.Open => IsOpen = true,
-        _ => false,
-    };
-
-    /// <summary>Hires one of the first class it has fewer of than it wants (doctors, nurses, handymen, receptionists).</summary>
-    private bool HireWanted(Simulation simulation)
-    {
-        foreach (var staffClass in (StaffClass[])[StaffClass.Doctor, StaffClass.Nurse, StaffClass.Handyman, StaffClass.Receptionist])
+        switch (action.Kind)
         {
-            if (StaffCount(staffClass) < WantedStaff(staffClass))
-            {
-                return Hire(simulation, staffClass);
-            }
-        }
+            case CompetitorActionKind.Hire:
+                var hired = Hire(simulation, action.StaffClass, action.Ability);
+                if (action.Slot is >= 0 and < QueuePlaces)
+                {
+                    // A hire from the queue leaves it when it succeeds, and moves to the free place furthest back when it fails.
+                    var task = _queue[action.Slot];
+                    _queue[action.Slot] = null;
+                    if (!hired && task is not null)
+                    {
+                        for (var slot = QueuePlaces - 1; slot >= 0; slot--)
+                        {
+                            if (_queue[slot] is null)
+                            {
+                                _queue[slot] = task;
+                                break;
+                            }
+                        }
+                    }
+                }
 
-        return true;
+                return hired;
+            case CompetitorActionKind.Build:
+                return Build(simulation, action.Target);
+            case CompetitorActionKind.Buy:
+                return BuyOne(simulation, action.Target);
+            default:
+                return true;
+        }
     }
 
     /// <summary>
-    /// Hires the most skilled candidate of the class it can pay for, from the candidates every hospital hires from (the
-    /// first of them at the same skill): 1.2 times the wage comes off its money, and the wage is paid at the end of every
-    /// month.
+    /// Hires the first candidate of the class, with the ability if one is asked for, in the order of the candidates every
+    /// hospital hires from: 1.2 times the wage comes off its money, and the wage is paid at the end of every month. With
+    /// less money than that, or none, the hire fails; it tries no other candidate.
     /// </summary>
-    private bool Hire(Simulation simulation, StaffClass staffClass)
+    private bool Hire(Simulation simulation, StaffClass staffClass, Specialism? ability)
     {
         var candidates = simulation.AvailableStaff(staffClass);
-        var best = -1;
         for (var i = 0; i < candidates.Count; i++)
         {
-            if (Balance >= HireCost(candidates[i]) && (best < 0 || candidates[i].Skill > candidates[best].Skill))
+            var candidate = candidates[i];
+            if (ability is { } needed && !candidate.Has(needed))
             {
-                best = i;
+                continue;
             }
+
+            var cost = (long)candidate.Wage * 6 / 5;
+            if (Balance < 1 || Balance < cost)
+            {
+                return false;
+            }
+
+            simulation.TakeAvailableStaff(staffClass, i);
+            Balance -= cost;
+            _staff.Add(new CompetitorStaff(staffClass, candidate.Skill, candidate.Wage));
+            return true;
         }
 
-        if (best < 0)
-        {
-            return false;
-        }
-
-        var candidate = simulation.TakeAvailableStaff(staffClass, best);
-        Balance -= HireCost(candidate);
-        _staff.Add(new CompetitorStaff(staffClass, candidate.Skill, candidate.Wage));
-        return true;
+        return false;
     }
 
-    private static long HireCost(StaffProfile candidate) => (long)candidate.Wage * 6 / 5;
-
-    /// <summary>
-    /// Builds the first room it has not got that research has made available to the player and it can pay for: from the
-    /// diagnosis rooms and the treatment rooms in turn, or from the other list when one has nothing to build.
-    /// </summary>
-    private bool BuildNext(Simulation simulation)
+    /// <summary>What a room costs it: the room and the objects it needs, and of those what counts towards its value.</summary>
+    private static (long Price, long Equipment) RoomPrice(Simulation simulation, string roomType)
     {
-        var first = _treatmentNext ? TreatmentRooms : DiagnosisRooms;
-        var second = _treatmentNext ? DiagnosisRooms : TreatmentRooms;
-        _treatmentNext = !_treatmentNext;
-        var wanted = false;
-        foreach (var list in (IReadOnlyList<string>[])[first, second])
+        var room = simulation.Content.Rooms.FirstOrDefault(r => string.Equals(r.Id, roomType, StringComparison.Ordinal));
+        long equipment = 0;
+        long objects = 0;
+        if (room is not null)
         {
-            foreach (var room in list)
+            foreach (var (objectId, count) in LevelRules.Needed(room))
             {
-                if (HasRoom(room) || !simulation.Hospitals[0].IsRoomDiscovered(room))
+                var cost = (long)count * ObjectCost(simulation, objectId);
+                objects += cost;
+                if (HospitalValue.Counts(objectId))
                 {
-                    continue;
-                }
-
-                wanted = true;
-                if (Build(simulation, room))
-                {
-                    return true;
+                    equipment += cost;
                 }
             }
         }
 
-        return !wanted;
+        return (simulation.Rules.RoomCost(roomType) + objects, equipment);
     }
 
     /// <summary>Builds a room, if it has the money: its cost and the objects it needs.</summary>
@@ -545,23 +730,7 @@ public sealed class CompetitorHospital
             return true;
         }
 
-        var room = simulation.Content.Rooms.FirstOrDefault(r => string.Equals(r.Id, roomType, StringComparison.Ordinal));
-        long equipment = 0;
-        long objects = 0;
-        if (room is not null)
-        {
-            foreach (var (objectId, count) in LevelRules.Needed(room))
-            {
-                long cost = (long)count * ObjectCost(simulation, objectId);
-                objects += cost;
-                if (HospitalValue.Counts(objectId))
-                {
-                    equipment += cost;
-                }
-            }
-        }
-
-        var price = simulation.Rules.RoomCost(roomType) + objects;
+        var (price, equipment) = RoomPrice(simulation, roomType);
         if (Balance < price)
         {
             return false;
@@ -574,112 +743,22 @@ public sealed class CompetitorHospital
         return true;
     }
 
-    /// <summary>Buys objects outside the rooms, if it has the money for all of them.</summary>
-    private bool Buy(Simulation simulation, string objectType, int count)
+    /// <summary>Buys one object outside the rooms, if it has the money; otherwise it goes without.</summary>
+    private bool BuyOne(Simulation simulation, string objectType)
     {
-        var price = (long)Math.Max(0, count) * ObjectCost(simulation, objectType);
-        if (count <= 0 || Balance < price)
+        var price = ObjectCost(simulation, objectType);
+        if (Balance < price)
         {
-            return count <= 0;
+            return false;
         }
 
         Balance -= price;
-        _objects[objectType] = ObjectCount(objectType) + count;
+        _objects[objectType] = ObjectCount(objectType) + 1;
         return true;
     }
-
-    /// <summary>
-    /// Buys 1 to 4 of each comfort object it has fewer of than it wants, then land: as much as the player has more of, at
-    /// the level's price per tile, if its money is above 0 and enough. False if it could not pay for something.
-    /// </summary>
-    private bool BuyComfort(Simulation simulation)
-    {
-        var random = simulation.CompetitorRandom;
-        var paid = true;
-        var wanted = WantedObjects();
-        foreach (var objectType in ComfortObjects)
-        {
-            var have = ObjectCount(objectType);
-            if (have < wanted)
-            {
-                paid &= Buy(simulation, objectType, Math.Min(random.NextInclusive(1, 4), wanted - have));
-            }
-        }
-
-        var land = PlayerLand(simulation) - Tiles;
-        if (land > 0)
-        {
-            var price = (long)land * simulation.Rules.LandCostPerTile;
-            if (Balance > 0 && Balance >= price)
-            {
-                Balance -= price;
-                Tiles += land;
-                RefreshValue(simulation);
-            }
-            else
-            {
-                paid = false;
-            }
-        }
-
-        return paid;
-    }
-
-    /// <summary>
-    /// The player's rules of borrowing: when it is short of money it borrows <see cref="Hospital.LoanStep"/>s up to its
-    /// limit (a third of its value and 10,000, at most 100,000); when it has plenty it pays a step back.
-    /// </summary>
-    private bool Borrow(Simulation simulation)
-    {
-        var limit = Math.Clamp((Value / 3) + Hospital.LoanAllowance, 0, Hospital.LoanCeiling);
-        if (simulation.Rules.FreeBuild)
-        {
-            return true;
-        }
-
-        if (Balance < Hospital.LoanStep)
-        {
-            if (Loan + Hospital.LoanStep > limit)
-            {
-                return false;
-            }
-
-            while (Balance < Hospital.LoanStep && Loan + Hospital.LoanStep <= limit)
-            {
-                Loan += Hospital.LoanStep;
-                Balance += Hospital.LoanStep;
-            }
-        }
-        else if (Loan > 0 && Balance >= RepayAbove + Hospital.LoanStep)
-        {
-            Loan -= Hospital.LoanStep;
-            Balance -= Hospital.LoanStep;
-        }
-
-        return true;
-    }
-
-    /// <summary>It pays a step of its loan back while that leaves it this much.</summary>
-    public const int RepayAbove = 20_000;
 
     private static int ObjectCost(Simulation simulation, string objectType) =>
         simulation.Hospitals.Count > 0 ? simulation.Hospitals[0].Research.ObjectCost(simulation.Rules, objectType) : simulation.Rules.ObjectCost(objectType);
-
-    /// <summary>The tiles the first player owns.</summary>
-    private static int PlayerLand(Simulation simulation)
-    {
-        var map = simulation.Map;
-        var land = 0;
-        for (var parcel = 1; parcel < map.ParcelCount; parcel++)
-        {
-            if (map.GetParcelOwner(parcel) == 1)
-            {
-                land += map.ParcelTileCount(parcel);
-            }
-        }
-
-        return land;
-    }
 
     /// <summary>
     /// A patient sent to it, who lives through the stay at once, without a place on the map (the specification's "Rival's
@@ -690,7 +769,7 @@ public sealed class CompetitorHospital
     /// <item>Without a GP's office the patient goes home.</item>
     /// <item>Then a room every five days: the GP's, then the disease's diagnosis rooms it has. Each charges its fee and
     /// diagnoses as for the player, with the average skill of its staff of the room's class instead of the doctor's
-    /// score; with drinks machines enough a patient in five buys a drink. The patient leaves when <c>rng % N = 0</c> (N
+    /// score; while drinks machines × 10 are more than the patients in the hospital, a patient in five buys a drink. The patient leaves when <c>rng % N = 0</c> (N
     /// then one less, not below 5) and dies when <c>rng % health = 0</c> (health then one less, not below 5). At a full
     /// diagnosis the treatment follows.</item>
     /// <item>When the rooms run out first: below <see cref="CompetitorPersonality.GuessAt"/> percent of a diagnosis the
@@ -728,8 +807,7 @@ public sealed class CompetitorHospital
         var maxDifficulty = rules.MaxDiagDiff(disease.ExpertiseId);
         var difficulty = maxDifficulty >= 1 ? random.Triangular(1, maxDifficulty) : 0;
         var progress = 0;
-        var drinks = ObjectCount(DrinksMachine);
-        var enoughDrinks = drinks > 0 && drinks >= WantedObjects();
+        var enoughDrinks = ObjectCount(DrinksMachine) * DrinksPerPatients > PatientsInHospital;
         var visits = new List<string> { PatientBehaviour.FirstRoom };
         visits.AddRange(disease.DiagnosisRooms.Where(room => !string.Equals(room, PatientBehaviour.FirstRoom, StringComparison.Ordinal) && HasRoom(room)));
         foreach (var room in visits)
@@ -895,17 +973,11 @@ public sealed class CompetitorHospital
         RefreshValue(simulation);
     }
 
-    /// <summary>The end of a month: the month's outcomes, then the staff's wages and the interest on the loan and overdraft, as the player's.</summary>
+    /// <summary>The end of a month: the month's outcomes, then the staff's wages.</summary>
     internal void OnEndMonth(Simulation simulation, int monthOfGame)
     {
         Transfer(simulation, monthOfGame);
         Balance -= Wages;
-        var rate = simulation.Rules.InterestRate;
-        Balance -= rate * Loan / 120_000;
-        if (Balance < 0)
-        {
-            Balance -= rate * -Balance * 2 / 120_000;
-        }
 
         VisitorsThisMonth = 0;
         RefreshValue(simulation);
@@ -929,7 +1001,7 @@ public sealed class CompetitorHospital
 
     /// <summary>
     /// An opponent of an imported save of the original: its reputation over its patients, its money and what the year's
-    /// charts show of it. What it has built is not in the import, so its scenario starts afresh.
+    /// charts show of it. Where it had got in its scenario is not imported yet, so its scenario starts afresh.
     /// </summary>
     internal void Import(ImportedCompetitor state)
     {
@@ -959,13 +1031,13 @@ public sealed class CompetitorHospital
     }
 
     /// <summary>
-    /// What a win criterion measures for the computer player, for its level score: reputation, balance less loan, the cured
+    /// What a win criterion measures for the computer player, for its level score: reputation, balance, the cured
     /// and killed shares of its visitors, cures and value; nothing for the rest.
     /// </summary>
     internal decimal? Measure(EndCriterion criterion) => criterion switch
     {
         EndCriterion.Reputation => Reputation,
-        EndCriterion.Balance => Balance - Loan,
+        EndCriterion.Balance => Balance,
         EndCriterion.PercentageCured => Visitors > 0 ? Cured * 100m / Visitors : 0,
         EndCriterion.NumCured => Cured,
         EndCriterion.PercentageKilled => Visitors > 0 ? Deaths * 100m / Visitors : 0,
@@ -988,7 +1060,6 @@ public sealed class CompetitorHospital
         writer.WriteInt64(ReputationScore);
         writer.WriteInt32(ReputationVisits);
         writer.WriteInt64(Balance);
-        writer.WriteInt64(Loan);
         writer.WriteInt64(Value);
         writer.WriteInt32(Cured);
         writer.WriteInt32(Deaths);
@@ -1008,8 +1079,6 @@ public sealed class CompetitorHospital
         writer.WriteInt32(PatientsInHospital);
         writer.WriteInt64(NextActionTick);
         writer.WriteInt32(ScenarioStep);
-        writer.WriteBool(_retryNext);
-        writer.WriteBool(_treatmentNext);
         writer.WriteInt64(_equipmentValue);
         writer.WriteBool(Pending is not null);
         if (Pending is { } pending)
@@ -1017,10 +1086,13 @@ public sealed class CompetitorHospital
             WriteAction(writer, pending);
         }
 
-        writer.WriteInt32(_retries.Count);
-        foreach (var retry in _retries)
+        foreach (var task in _queue)
         {
-            WriteAction(writer, retry);
+            writer.WriteBool(task is not null);
+            if (task is { } queued)
+            {
+                WriteAction(writer, queued);
+            }
         }
 
         writer.WriteInt32(_staff.Count);
@@ -1063,16 +1135,27 @@ public sealed class CompetitorHospital
         writer.WriteByte((byte)action.Kind);
         writer.WriteString(action.Target);
         writer.WriteInt32(action.Count);
+        writer.WriteByte(action.Ability is { } ability ? (byte)(ability + 1) : (byte)0);
+        writer.WriteInt32(action.Slot);
+        writer.WriteBool(action.FromStart);
     }
 
-    private static CompetitorAction ReadAction(SimReader reader) =>
-        new((CompetitorActionKind)Math.Min(reader.ReadByte(), (byte)CompetitorActionKind.Open), reader.ReadString(MaxNameBytes), reader.ReadInt32());
+    private static CompetitorAction ReadAction(SimReader reader)
+    {
+        var kind = (CompetitorActionKind)Math.Min(reader.ReadByte(), (byte)CompetitorActionKind.Loan);
+        var target = reader.ReadString(MaxNameBytes);
+        var count = reader.ReadInt32();
+        var ability = reader.ReadByte();
+        var slot = reader.ReadInt32();
+        return new CompetitorAction(kind, target, count, ability is > 0 and <= 3 ? (Specialism)(ability - 1) : null, slot is >= 0 and < QueuePlaces ? slot : -1, reader.ReadBool());
+    }
 
     /// <param name="reader">The save.</param>
     /// <param name="startReputation">The level's starting reputation, for a game saved before opponents had one.</param>
     /// <param name="startCash">The level's starting money, for a game saved before opponents had any.</param>
     /// <param name="tiles">The tiles of the plot the players start on, for a game saved before opponents had a plot.</param>
-    internal static CompetitorHospital Read(SimReader reader, int startReputation, long startCash, int tiles)
+    /// <param name="personality">The level's traits for it, for a game saved before opponents had them.</param>
+    internal static CompetitorHospital Read(SimReader reader, int startReputation, long startCash, int tiles, CompetitorPersonality? personality = null)
     {
         var number = reader.ReadInt32();
         var name = reader.ReadString(MaxNameBytes);
@@ -1094,7 +1177,7 @@ public sealed class CompetitorHospital
             _ = reader.ReadInt32(); // the start's reputation
         }
 
-        var competitor = new CompetitorHospital(number, name, reputation, startCash, tiles)
+        var competitor = new CompetitorHospital(number, name, reputation, startCash, tiles, personality)
         {
             SpawnAttempts = spawnAttempts,
             Visitors = visitors,
@@ -1138,7 +1221,6 @@ public sealed class CompetitorHospital
         competitor.ReputationScore = reader.ReadInt64();
         competitor.ReputationVisits = Math.Max(1, reader.ReadInt32());
         competitor.Balance = reader.ReadInt64();
-        competitor.Loan = Math.Max(0, reader.ReadInt64());
         competitor.Value = Math.Max(0, reader.ReadInt64());
         competitor.Cured = Math.Max(0, reader.ReadInt32());
         competitor.Deaths = Math.Max(0, reader.ReadInt32());
@@ -1153,15 +1235,12 @@ public sealed class CompetitorHospital
         competitor.IsOpen = reader.ReadBool();
         competitor.PatientsInHospital = Math.Max(0, reader.ReadInt32());
         competitor.NextActionTick = reader.ReadInt64();
-        competitor.ScenarioStep = Math.Clamp(reader.ReadInt32(), 0, StartScenario.Count + Cycle.Count - 1);
-        competitor._retryNext = reader.ReadBool();
-        competitor._treatmentNext = reader.ReadBool();
+        competitor.ScenarioStep = Math.Clamp(reader.ReadInt32(), 0, StartSteps + CycleSteps - 1);
         competitor._equipmentValue = Math.Max(0, reader.ReadInt64());
         competitor.Pending = reader.ReadBool() ? ReadAction(reader) : null;
-        var retries = reader.ReadCount(RetryPlaces);
-        for (var i = 0; i < retries; i++)
+        for (var slot = 0; slot < QueuePlaces; slot++)
         {
-            competitor._retries.Add(ReadAction(reader));
+            competitor._queue[slot] = reader.ReadBool() ? ReadAction(reader) : null;
         }
 
         var staff = reader.ReadCount(MaxEntries);
@@ -1203,7 +1282,6 @@ public sealed class CompetitorHospital
         return competitor;
     }
 
-    /// <summary>What happened to an opponent's patients in a month of the game, until it reaches the hospital.</summary>
     private sealed class MonthOutcomes
     {
         public int Month { get; init; }

@@ -100,7 +100,7 @@ public sealed class Simulation
         // World:World adds the computer opponents after the players' hospitals.
         foreach (var competitor in Rules.Competitors)
         {
-            _competitors.Add(CompetitorHospital.Create(competitor, Rules, CompetitorRandom, map.ParcelTileCount(1)));
+            _competitors.Add(CompetitorHospital.Create(competitor, Rules, map.ParcelTileCount(1)));
         }
 
         // Then Hospital:initStaff, before the first candidates for hire.
@@ -587,7 +587,7 @@ public sealed class Simulation
         var competitorCount = reader.ReadCount(rules.Competitors.Count);
         for (var i = 0; i < competitorCount; i++)
         {
-            simulation._competitors.Add(CompetitorHospital.Read(reader, rules.StartReputation, rules.StartCash, map.ParcelTileCount(1)));
+            simulation._competitors.Add(CompetitorHospital.Read(reader, rules.StartReputation, rules.StartCash, map.ParcelTileCount(1), i < rules.Competitors.Count ? rules.Competitors[i].Personality : null));
         }
 
         simulation.Temperatures = TileTemperatures.Read(reader, map.Width, map.Height);
