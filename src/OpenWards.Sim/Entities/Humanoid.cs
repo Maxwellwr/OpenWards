@@ -187,11 +187,30 @@ public sealed class Humanoid : Entity
     /// <summary>Fired or quit: leaving the hospital and no longer counted as its staff (CorsixTH's <c>fired</c>).</summary>
     public bool IsFired { get; internal set; }
 
-    /// <summary>Hours of unhappiness left before asking for a raise, or −1 (CorsixTH's <c>timer_until_raise</c>).</summary>
-    public int RaiseTimer { get; internal set; } = -1;
+    /// <summary>
+    /// How long the member of staff has been unhappy (the specification's resign count): it grows by 1 every
+    /// <see cref="People.PatientNeeds.ModifyFreq"/> ticks while their mood is below <c>gbv.Unhappy</c> and falls while it
+    /// is above <c>gbv.Happy</c>; above <c>gbv.ResignMax</c> they ask for money (<see cref="Staff.StaffEmployment"/>).
+    /// </summary>
+    public int Discontent { get; internal set; }
 
-    /// <summary>The raise asked for and not yet answered, or 0 (CorsixTH's <c>pay_rise</c> mood and message).</summary>
+    /// <summary>The hour the member of staff was hired (0 for those there from the start).</summary>
+    public long HiredAt { get; internal set; }
+
+    /// <summary>How many times the member of staff has asked for money.</summary>
+    public int RaiseRequestCount { get; internal set; }
+
+    /// <summary>Why the member of staff asks for money and what agreeing gives them, while <see cref="RaiseRequest"/> waits.</summary>
+    public Staff.RaiseReason RaiseReason { get; internal set; }
+
+    /// <summary>
+    /// The money asked for and not yet answered, or 0: a rise of the wage, or a one-off payment when
+    /// <see cref="RaiseReason"/> says so (CorsixTH's <c>pay_rise</c> mood and message).
+    /// </summary>
     public int RaiseRequest { get; internal set; }
+
+    /// <summary>Whether a request for money waits for an answer (one that nothing will satisfy asks for no sum).</summary>
+    public bool HasRaiseRequest => RaiseReason != Staff.RaiseReason.None;
 
     /// <summary>Hours the raise request still waits for an answer, or −1 (CorsixTH's <c>quitting_in</c>).</summary>
     public int QuittingIn { get; internal set; } = -1;
@@ -759,6 +778,13 @@ public sealed class Humanoid : Entity
         return value is >= 0m and <= 1m ? value : throw new InvalidDataException($"Attribute {value} is not between 0 and 1.");
     }
 
+    /// <summary>The discontent, where versions before 109 kept the hours left before asking for a raise instead.</summary>
+    private static int ReadDiscontent(SimReader reader)
+    {
+        var value = reader.ReadInt32();
+        return reader.Version is 0 or >= 109 ? value : 0;
+    }
+
     internal static Humanoid ReadState(int id, SimReader reader)
     {
         var tile = reader.ReadTile();
@@ -792,7 +818,7 @@ public sealed class Humanoid : Entity
             WaitingForStaffRoom = reader.ReadBool(),
             IsTiredMoodShown = reader.Version is 0 or >= 74 && reader.ReadBool(),
             IsFired = reader.ReadBool(),
-            RaiseTimer = reader.ReadInt32(),
+            Discontent = ReadDiscontent(reader),
             RaiseRequest = reader.ReadInt32(),
             QuittingIn = reader.ReadInt32(),
             IsSlow = reader.ReadBool(),
@@ -803,6 +829,18 @@ public sealed class Humanoid : Entity
             PoachedBy = reader.Version is 0 or >= 97 ? reader.ReadInt32() : -1,
             IsLeavingForPoacher = reader.Version is 0 or >= 97 && reader.ReadBool(),
         };
+
+        if (reader.Version is 0 or >= 109)
+        {
+            humanoid.HiredAt = reader.ReadInt64();
+            humanoid.RaiseRequestCount = reader.ReadInt32();
+            humanoid.RaiseReason = (Staff.RaiseReason)reader.ReadByte();
+        }
+        else if (humanoid.RaiseRequest > 0)
+        {
+            // A request of the old model was always for a rise.
+            humanoid.RaiseReason = humanoid.PoachedBy >= 0 ? Staff.RaiseReason.Poached : Staff.RaiseReason.Underpaid;
+        }
 
         var count = reader.ReadCount(1 << 20);
         for (var i = 0; i < count; i++)
@@ -861,7 +899,7 @@ public sealed class Humanoid : Entity
         writer.WriteBool(WaitingForStaffRoom);
         writer.WriteBool(IsTiredMoodShown);
         writer.WriteBool(IsFired);
-        writer.WriteInt32(RaiseTimer);
+        writer.WriteInt32(Discontent);
         writer.WriteInt32(RaiseRequest);
         writer.WriteInt32(QuittingIn);
         writer.WriteBool(IsSlow);
@@ -871,6 +909,9 @@ public sealed class Humanoid : Entity
         writer.WriteBool(IsCrazy);
         writer.WriteInt32(PoachedBy);
         writer.WriteBool(IsLeavingForPoacher);
+        writer.WriteInt64(HiredAt);
+        writer.WriteInt32(RaiseRequestCount);
+        writer.WriteByte((byte)RaiseReason);
 
         writer.WriteInt32(_path.Count);
         foreach (var tile in _path)

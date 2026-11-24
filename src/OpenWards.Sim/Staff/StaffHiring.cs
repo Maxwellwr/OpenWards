@@ -156,6 +156,7 @@ public static class StaffHiring
     {
         var profile = simulation.TakeAvailableStaff(staffClass, index);
         var staff = Place(simulation, profile, tile, player);
+        staff.HiredAt = simulation.Hours;
         simulation.Hospitals[player].Spend(simulation.Hours, profile.Wage, TransactionKind.HireStaff, staffClass.ToString());
         return staff;
     }

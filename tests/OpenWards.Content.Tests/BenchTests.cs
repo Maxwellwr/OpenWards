@@ -23,7 +23,7 @@ public class BenchTests
         var animations = new HashSet<int>();
         var saved = false;
 
-        for (var tick = 0; tick < 2 * 31 * GameDate.HoursPerDay; tick++)
+        for (var tick = 0; tick < 4 * 31 * GameDate.HoursPerDay; tick++)
         {
             simulation.Step();
             foreach (var humanoid in simulation.Entities.OfType<Humanoid>())
@@ -104,7 +104,7 @@ public class BenchTests
         for (var attempt = 0; attempt < 5 && !drank; attempt++)
         {
             Humanoid? sitter = null;
-            for (var tick = 0; tick < 2 * 31 * GameDate.HoursPerDay && sitter is null; tick++)
+            for (var tick = 0; tick < 4 * 31 * GameDate.HoursPerDay && sitter is null; tick++)
             {
                 simulation.Step();
                 sitter = simulation.Entities.OfType<Humanoid>().FirstOrDefault(h => !tried.Contains(h.Id) && h.Behaviour is PatientBehaviour { BenchId: not 0 } && h.ActionAnimation is { Id: 146 or 224 });

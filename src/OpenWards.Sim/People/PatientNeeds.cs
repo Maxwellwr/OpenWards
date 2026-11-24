@@ -17,7 +17,8 @@ namespace OpenWards.Sim.People;
 /// </summary>
 /// <remarks>
 /// The mood is kept in <see cref="Humanoid.Happiness"/> (a point is 0.01) and the warmth in <see cref="Humanoid.Warmth"/>
-/// (likewise, 0.2 cold and 0.8 hot), so that staff, who still follow their own model, share the fields.
+/// (likewise, 0.2 cold and 0.8 hot). Staff's warmth is worked out the same way, and their discontent at the same time
+/// (<see cref="Staff.StaffEmployment.Modify"/>).
 /// </remarks>
 public static class PatientNeeds
 {
@@ -94,6 +95,28 @@ public static class PatientNeeds
             {
                 Modify(simulation, world, humanoid, patient);
             }
+            else if (humanoid is { Profile: not null, IsFired: false, IsDespawning: false, IsLeavingForPoacher: false }
+                && humanoid.Employer >= 0 && humanoid.Employer < simulation.Hospitals.Count)
+            {
+                ModifyStaff(simulation, world, humanoid);
+                Staff.StaffEmployment.Modify(simulation, humanoid);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A member of staff's warmth, worked out as a patient's: it moves a point towards what the radiators give, and
+    /// above <see cref="Hot"/> or below <see cref="Cold"/> it costs a point of mood.
+    /// </summary>
+    private static void ModifyStaff(Simulation simulation, World world, Humanoid humanoid)
+    {
+        var roomId = simulation.Map[humanoid.Tile.X, humanoid.Tile.Y].RoomId;
+        var warmth = Warmth(humanoid);
+        SetWarmth(humanoid, warmth + Math.Sign(WarmthTarget(simulation, world, humanoid, roomId) - warmth));
+        warmth = Warmth(humanoid);
+        if (warmth is > Hot or < Cold)
+        {
+            Feelings.ChangeHappiness(simulation, humanoid, -1m / MaxPoints);
         }
     }
 
