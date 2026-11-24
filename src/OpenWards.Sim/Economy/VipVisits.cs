@@ -43,8 +43,14 @@ public enum VipState : byte
 /// </remarks>
 public sealed class VipVisits
 {
-    /// <summary>How many VIP names there are.</summary>
+    /// <summary>
+    /// How many VIP names there are, numbered 0 to 10 in the order of the game's VIP list: 0 the Minister for Health,
+    /// 1 the Mayor of Greater Trumpton, and so on. The number is kept in saves and faxes, so the order stays.
+    /// </summary>
     public const int NameCount = 11;
+
+    /// <summary>The <see cref="InvitedName"/> when there is no VIP.</summary>
+    public const int NoName = -1;
 
     /// <summary>The fax asking accepts the VIP after this many days (CorsixTH's <c>Date.hoursPerDay() * 20</c>).</summary>
     public const int InvitationDays = 20;
@@ -79,8 +85,11 @@ public sealed class VipVisits
     /// <summary>Days since a VIP last asked to visit (or since the game began).</summary>
     public int DaysSinceLast { get; internal set; }
 
-    /// <summary>The name (1 to <see cref="NameCount"/>) of the VIP asking, on the way or visiting, or 0 when there is none.</summary>
-    public int InvitedName { get; internal set; }
+    /// <summary>
+    /// The name (0 to <see cref="NameCount"/> − 1) of the VIP asking, on the way or visiting, or <see cref="NoName"/> when
+    /// there is none.
+    /// </summary>
+    public int InvitedName { get; internal set; } = NoName;
 
     /// <summary>The tick at which the fax asking accepts the VIP by itself.</summary>
     public long InvitationExpires { get; internal set; }
@@ -142,7 +151,7 @@ public sealed class VipVisits
         if (vips.State == VipState.Visiting && !IsVipOnMap(simulation, hospital.Player))
         {
             vips.State = VipState.Over;
-            vips.InvitedName = 0;
+            vips.InvitedName = NoName;
         }
 
         var shared = Disasters.Emergencies.IsShared(simulation);
@@ -199,7 +208,7 @@ public sealed class VipVisits
         var vips = hospital.Vips;
         vips.State = VipState.Invited;
         vips.DaysSinceLast = 0;
-        vips.InvitedName = simulation.Random.NextInclusive(1, NameCount);
+        vips.InvitedName = simulation.Random.Next(NameCount);
         vips.InvitationExpires = simulation.Tick + (InvitationDays * GameDate.HoursPerDay);
     }
 
@@ -239,7 +248,7 @@ public sealed class VipVisits
                     && other.Vips.InvitationExpires == vips.InvitationExpires)
                 {
                     other.Vips.State = VipState.None;
-                    other.Vips.InvitedName = 0;
+                    other.Vips.InvitedName = NoName;
                 }
             }
         }
@@ -252,7 +261,7 @@ public sealed class VipVisits
         else
         {
             vips.State = VipState.None;
-            vips.InvitedName = 0;
+            vips.InvitedName = NoName;
         }
     }
 
@@ -309,7 +318,7 @@ public sealed class VipVisits
         if (vips.State == VipState.Visiting)
         {
             vips.State = VipState.Over;
-            vips.InvitedName = 0;
+            vips.InvitedName = NoName;
         }
     }
 
@@ -359,7 +368,8 @@ public sealed class VipVisits
     internal static VipVisits Read(SimReader reader)
     {
         var visits = reader.Version is 0 or >= SaveVersion ? ReadCurrent(reader) : ReadBeforeTimer(reader);
-        return visits.InvitedName is >= 0 and <= NameCount && visits.State <= VipState.Over
+        return visits.InvitedName is >= NoName and < NameCount && visits.State <= VipState.Over
+            && visits.Report is not { Name: < 0 or >= NameCount }
             ? visits
             : throw new InvalidDataException($"Unknown VIP name {visits.InvitedName} or state {visits.State}.");
     }
@@ -367,13 +377,25 @@ public sealed class VipVisits
     /// <summary>The save version that brought the VIP timer and scores.</summary>
     internal const int SaveVersion = 110;
 
+    /// <summary>The save version from which the names count from 0 in the game's order (before: 1 to 10, 11 the minister, 0 none).</summary>
+    internal const int NamesFromZeroVersion = 116;
+
+    /// <summary>A name from an older save: 0 was none, 1 to 10 are as now, 11 was the Minister for Health, now 0.</summary>
+    internal static int NameFromSave(SimReader reader, int name) =>
+        reader.Version is 0 or >= NamesFromZeroVersion ? name : name switch
+        {
+            0 => NoName,
+            NameCount => 0,
+            _ => name,
+        };
+
     private static VipVisits ReadCurrent(SimReader reader)
     {
         var visits = new VipVisits
         {
             State = (VipState)reader.ReadByte(),
             DaysSinceLast = reader.ReadInt32(),
-            InvitedName = reader.ReadInt32(),
+            InvitedName = NameFromSave(reader, reader.ReadInt32()),
             InvitationExpires = reader.ReadInt64(),
             ArrivalTick = reader.ReadInt64(),
             Count = reader.ReadInt32(),
@@ -383,7 +405,7 @@ public sealed class VipVisits
         };
         if (reader.ReadBool())
         {
-            visits.Report = new VipReport(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt64());
+            visits.Report = new VipReport(NameFromSave(reader, reader.ReadInt32()), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt64());
         }
 
         return visits;
@@ -402,7 +424,7 @@ public sealed class VipVisits
         var visits = new VipVisits
         {
             State = name != 0 ? VipState.Invited : VipState.None,
-            InvitedName = name,
+            InvitedName = NameFromSave(reader, name),
             InvitationExpires = expires,
             Count = reader.ReadInt32(),
             ThisYear = reader.ReadInt32(),
@@ -410,7 +432,7 @@ public sealed class VipVisits
         };
         if ((reader.Version >= 80) && reader.ReadBool())
         {
-            var reportName = reader.ReadInt32();
+            var reportName = NameFromSave(reader, reader.ReadInt32());
             var score = VipReport.ScoreOfRemark(reader.ReadInt32());
             var grant = reader.ReadInt32();
             visits.Report = new VipReport(reportName, score, grant, ReputationPercent(score), reader.ReadInt64());

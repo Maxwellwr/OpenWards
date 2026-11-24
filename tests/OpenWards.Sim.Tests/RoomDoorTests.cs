@@ -51,6 +51,29 @@ public class RoomDoorTests
     }
 
     [Fact]
+    public void ASlowMemberOfStaffGoesThroughAtThePaceOfTheirFrames()
+    {
+        var simulation = NewSimulationWithRoom();
+        var walker = simulation.AddEntity(id => new Humanoid(id, new TilePosition(3, 6)));
+        walker.FrameTicks = 2;
+
+        Assert.True(walker.WalkTo(simulation, new TilePosition(3, 5)));
+        simulation.Step();
+        Assert.True(walker.IsCrossingDoor);
+        Assert.Equal(2, walker.ActionAnimationFrameTicks);
+
+        for (var i = 1; i < PatientDoor.Leaving.Length * 2; i++)
+        {
+            simulation.Step();
+            Assert.True(walker.IsCrossingDoor);
+        }
+
+        simulation.Step();
+        Assert.False(walker.IsCrossingDoor);
+        Assert.Equal(new TilePosition(3, 5), walker.Tile);
+    }
+
+    [Fact]
     public void GoingOutSouthPlaysTheEnteringAnimationMirrored()
     {
         var simulation = NewSimulationWithRoom();

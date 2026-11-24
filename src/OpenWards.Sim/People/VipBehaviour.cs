@@ -68,7 +68,7 @@ public sealed class VipBehaviour : HumanoidBehaviour, IQueueMember
 
     public override BehaviourKind Kind => BehaviourKind.Vip;
 
-    /// <summary>Which of the VIP names (1 to <see cref="VipVisits.NameCount"/>).</summary>
+    /// <summary>Which of the VIP names (0 to <see cref="VipVisits.NameCount"/> − 1, in the game's order).</summary>
     public int Name { get; }
 
     public VipPhase Phase { get; private set; }
@@ -380,7 +380,7 @@ public sealed class VipBehaviour : HumanoidBehaviour, IQueueMember
 
     internal static VipBehaviour ReadState(SimReader reader)
     {
-        var name = reader.ReadInt32();
+        var name = VipVisits.NameFromSave(reader, reader.ReadInt32());
         var phase = reader.ReadByte();
         if (phase > (byte)VipPhase.GoingHome)
         {
