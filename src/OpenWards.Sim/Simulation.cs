@@ -932,9 +932,22 @@ public sealed class Simulation
             // Hospital:onEndMonth: equipment the level brings this month.
             hospital.Research.CheckAutomaticDiscovery(this, hospital, date.MonthOfGame);
             hospital.RecordMonth(wages[hospital.Player]);
-            if (date.IsLastDayOfYear)
+        }
+
+        // The shares of the town's patients and what the month showed, for the year's awards; then the opponents' month.
+        YearEndAwards.OnEndMonth(this);
+        foreach (var competitor in _competitors)
+        {
+            competitor.OnEndMonth(date.MonthOfGame, Random);
+        }
+
+        if (date.IsLastDayOfYear)
+        {
+            // Every hospital's trophies and awards are judged before any year's counts start afresh.
+            YearEndAwards.Judge(this);
+            foreach (var hospital in _hospitals)
             {
-                hospital.OnEndYear(Hours, Random, Rules.Awards);
+                hospital.OnEndYear(Hours);
                 hospital.RaiseSalary(Rules.EndConditions.Score(this, hospital), Rules.ScoreMaxIncrease);
 
                 // Hospital:onEndYear: at the end of the third year of level 3 the salary rises a lot, as in the original.
@@ -948,12 +961,8 @@ public sealed class Simulation
                 // checks come after them.
                 CheckEndConditions(hospital, mayLose: true);
             }
-        }
 
-        foreach (var competitor in _competitors)
-        {
-            competitor.OnEndMonth(date.MonthOfGame, Random);
-            if (date.IsLastDayOfYear)
+            foreach (var competitor in _competitors)
             {
                 competitor.OnEndYear(Rules.EndConditions.Score(competitor.Measure), Rules.ScoreMaxIncrease);
             }

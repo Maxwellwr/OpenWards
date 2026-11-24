@@ -29,10 +29,13 @@ public class EndConditionsTests
     [Fact]
     public void AHospitalLosesOnlyAtTheYearEndAfterItsAwards()
     {
-        // Lose with less than 2,000 in the bank. The fines of the year end take 3,000 off the 4,000 it starts with.
-        var lose = new EndGoal(EndCriterion.Balance, 1, AtLeast: false, 2000, 3000, 4000);
+        // Lose with less than 4,000 in the bank. The year end's trophy for a steady reputation brings 2,000 and the fine
+        // for few cures takes 3,000 off the 4,000 it starts with (15 deaths in the year are neither few nor many).
+        var lose = new EndGoal(EndCriterion.Balance, 1, AtLeast: false, 4000, 3000, 4000);
         var simulation = NewSimulation(4000, lose: [lose]);
         var hospital = simulation.Hospitals[0];
+        hospital.VisitorsThisYear = 10;
+        hospital.DeathsThisYear = 15;
 
         while (simulation.Date.Year == 1)
         {
@@ -40,7 +43,7 @@ public class EndConditionsTests
             simulation.Step();
         }
 
-        Assert.Equal(1000, hospital.Balance);
+        Assert.Equal(3000, hospital.Balance);
         Assert.Equal(EndOutcome.Lost, hospital.Outcome);
         Assert.Equal(lose, hospital.LostTo);
     }

@@ -15,6 +15,10 @@ public sealed class AnnualReportScreenTests
         Assert.False(AnnualReportScreen.IsTrophy(YearEndAwardKind.PoorReputation));
         Assert.Equal((27, 26), AnnualReportScreen.Text(YearEndAwardKind.DrinksSoldTrophy));
         Assert.Equal((56, 2), AnnualReportScreen.Text(YearEndAwardKind.PoorReputation));
+        Assert.True(AnnualReportScreen.IsTrophy(YearEndAwardKind.RatAccuracyTrophy));
+        Assert.False(AnnualReportScreen.IsTrophy(YearEndAwardKind.Dirty));
+        Assert.Equal((27, 20), AnnualReportScreen.Text(YearEndAwardKind.RatAccuracyTrophy));
+        Assert.Equal((56, 38), AnnualReportScreen.Text(YearEndAwardKind.NeglectedMachines));
     }
 
     [Fact]

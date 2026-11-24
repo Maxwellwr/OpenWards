@@ -1,6 +1,7 @@
 // The annual report as the original draws it, ported from CorsixTH
 // CorsixTH/Lua/dialogs/fullscreen/annual_report.lua (UIAnnualReport: the statistics and awards pages, addTrophy,
-// addAward, the motivations, drawStatisticsScreen).
+// addAward, the motivations, drawStatisticsScreen); the texts of the trophies and awards CorsixTH does not give are
+// those CorsixTH/Lua/languages/original_strings.lua lists under trophy_room.
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using System.Globalization;
@@ -49,8 +50,7 @@ internal sealed class AnnualReportScreen
         && graphics.Font("FONT46V", Palette) is not null && graphics.Font("FONT47V", Palette) is not null;
 
     /// <summary>Whether a year-end prize is a trophy (a figure) rather than an award or penalty (a frame).</summary>
-    public static bool IsTrophy(YearEndAwardKind kind) => kind is YearEndAwardKind.ConsistentReputation or YearEndAwardKind.AllCuredTrophy
-        or YearEndAwardKind.NoDeathsTrophy or YearEndAwardKind.ManyCuredTrophy or YearEndAwardKind.HappyVips or YearEndAwardKind.DrinksSoldTrophy;
+    public static bool IsTrophy(YearEndAwardKind kind) => YearEndAwards.IsTrophy(kind);
 
     /// <summary>What a prize was for: the original's text (<c>_S.trophy_room</c>), its section and index.</summary>
     public static (int Section, int Index) Text(YearEndAwardKind kind) => kind switch
@@ -71,6 +71,26 @@ internal sealed class AnnualReportScreen
         YearEndAwardKind.FewDeaths => (55, 8),
         YearEndAwardKind.ManyDeaths => (56, 8),
         YearEndAwardKind.CuresOverDeaths => (55, 14),
+        YearEndAwardKind.HappyStaffTrophy => (27, 8),
+        YearEndAwardKind.RatsKilledTrophy => (27, 17),
+        YearEndAwardKind.RatAccuracyTrophy => (27, 20),
+        YearEndAwardKind.HealthyPlantsTrophy => (27, 24),
+        YearEndAwardKind.HighPopulationShare => (55, 11),
+        YearEndAwardKind.LowPopulationShare => (56, 11),
+        YearEndAwardKind.HappyPatients => (55, 17),
+        YearEndAwardKind.UnhappyPatients => (56, 17),
+        YearEndAwardKind.HappyStaff => (55, 23),
+        YearEndAwardKind.UnhappyStaff => (56, 23),
+        YearEndAwardKind.Clean => (55, 26),
+        YearEndAwardKind.Dirty => (56, 26),
+        YearEndAwardKind.ShortWaits => (55, 29),
+        YearEndAwardKind.LongWaits => (56, 29),
+        YearEndAwardKind.EmergenciesSaved => (55, 32),
+        YearEndAwardKind.EmergenciesLost => (56, 32),
+        YearEndAwardKind.GoodResearch => (55, 35),
+        YearEndAwardKind.PoorResearch => (56, 35),
+        YearEndAwardKind.WellKeptMachines => (55, 38),
+        YearEndAwardKind.NeglectedMachines => (56, 38),
         _ => (56, 14),
     };
 
@@ -254,7 +274,8 @@ internal sealed class AnnualReportScreen
     {
         var (section, index) = Text(prize.Kind);
         var text = host.Texts?.String(section, index) ?? prize.Kind.ToString();
-        var lines = Maps.MapViewScreen.WrapToWidth(text.Replace("%d", string.Empty, StringComparison.Ordinal), width, line => font.Measure(line).Width);
+        var detail = prize.Detail != 0 ? prize.Detail.ToString(CultureInfo.InvariantCulture) : string.Empty;
+        var lines = Maps.MapViewScreen.WrapToWidth(text.Replace("%d", detail, StringComparison.Ordinal), width, line => font.Measure(line).Width);
         for (var i = 0; i < lines.Count; i++)
         {
             font.Draw(batch, lines[i], new Vector2(origin.X + x + ((width - font.Measure(lines[i]).Width) / 2), origin.Y + y + (i * font.LineHeight)));
@@ -262,7 +283,7 @@ internal sealed class AnnualReportScreen
 
         var cash = prize.Money != 0;
         var kind = cash ? host.Texts?.String(63, 2) ?? "Cash" : host.Texts?.String(63, 1) ?? "Reputation";
-        var amount = (cash ? prize.Money : prize.Reputation).ToString("+0;-0", CultureInfo.InvariantCulture);
+        var amount = cash ? prize.Money.ToString("+0;-0", CultureInfo.InvariantCulture) : prize.Reputation.ToString("+0'%';-0'%'", CultureInfo.InvariantCulture);
         font.Draw(batch, kind, new Vector2(origin.X + 220 + ((200 - font.Measure(kind).Width) / 2), origin.Y + kindY));
         font.Draw(batch, amount, new Vector2(origin.X + 220 + ((200 - font.Measure(amount).Width) / 2), origin.Y + kindY + 25));
     }

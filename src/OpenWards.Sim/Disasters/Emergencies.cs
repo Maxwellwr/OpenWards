@@ -604,6 +604,11 @@ public static class Emergencies
             }
         }
 
+        // For the year's award for emergencies.
+        hospital.EmergenciesThisYear++;
+        hospital.EmergencyVictimsThisYear += emergency.Victims;
+        hospital.EmergencySavedThisYear += emergency.Cured;
+
         var success = emergency.Cured * 100 >= emergency.Percentage * emergency.Victims;
         var earned = success ? emergency.Bonus * emergency.Cured : 0;
         state.Report = new EmergencyReport(emergency.Cured, emergency.Victims, emergency.Bonus * emergency.Victims, earned, simulation.Tick + (HospitalEmergencies.ReportDays * GameDate.HoursPerDay));
