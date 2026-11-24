@@ -300,6 +300,7 @@ public class AdviserTests
 
         host.Simulation.Hospitals[0].Cured = 1;
         doctor.RaiseRequest = 50;
+        doctor.RaiseReason = RaiseReason.Underpaid;
         checks.Observe(host.Simulation, 0, null, 0);
 
         Assert.Equal(AdviserChecks.FirstCure.Fallback, host.Adviser.Current);
@@ -310,8 +311,10 @@ public class AdviserTests
         // Only the first request is explained.
         host.Adviser.Next(0);
         doctor.RaiseRequest = 0;
+        doctor.RaiseReason = RaiseReason.None;
         checks.Observe(host.Simulation, 0, null, 0);
         doctor.RaiseRequest = 50;
+        doctor.RaiseReason = RaiseReason.Underpaid;
         checks.Observe(host.Simulation, 0, null, 0);
         Assert.Null(host.Adviser.Current);
     }
@@ -334,7 +337,7 @@ public class AdviserTests
 
         if (!profile.IsConsultant)
         {
-            profile.TrainSkill(1m, host.Simulation.Rules.Staff);
+            profile.Promote();
             checks.Observe(host.Simulation, 0, null, 0);
             Assert.Contains(host.Adviser.Current, new[] { AdviserChecks.PromotionToDoctor.Fallback, AdviserChecks.PromotionToConsultant.Fallback });
         }

@@ -202,9 +202,11 @@ strings:
       show: Montrer
       confirm_fire: Sûr ? Renvoyer
       fire: Renvoyer
-      asks_raise_or_quits: Demande %1% d'augmentation, sinon démissionne
+      asks_rise: 'Demande %1% d''augmentation'
+      asks_payment: Demande une prime unique de %1%
+      will_quit: 'Démissionne quoi qu''il arrive'
       grant: Accorder
-      refuse: Refuser (démission)
+      refuse: Refuser
       doctors: Médecins
       nurses: Infirmières
       handymen: Agents de maintenance

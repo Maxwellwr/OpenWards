@@ -1068,7 +1068,7 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
                 hospital.Cured,
                 hospital.Deaths,
                 hospital.AutopsiesDiscovered,
-                staff.Count(s => s.RaiseRequest > 0),
+                staff.Count(s => s.HasRaiseRequest),
                 hospital.IsHeatingBroken,
                 simulation.Earthquakes.IsActive,
                 simulation.Earthquakes.Size,

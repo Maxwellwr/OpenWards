@@ -97,7 +97,7 @@ public class BenchTests
 
         Assert.True(machinePlaced);
         Humanoid? sitter = null;
-        for (var tick = 0; tick < 2 * 31 * GameDate.HoursPerDay && sitter is null; tick++)
+        for (var tick = 0; tick < 4 * 31 * GameDate.HoursPerDay && sitter is null; tick++)
         {
             simulation.Step();
             sitter = simulation.Entities.OfType<Humanoid>().FirstOrDefault(h => h.Behaviour is PatientBehaviour { BenchId: not 0 } && h.ActionAnimation is { Id: 146 or 224 });

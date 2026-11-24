@@ -171,7 +171,8 @@ public sealed class RestingBehaviour : HumanoidBehaviour
                 humanoid.Fatigue = Math.Max(0, humanoid.Fatigue - Relaxation(target?.ObjectType));
                 if (humanoid.Fatigue == 0)
                 {
-                    // Rested: get up, then leave.
+                    // Rested: get up, then leave. A full rest halves the discontent (the specification's resign count).
+                    humanoid.Discontent /= 2;
                     Use!.Interrupt();
                     _nextTargetId = 0;
                     return;

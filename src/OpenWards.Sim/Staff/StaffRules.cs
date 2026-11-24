@@ -163,6 +163,9 @@ public sealed class StaffRules
     /// <summary>How fast doctors learn in the training room.</summary>
     public TrainingRules Training { get; init; } = TrainingRules.Default;
 
+    /// <summary>Promotion, pay and discontent.</summary>
+    public EmploymentRules Employment { get; init; } = EmploymentRules.Default;
+
     public int DoctorThreshold { get; }
 
     public int ConsultantThreshold { get; }
@@ -187,6 +190,7 @@ public sealed class StaffRules
         _startStaff)
     {
         Training = Training,
+        Employment = Employment,
     };
 
     /// <summary>The minimum salary of a class (<c>staff[n].MinSalary</c>).</summary>
@@ -270,6 +274,7 @@ public sealed class StaffRules
         }
 
         Training.Write(writer);
+        Employment.Write(writer);
     }
 
     internal static StaffRules Read(SimReader reader)
@@ -312,9 +317,10 @@ public sealed class StaffRules
         }
 
         var training = reader.Version is 0 or >= 70 ? TrainingRules.Read(reader) : TrainingRules.Default;
+        var employment = reader.Version is 0 or >= 109 ? EmploymentRules.Read(reader) : EmploymentRules.Default;
         try
         {
-            return new StaffRules(minSalaries, salaryAdds, divisor, doctorThreshold, consultantThreshold, levels, startStaff) { Training = training };
+            return new StaffRules(minSalaries, salaryAdds, divisor, doctorThreshold, consultantThreshold, levels, startStaff) { Training = training, Employment = employment };
         }
         catch (ArgumentException exception)
         {

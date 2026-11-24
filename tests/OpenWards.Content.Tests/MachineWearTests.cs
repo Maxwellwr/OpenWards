@@ -218,6 +218,13 @@ public class MachineWearTests
         }
 
         Assert.True(inflator.Machine!.TimesUsed >= 2);
+
+        // Not on the month's last hour, whose wages would come with the replacement.
+        while (simulation.Date.Day != GameDate.FromHours(simulation.Hours + 1).Day && simulation.Date.IsLastDayOfMonth)
+        {
+            simulation.Step();
+        }
+
         var balance = hospital.Balance;
         Run(simulation, new ReplaceMachineCommand(inflator.Id));
 
