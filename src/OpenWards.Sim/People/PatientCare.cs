@@ -536,7 +536,7 @@ public static class PatientCare
     {
         if (simulation.FindEntity(room.StaffId) is Humanoid { Profile: { Class: StaffClass.Doctor } profile })
         {
-            profile.GainProcedureSkill(simulation.Rules.Staff);
+            profile.GainProcedureSkill();
         }
     }
 

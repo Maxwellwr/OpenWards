@@ -88,10 +88,16 @@ public sealed class StaffProfile
 
     public bool IsResearcher { get; private set; }
 
-    /// <summary>Skill at most <see cref="StaffRules.DoctorThreshold"/>. Set for every class, as CorsixTH does; it matters for doctors.</summary>
+    /// <summary>
+    /// A junior: skill at most <see cref="StaffRules.DoctorThreshold"/> when hired, until promoted. Set for every class, as
+    /// CorsixTH does; it matters for doctors.
+    /// </summary>
     public bool IsJunior { get; private set; }
 
-    /// <summary>Skill at least <see cref="StaffRules.ConsultantThreshold"/>. Set for every class, as CorsixTH does; it matters for doctors.</summary>
+    /// <summary>
+    /// A consultant: skill at least <see cref="StaffRules.ConsultantThreshold"/> when hired, or promoted. Set for every
+    /// class, as CorsixTH does; it matters for doctors.
+    /// </summary>
     public bool IsConsultant { get; private set; }
 
     /// <summary>The original name and description of a member of staff imported from the original game, else null.</summary>
@@ -131,10 +137,10 @@ public sealed class StaffProfile
     };
 
     /// <summary>
-    /// <c>Doctor:updateSkill("skill", amount)</c>: the skill grows, up to 1, and whether the doctor is a junior or a
-    /// consultant follows it.
+    /// <c>Doctor:updateSkill("skill", amount)</c>: the skill grows, up to 1. The rank stays: promotion comes at the end of
+    /// a month (<see cref="StaffEmployment.OnEndMonth"/>).
     /// </summary>
-    internal void TrainSkill(decimal amount, StaffRules rules)
+    internal void TrainSkill(decimal amount)
     {
         if (Skill >= MaxSkill)
         {
@@ -145,17 +151,29 @@ public sealed class StaffProfile
         total = Math.Min(total, (long)MaxSkill * 1000);
         Skill = (int)(total / 1000);
         _skillMillionths = (int)(total % 1000);
-        ParseSkillLevel(rules);
     }
 
     /// <summary>
     /// The community specification's experience rule: each procedure a doctor finishes adds 1 to the skill, kept within
-    /// <see cref="MinProcedureSkill"/> to <see cref="MaxSkill"/>; whether the doctor is a junior or a consultant follows it.
+    /// <see cref="MinProcedureSkill"/> to <see cref="MaxSkill"/>. The rank stays: promotion comes at the end of a month
+    /// (<see cref="StaffEmployment.OnEndMonth"/>).
     /// </summary>
-    internal void GainProcedureSkill(StaffRules rules)
+    internal void GainProcedureSkill()
     {
         Skill = Math.Clamp(Skill + 1, MinProcedureSkill, MaxSkill);
-        ParseSkillLevel(rules);
+    }
+
+    /// <summary>A junior becomes a doctor, a doctor a consultant.</summary>
+    internal void Promote()
+    {
+        if (IsJunior)
+        {
+            IsJunior = false;
+        }
+        else
+        {
+            IsConsultant = true;
+        }
     }
 
     /// <summary><c>Doctor:updateSkill("is_surgeon", amount)</c> and so on: at 1 the doctor has the ability.</summary>

@@ -106,7 +106,7 @@ internal static class HumanoidMoods
         else if (humanoid.Profile is not null)
         {
             Offer(humanoid.IsFired, 4052, 60); // exit
-            Offer(humanoid.RaiseRequest > 0, 4576, 40); // pay_rise
+            Offer(humanoid.HasRaiseRequest, 4576, 40); // pay_rise
             Offer(humanoid.IsTiredMoodShown, 3990, 30); // tired
 
             var roomId = humanoid.Behaviour switch { DoctorBehaviour doctor => doctor.RoomId, NurseBehaviour nurse => nurse.RoomId, _ => 0 };

@@ -269,9 +269,11 @@ strings:
       show: Zeigen
       confirm_fire: Sicher? Entlassen
       fire: Entlassen
-      asks_raise_or_quits: Will %1% mehr Gehalt oder kündigt
+      asks_rise: Will %1% mehr Gehalt
+      asks_payment: Will eine einmalige Zahlung von %1%
+      will_quit: Kündigt auf jeden Fall
       grant: Gewähren
-      refuse: Ablehnen (kündigt)
+      refuse: Ablehnen
       doctors: Ärzte
       nurses: Schwestern
       handymen: Handlanger

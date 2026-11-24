@@ -482,7 +482,9 @@ public static partial class LevelRulesLoader
     /// The staff settings: <c>staff[n].MinSalary</c>, <c>gbv.SalaryAdd[3]</c> to <c>[8]</c>,
     /// <c>gbv.SalaryAbilityDivisor</c>, <c>gbv.DoctorThreshold</c>, <c>gbv.ConsultantThreshold</c> and
     /// the <c>staff_levels</c> entries, and the training settings (<c>gbv.TrainingRate</c>, <c>gbv.AbilityThreshold</c>,
-    /// <c>gbv.TrainingValue</c>). What the files leave out comes from CorsixTH's base_config.lua,
+    /// <c>gbv.TrainingValue</c>) and employment settings (<c>gbv.PromoDoc</c>, <c>PromoCon</c>, <c>ResignMax</c>, <c>Happy</c>,
+    /// <c>Unhappy</c>, <c>SalaryTooLow</c>, <c>SalaryTooHigh</c>). What the files leave out comes from CorsixTH's base_config.lua
+    /// (the employment settings: <see cref="EmploymentRules.Default"/>),
     /// on which CorsixTH reads the level files.
     /// </summary>
     public static StaffRules StaffFromConfig(LevelConfig config)
@@ -529,6 +531,14 @@ public static partial class LevelRulesLoader
                 config.GetInt("gbv.TrainingValue[0]") ?? TrainingRules.Default.ProjectorValue,
                 config.GetInt("gbv.TrainingValue[1]") ?? TrainingRules.Default.SkeletonValue,
                 config.GetInt("gbv.TrainingValue[2]") ?? TrainingRules.Default.BookcaseValue),
+            Employment = new EmploymentRules(
+                Math.Max(0, config.GetInt("gbv.PromoDoc") ?? EmploymentRules.Default.PromoDoc),
+                Math.Max(0, config.GetInt("gbv.PromoCon") ?? EmploymentRules.Default.PromoCon),
+                Math.Max(0, config.GetInt("gbv.ResignMax") ?? EmploymentRules.Default.ResignMax),
+                config.GetInt("gbv.Happy") ?? EmploymentRules.Default.Happy,
+                config.GetInt("gbv.Unhappy") ?? EmploymentRules.Default.Unhappy,
+                config.GetInt("gbv.SalaryTooLow") ?? EmploymentRules.Default.SalaryTooLow,
+                config.GetInt("gbv.SalaryTooHigh") ?? EmploymentRules.Default.SalaryTooHigh),
         };
     }
 

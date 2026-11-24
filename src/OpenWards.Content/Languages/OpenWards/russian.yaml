@@ -195,9 +195,11 @@ strings:
       show: Показать
       confirm_fire: Точно? Уволить
       fire: Уволить
-      asks_raise_or_quits: Просит прибавку %1%, иначе уйдёт
+      asks_rise: Просит прибавку %1%
+      asks_payment: Просит разовую выплату %1%
+      will_quit: Уйдёт при любом ответе
       grant: Дать
-      refuse: Отказать (уволится)
+      refuse: Отказать
       doctors: Доктора
       nurses: Медсёстры
       handymen: Рабочие

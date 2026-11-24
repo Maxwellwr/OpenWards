@@ -129,7 +129,7 @@ internal sealed class StaffManagementWindow : UiWindow
                 WindowCell.Number(StaffLabels.Percent(staff.Fatigue), highlight: selected),
                 WindowCell.Number(StaffLabels.Percent(staff.Happiness), highlight: selected),
                 new WindowCell(StaffLabels.Abilities(profile), Highlight: selected),
-                new WindowCell(staff.RaiseRequest > 0 ? $"+{MoneyText.Format(staff.RaiseRequest)}" : string.Empty, Highlight: true));
+                new WindowCell(staff.RaiseRequest > 0 ? $"+{MoneyText.Format(staff.RaiseRequest)}" : staff.HasRaiseRequest ? "!" : string.Empty, Highlight: true));
         }
 
         if (members.Count == 0)
@@ -168,12 +168,12 @@ internal sealed class StaffManagementWindow : UiWindow
                     _selected = null;
                 })
                 : WindowCell.Button(UiText.Get("openwards.staff.fire", "Fire"), () => _confirmFire = chosen.Id)).WithTooltip(OriginalTooltips.Get(host, 58, "Sack this person")));
-        if (chosen.RaiseRequest > 0)
+        if (chosen.HasRaiseRequest)
         {
             yield return WindowRow.Of(
-                UiText.Format("openwards.staff.asks_raise_or_quits", "Asks for a raise of %1% or quits", MoneyText.Format(chosen.RaiseRequest)),
+                StaffRiseWindow.Offer(chosen),
                 WindowCell.Button(UiText.Get("openwards.staff.grant", "Grant"), () => host.Submit(new AnswerRaiseCommand(chosen.Id, true))).WithTooltip(OriginalTooltips.Get(host, 236, "Give the pay rise")),
-                WindowCell.Button(UiText.Get("openwards.staff.refuse", "Refuse (fires)"), () => host.Submit(new AnswerRaiseCommand(chosen.Id, false))).WithTooltip(OriginalTooltips.Get(host, 237, "Refuse the pay rise: the person leaves")));
+                WindowCell.Button(UiText.Get("openwards.staff.refuse", "Refuse"), () => host.Submit(new AnswerRaiseCommand(chosen.Id, false))).WithTooltip(OriginalTooltips.Get(host, 237, "Refuse the pay rise: the person leaves")));
         }
     }
 
@@ -284,9 +284,9 @@ internal sealed class StaffWindow(int staffId) : UiWindow
         yield return WindowRow.Of(UiText.Get("dynamic_info.staff.tiredness", "Tiredness"), WindowCell.Number(StaffLabels.Percent(staff.Fatigue)), staff.IsTiredMoodShown ? UiText.Get("openwards.staff.tired", "Tired") : string.Empty);
         yield return WindowRow.Of(UiText.Get("tooltip.handyman_window.happiness", "Happiness"), WindowCell.Number(StaffLabels.Percent(staff.Happiness)));
         yield return WindowRow.Of(UiText.Get("openwards.staff.doing", "Doing"), StaffLabels.Doing(simulation, staff));
-        if (staff.RaiseRequest > 0)
+        if (staff.HasRaiseRequest)
         {
-            yield return WindowRow.Of(UiText.Get("openwards.staff.asks_for_raise", "Asks for a raise"), WindowCell.Number(MoneyText.Format(staff.RaiseRequest)));
+            yield return WindowRow.Of(UiText.Get("openwards.staff.asks_for_raise", "Asks for a raise"), StaffRiseWindow.Offer(staff));
         }
 
         if (staff.Behaviour is HandymanBehaviour handyman)

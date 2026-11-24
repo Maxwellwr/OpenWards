@@ -85,12 +85,27 @@ internal static class Feelings
             return;
         }
 
+        // A member of staff's warmth follows the radiators, as a patient's does (PatientNeeds); others' the tile.
+        var isStaff = humanoid.Profile is not null && humanoid.Employer >= 0;
+        if (isStaff)
+        {
+            if (humanoid.Profile!.Class != StaffClass.Receptionist)
+            {
+                OnEndDayStaff(simulation, humanoid, humanoid.Profile);
+                if (humanoid.Profile.Class == StaffClass.Doctor)
+                {
+                    Tiredness.CheckCrazy(simulation, humanoid);
+                }
+            }
+
+            return;
+        }
+
         var temperature = simulation.Temperatures[humanoid.Tile.X, humanoid.Tile.Y] / (decimal)TileTemperatures.Max;
         humanoid.Warmth = (humanoid.Warmth * 0.75m) + (temperature * 0.25m);
 
         // Only people of a hospital mind the temperature: the demo's wanderers have none.
-        var isStaff = humanoid.Profile is not null && humanoid.Employer >= 0;
-        if (!isStaff && humanoid.HospitalPlayer < 0)
+        if (humanoid.HospitalPlayer < 0)
         {
             return;
         }
@@ -107,15 +122,6 @@ internal static class Feelings
         else
         {
             ChangeHappiness(simulation, humanoid, ComfortHappiness);
-        }
-
-        if (isStaff && humanoid.Profile!.Class != StaffClass.Receptionist)
-        {
-            OnEndDayStaff(simulation, humanoid, humanoid.Profile);
-            if (humanoid.Profile.Class == StaffClass.Doctor)
-            {
-                Tiredness.CheckCrazy(simulation, humanoid);
-            }
         }
     }
 
@@ -151,10 +157,7 @@ internal static class Feelings
     /// <summary>The staff's part of <c>Staff:tickDay</c>.</summary>
     private static void OnEndDayStaff(Simulation simulation, Humanoid humanoid, StaffProfile profile)
     {
-        // Paid too little makes unhappy, too much happy.
-        var fairWage = profile.FairWage(simulation.Rules.Staff);
-        ChangeHappiness(simulation, humanoid, 0.05m * (profile.Wage - fairWage) / (fairWage != 0 ? fairWage : 1));
-
+        // Pay against the expected wage counts once a month (StaffEmployment.OnEndMonth), warmth every ModifyFreq ticks.
         // Working while tired makes unhappy, resting happier.
         Tiredness.OnEndDay(simulation, humanoid);
 
