@@ -209,11 +209,21 @@ public sealed class OriginalTexts
     }
 
     /// <summary>
-    /// A VIP's name, 1 to 10 (CorsixTH's <c>vip_names[n]</c>, <c>S[42][n + 1]</c>; <c>S[42][1]</c> is the health
-    /// minister), or null if missing.
+    /// A VIP's name, 1 to 11, or null if missing: 1 to 10 are CorsixTH's <c>vip_names[n]</c> (<c>S[42][n + 1]</c>), 11 is
+    /// the section's first string, the health minister (<c>vip_names.health_minister</c>), whom the original game's VIP
+    /// can also be (eleven names, as the community describes it).
     /// </summary>
-    public string? VipName(int number) =>
-        number < 1 ? null : Named("vip_names." + number.ToString(CultureInfo.InvariantCulture)) ?? _strings.Get(VipNamesSection, number);
+    public string? VipName(int number) => number switch
+    {
+        < 1 => null,
+        HealthMinisterVip => NonEmpty(Named("vip_names.health_minister") ?? _strings.Get(VipNamesSection, 0)),
+        _ => NonEmpty(Named("vip_names." + number.ToString(CultureInfo.InvariantCulture)) ?? _strings.Get(VipNamesSection, number)),
+    };
+
+    /// <summary>The VIP number standing for the health minister.</summary>
+    private const int HealthMinisterVip = 11;
+
+    private static string? NonEmpty(string? text) => string.IsNullOrEmpty(text) ? null : text;
 
     private static Dictionary<string, IReadOnlyList<string>> ParseRoomDescriptions(StringTable strings)
     {

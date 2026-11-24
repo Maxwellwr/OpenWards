@@ -672,8 +672,8 @@ public sealed class ResearchDepartment
 
     internal static ResearchDepartment Read(SimReader reader)
     {
-        // Version 110 has the pool and the specification's improvements; older saves kept CorsixTH's points.
-        var old = reader.Version is not 0 and < 110;
+        // Version 111 has the pool and the specification's improvements; older saves kept CorsixTH's points.
+        var old = reader.Version is not 0 and < 111;
         var research = new ResearchDepartment();
         if (!old)
         {

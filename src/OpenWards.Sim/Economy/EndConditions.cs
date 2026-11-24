@@ -200,6 +200,49 @@ public sealed class EndConditions
 
     private static int Sign(EndGoal goal) => goal.AtLeast ? 1 : -1;
 
+    /// <summary>The level score of a hospital that meets every goal of a win group.</summary>
+    public const int FullScore = 100;
+
+    /// <summary>The level score of a hospital now (<see cref="Score(Func{EndCriterion, decimal?})"/>).</summary>
+    public int Score(Simulation simulation, Hospital hospital) => Score(criterion => Measure(simulation, hospital, criterion));
+
+    /// <summary>
+    /// The community specification's level score, 0 to 100, which the player's raises go by: for each win group the mean
+    /// of its goals' percentages, the best group counting. A goal met gives 100; one not met ⌊measure × 100 / goal⌋ for
+    /// "at least" or ⌊goal × 100 / measure⌋ for "at most", always below 100. So 100 means a whole group is met. A level
+    /// without win goals scores 0.
+    /// </summary>
+    public int Score(Func<EndCriterion, decimal?> measure)
+    {
+        ArgumentNullException.ThrowIfNull(measure);
+        var best = 0;
+        foreach (var group in Groups(WinGoals))
+        {
+            var sum = group.Sum(goal => GoalPercent(goal, measure(goal.Criterion)));
+            best = Math.Max(best, sum / group.Count);
+        }
+
+        return best;
+    }
+
+    private static int GoalPercent(EndGoal goal, decimal? measure)
+    {
+        if (measure is not { } value)
+        {
+            return 0;
+        }
+
+        if ((value - goal.Value) * Sign(goal) >= 0)
+        {
+            return FullScore;
+        }
+
+        var percent = goal.AtLeast
+            ? (goal.Value > 0 ? value * 100 / goal.Value : 0)
+            : (value > 0 ? goal.Value * 100m / value : 0);
+        return Math.Clamp((int)decimal.Floor(percent), 0, FullScore - 1);
+    }
+
     /// <summary><c>EndConditions:_checkWinGroup</c>: the share of the group's goals the hospital meets.</summary>
     private static decimal WinScore(Simulation simulation, Hospital hospital, IReadOnlyList<EndGoal> group)
     {

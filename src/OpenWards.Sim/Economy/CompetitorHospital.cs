@@ -267,15 +267,30 @@ public sealed class CompetitorHospital
     /// from 51,660; the others 55,690 from 54,660 and 58,690 from 55,660, a thousand less and more), and the year's
     /// patients start afresh.
     /// </summary>
-    internal void OnEndYear(SimRandom random)
+    internal void OnEndYear(int score, int scoreMaxIncrease)
     {
         VisitorsThisYear = 0;
-        PlayerSalary = Hospital.RaisedSalary(PlayerSalary, random);
+        PlayerSalary = Hospital.RaisedSalary(PlayerSalary, score, StartSalary, scoreMaxIncrease);
         if (Value > 0)
         {
             Value += YearEndValueRise;
         }
     }
+
+    /// <summary>
+    /// What a win criterion measures for the computer player, for its level score: reputation, balance, the cured and
+    /// killed shares of its visitors, cures and value; nothing for the rest.
+    /// </summary>
+    internal decimal? Measure(EndCriterion criterion) => criterion switch
+    {
+        EndCriterion.Reputation => Reputation,
+        EndCriterion.Balance => Balance,
+        EndCriterion.PercentageCured => Visitors > 0 ? Cured * 100m / Visitors : 0,
+        EndCriterion.NumCured => Cured,
+        EndCriterion.PercentageKilled => Visitors > 0 ? Deaths * 100m / Visitors : 0,
+        EndCriterion.Value => Value,
+        _ => null,
+    };
 
     internal void Write(SimWriter writer)
     {

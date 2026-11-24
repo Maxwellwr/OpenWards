@@ -224,6 +224,9 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
     /// <summary>The level's outcome when last looked, so that winning or losing opens the level's end.</summary>
     private EndOutcome _lastOutcome;
 
+    /// <summary>The letters offering the next level when last looked, so that another after a refusal opens the fax.</summary>
+    private int _lastSalaryOffers;
+
     /// <summary>Whether a countdown ran when last looked, so that a new one opens the watch.</summary>
 
     /// <summary>The faxes waiting when last looked, so that a new one opens the faxes window.</summary>
@@ -1255,6 +1258,7 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
         _levelIndex = index;
         _lastYearSeen = null;
         _lastOutcome = EndOutcome.None;
+        _lastSalaryOffers = 0;
         _session?.Dispose();
         _session = null;
         try
@@ -3516,7 +3520,16 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
             }
         }
 
+        else if (hospital.Outcome == EndOutcome.Won && hospital.SalaryOffers > _lastSalaryOffers && hospital.SalaryOffer > 0
+            && ((IWindowHost)this).HasNextLevel && FaxScreen.IsAvailable(this))
+        {
+            // Turned down, the next level is offered again at the end of a quarter while every goal of a group is met.
+            _winLetterPending = true;
+            _windows.Open(new FaxWindow());
+        }
+
         _lastOutcome = hospital.Outcome;
+        _lastSalaryOffers = hospital.SalaryOffers;
         if (HotkeyInput.Pressed(_hotkeys["ingame_toggleAdvisor"], keys, pressed))
         {
             ToggleAdviser();
@@ -3755,7 +3768,11 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
 
     bool IWindowHost.IsWinLetterPending => _winLetterPending && Simulation is { } simulation && _session is not null && simulation.Hospitals[_session.Player].Outcome == EndOutcome.Won;
 
-    void IWindowHost.DeclineWinLetter() => _winLetterPending = false;
+    void IWindowHost.DeclineWinLetter()
+    {
+        _winLetterPending = false;
+        _session?.Submit(new DeclineSalaryOfferCommand());
+    }
 
     void IWindowHost.PickUpStaff(int staffId)
     {
@@ -3803,7 +3820,15 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
 
         _windows.CloseAll();
         var moveOn = next && _levelIndex + 1 < _levels.Count;
+
+        // Accepting the next level brings the offered salary to it.
+        var salary = moveOn && Simulation is { } finished ? finished.Hospitals[_session.Player].SalaryOffer : 0;
         SelectLevel(next ? Math.Min(_levelIndex + 1, _levels.Count - 1) : _levelIndex);
+        if (salary > 0 && _session is LocalSession started)
+        {
+            started.Simulation.Hospitals[started.Player].BringSalary(salary);
+        }
+
         if (moveOn)
         {
             // UIFax's accept_new_level: the board's movie to the next level, the original's by its number, a custom

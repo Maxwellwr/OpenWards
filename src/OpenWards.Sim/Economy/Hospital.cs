@@ -390,11 +390,20 @@ public sealed class Hospital
     /// <summary>The player's salary at the start of a level (<c>Hospital:Hospital</c>).</summary>
     public const long StartPlayerSalary = 10_000;
 
-    /// <summary>The least a salary rises in percent at the end of a year.</summary>
-    public const int LowestRaisePercent = 4;
+    /// <summary>The highest salary there is.</summary>
+    public const long MaxPlayerSalary = 200_000_000;
 
-    /// <summary>The most a salary rises in percent at the end of a year.</summary>
-    public const int HighestRaisePercent = 9;
+    /// <summary>Above this salary the year's raise always takes the table's column above the ceiling.</summary>
+    public const long RaiseCeilingSalary = 1_000_000;
+
+    /// <summary>The level scores (at most) of the year's raise table's rows, the last row for anything higher.</summary>
+    private static readonly int[] RaiseScores = [10, 60, 70, 75, 80, 90, 95, 100, 105, 110, 120, 130, 150, 175];
+
+    /// <summary>The year's raise in percent for each row, while the salary is below the ceiling.</summary>
+    private static readonly int[] RaisePercents = [0, 5, 6, 7, 8, 9, 10, 50, 55, 56, 58, 60, 62, 64, 65];
+
+    /// <summary>The year's raise in percent for each row once the salary is above the ceiling.</summary>
+    private static readonly int[] CeilingRaisePercents = [0, 0, 0, 0, 0, 2, 3, 4, 5, 5, 5, 6, 7, 7, 7];
 
     /// <summary>The longest name read back from a save.</summary>
     private const int MaxNameLength = 64;
@@ -721,8 +730,20 @@ public sealed class Hospital
     /// </summary>
     public string Name { get; internal set; } = string.Empty;
 
-    /// <summary>The salary offered for the next level on winning (<c>salary_offer</c>), 0 until then.</summary>
+    /// <summary>The salary offered for the next level on winning (<c>salary_offer</c>), 0 until then and after a refusal.</summary>
     public long SalaryOffer { get; private set; }
+
+    /// <summary>The player's salary when the level started, which the year's raise measures its ceiling from.</summary>
+    public long StartSalary { get; private set; } = StartPlayerSalary;
+
+    /// <summary>How many letters offering the next level have come; each new one is another letter to show.</summary>
+    public int SalaryOffers { get; private set; }
+
+    /// <summary>Whether the player turned the next level down to play on.</summary>
+    public bool IsSalaryOfferDeclined { get; private set; }
+
+    /// <summary>Whether the next quarter's check for another offer is skipped, the first after a refusal.</summary>
+    public bool SkipsNextSalaryOffer { get; private set; }
 
     /// <summary>Patients sent to the hospital so far, whether they came or not (CorsixTH's <c>spawn_attempts</c>).</summary>
     public long SpawnAttempts { get; internal set; }
@@ -1376,30 +1397,96 @@ public sealed class Hospital
             LostTo = lostTo;
             if (outcome == EndOutcome.Won)
             {
-                var bonusRate = random.NextInclusive(4, 9);
-                var bonus = Cheated ? 0m : PlayerSalary * bonusRate / 100m;
-                SalaryOffer = (long)decimal.Floor(PlayerSalary + bonus);
+                OfferSalary(EndConditions.FullScore, random);
             }
         }
     }
 
     /// <summary>
+    /// The letter offering the next level, as the community's specification describes it: the salary times
+    /// (score / 2 + rnd(55, 60)) %, at most <see cref="MaxPlayerSalary"/>; at a score of 100 that is 5 to 9 % more,
+    /// mostly 7. A hospital that cheated gets no more than it has.
+    /// </summary>
+    internal void OfferSalary(int score, SimRandom random)
+    {
+        var percent = (score / 2) + random.Triangular(55, 60);
+        SalaryOffer = Cheated ? PlayerSalary : Math.Min(MaxPlayerSalary, PlayerSalary * percent / 100);
+        SalaryOffers++;
+    }
+
+    /// <summary>
+    /// The player turns the next level down and plays on: the offer goes, and comes again at the end of the third, sixth
+    /// or ninth month while the score stays at 100, the first of those checks skipped.
+    /// </summary>
+    internal void DeclineSalaryOffer()
+    {
+        if (Outcome != EndOutcome.Won || SalaryOffer <= 0)
+        {
+            return;
+        }
+
+        SalaryOffer = 0;
+        IsSalaryOfferDeclined = true;
+        SkipsNextSalaryOffer = true;
+    }
+
+    /// <summary>The end of March, June or September after a refusal: another offer if the score is still 100.</summary>
+    internal void CheckSalaryOfferAgain(int score, SimRandom random)
+    {
+        if (!IsSalaryOfferDeclined || SalaryOffer > 0)
+        {
+            return;
+        }
+
+        if (SkipsNextSalaryOffer)
+        {
+            SkipsNextSalaryOffer = false;
+            return;
+        }
+
+        if (score >= EndConditions.FullScore)
+        {
+            OfferSalary(score, random);
+        }
+    }
+
+    /// <summary>
+    /// The salary the player brings to a level from the one before, set before the level's first tick: it is also the
+    /// start the year's raise measures its ceiling from.
+    /// </summary>
+    public void BringSalary(long salary)
+    {
+        PlayerSalary = Math.Clamp(salary, 0, MaxPlayerSalary);
+        StartSalary = PlayerSalary;
+    }
+
+    /// <summary>
     /// The year end's raise, as in the original rather than CorsixTH (whose <c>Hospital:onEndMonth</c> raises the salary
     /// each month by up to <c>gbv.ScoreMaxInc</c>): the salary stays the same all year and rises on 1 January by a whole
-    /// percentage, rounded down. Saves of the original show it: 69,935 from September to December and 74,131 (6 % more)
-    /// from 1 January to May; the computer players' 11,236 and 11,130 are 10,000 raised twice by 6 % and by 5 % and 6 %,
-    /// and became 12,247 (9 %), 11,910 (6 %) and 11,797 or 11,909 (6 % or 7 %). How the percentage is chosen is not known;
-    /// it is drawn from <see cref="LowestRaisePercent"/> to <see cref="HighestRaisePercent"/>, the range of CorsixTH's
-    /// bonus on winning a level.
+    /// percentage, rounded down (saves of the original: 69,935 from September to December, 74,131 from 1 January). The
+    /// percentage comes from the community specification's table by the level score: the first row whose score is at
+    /// least it, from the ordinary column while the salary is at most <paramref name="scoreMaxIncrease"/> % of
+    /// <paramref name="startSalary"/> and at most <see cref="RaiseCeilingSalary"/>, otherwise from the column above the
+    /// ceiling; never above <see cref="MaxPlayerSalary"/> and never down.
     /// </summary>
-    internal static long RaisedSalary(long salary, SimRandom random) =>
-        RaisedSalary(salary, random.NextInclusive(LowestRaisePercent, HighestRaisePercent));
+    internal static long RaisedSalary(long salary, int score, long startSalary, int scoreMaxIncrease)
+    {
+        var row = 0;
+        while (row < RaiseScores.Length && score > RaiseScores[row])
+        {
+            row++;
+        }
+
+        var belowCeiling = salary <= startSalary * scoreMaxIncrease / 100 && salary <= RaiseCeilingSalary;
+        var percent = belowCeiling ? RaisePercents[row] : CeilingRaisePercents[row];
+        return Math.Max(salary, Math.Min(MaxPlayerSalary, RaisedSalary(salary, percent)));
+    }
 
     /// <summary>A salary raised by a whole percentage, rounded down.</summary>
     internal static long RaisedSalary(long salary, int percent) => salary * (100 + percent) / 100;
 
-    /// <summary>The year end's raise of the player's salary (<see cref="RaisedSalary"/>).</summary>
-    internal void RaiseSalary(SimRandom random) => PlayerSalary = RaisedSalary(PlayerSalary, random);
+    /// <summary>The year end's raise of the player's salary by the level score (<see cref="RaisedSalary(long, int, long, int)"/>).</summary>
+    internal void RaiseSalary(int score, int scoreMaxIncrease) => PlayerSalary = RaisedSalary(PlayerSalary, score, StartSalary, scoreMaxIncrease);
 
     /// <summary>The year's this-year counts of an imported game, which the year's awards go by.</summary>
     internal void ImportYear(int visitors, int cured, int deaths, int notCured, int lowestReputation)
@@ -1478,6 +1565,7 @@ public sealed class Hospital
         VisitorsThisYear = 0;
         Vips.ThisYear = 0;
         Vips.PleasedThisYear = 0;
+        Vips.ScoreSumThisYear = 0;
         CuredThisYear = 0;
         NotCuredThisYear = 0;
         DeathsThisYear = 0;
@@ -1680,6 +1768,10 @@ public sealed class Hospital
         writer.WriteBool(Cheated);
         writer.WriteInt64(PlayerSalary);
         writer.WriteInt64(SalaryOffer);
+        writer.WriteInt64(StartSalary);
+        writer.WriteInt32(SalaryOffers);
+        writer.WriteBool(IsSalaryOfferDeclined);
+        writer.WriteBool(SkipsNextSalaryOffer);
         writer.WriteByte((byte)ActiveCheats);
         writer.WriteInt64(SpawnAttempts);
         writer.WriteInt32(RadiatorHeat);
@@ -1879,6 +1971,18 @@ public sealed class Hospital
         hospital.Cheated = reader.ReadBool();
         hospital.PlayerSalary = reader.ReadInt64();
         hospital.SalaryOffer = reader.ReadInt64();
+        if (reader.Version is 0 or >= 110)
+        {
+            hospital.StartSalary = reader.ReadInt64();
+            hospital.SalaryOffers = reader.ReadInt32();
+            hospital.IsSalaryOfferDeclined = reader.ReadBool();
+            hospital.SkipsNextSalaryOffer = reader.ReadBool();
+        }
+        else
+        {
+            hospital.SalaryOffers = hospital.SalaryOffer > 0 ? 1 : 0;
+        }
+
         var cheats = reader.ReadByte();
         hospital.ActiveCheats = cheats <= (byte)ToggleCheats.All ? (ToggleCheats)cheats : throw new InvalidDataException($"Unknown toggle cheats {cheats}.");
         hospital.SpawnAttempts = reader.ReadInt64();
@@ -1935,8 +2039,8 @@ public sealed class Hospital
             entry.Reputation = hasReputation ? diseaseReputation : null;
             entry.TurnedAway = reader.ReadInt32();
 
-            // Version 110 researches drugs; older games keep every drug they had.
-            entry.DrugAvailable = reader.Version is not 0 and < 110 || reader.ReadBool();
+            // Version 111 researches drugs; older games keep every drug they had.
+            entry.DrugAvailable = reader.Version is not 0 and < 111 || reader.ReadBool();
             if (DiseaseCatalog.Find(id) is { } disease && !OpenWards.Sim.Research.ResearchDepartment.IsDrugDisease(disease))
             {
                 // Games imported before the fix took the original's 0 for these, and their patients all died.

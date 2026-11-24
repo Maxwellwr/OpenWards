@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 110;
+    private const int FormatVersion = 111;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -83,7 +83,6 @@ public sealed class Simulation
             _hospitals[player].ChooseInsurers(new SimRandom(seed, sequence: 0x1A5u + (ulong)player));
 
             _hospitals[player].ScheduleNextDisaster(Random, Rules.Difficulty);
-            _hospitals[player].Vips.ScheduleNext(Random, Rules.MayorLaunch, today: 0);
             Emergencies.Start(this, _hospitals[player]);
 
             // CorsixTH's Hospital:Hospital: the rooms of the level whose objects are all there from the start.
@@ -913,10 +912,15 @@ public sealed class Simulation
 
         foreach (var hospital in _hospitals)
         {
-            // PlayerHospital:onEndMonth looks for a win at the end of March, June and September, before the wages.
+            // PlayerHospital:onEndMonth looks for a win at the end of March, June and September, before the wages; a
+            // player who turned the next level down may be offered it again then.
             if (date.Month is 3 or 6 or 9)
             {
                 CheckEndConditions(hospital, mayLose: false);
+                if (hospital.Outcome == EndOutcome.Won)
+                {
+                    hospital.CheckSalaryOfferAgain(Rules.EndConditions.Score(this, hospital), Random);
+                }
             }
 
             // The logic specification's order: wages, the insurers' payments, heating, then interest on the loan and the
@@ -933,7 +937,7 @@ public sealed class Simulation
             if (date.IsLastDayOfYear)
             {
                 hospital.OnEndYear(Hours, Random, Rules.Awards);
-                hospital.RaiseSalary(Random);
+                hospital.RaiseSalary(Rules.EndConditions.Score(this, hospital), Rules.ScoreMaxIncrease);
 
                 // Hospital:onEndYear: at the end of the third year of level 3 the salary rises a lot, as in the original.
                 if (date.Year == 3 && Rules.LevelNumber == 3)
@@ -953,7 +957,7 @@ public sealed class Simulation
             competitor.OnEndMonth(date.MonthOfGame, Random);
             if (date.IsLastDayOfYear)
             {
-                competitor.OnEndYear(Random);
+                competitor.OnEndYear(Rules.EndConditions.Score(competitor.Measure), Rules.ScoreMaxIncrease);
             }
         }
 

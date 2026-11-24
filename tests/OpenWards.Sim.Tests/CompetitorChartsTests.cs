@@ -57,10 +57,10 @@ public class CompetitorChartsTests
         // MULTIVAC on level 4: 11,236 and 51,660 on 31 December, 12,247 and 53,690 on 1 January.
         var opponent = new CompetitorHospital(1, "MULTIVAC");
         opponent.Import(new ImportedCompetitor("MULTIVAC", 532, 169, Value: 51_660, Salary: 11_236));
-        opponent.OnEndYear(new SimRandom(5));
+        opponent.OnEndYear(90, 300);
 
         Assert.Equal(51_660 + CompetitorHospital.YearEndValueRise, opponent.Value);
-        Assert.Contains(opponent.PlayerSalary, Enumerable.Range(Hospital.LowestRaisePercent, Hospital.HighestRaisePercent - Hospital.LowestRaisePercent + 1).Select(p => 11_236L * (100 + p) / 100));
+        Assert.Equal(12_247, opponent.PlayerSalary);
         Assert.Equal(0, opponent.VisitorsThisYear);
     }
 

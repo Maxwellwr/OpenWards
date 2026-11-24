@@ -19,7 +19,7 @@ public sealed class FaxScreenTests
     {
         var host = new WindowTestHost();
         var hospital = host.Simulation.Hospitals[0];
-        OpenWards.Sim.Economy.VipVisits.OnVipLeft(host.Simulation, hospital, new OpenWards.Sim.People.VipBehaviour(3, 2));
+        OpenWards.Sim.Economy.VipVisits.OnVipLeft(host.Simulation, hospital, new OpenWards.Sim.People.VipBehaviour(3) { Score = -4 });
         var fax = new FaxWindow();
         var message = Assert.Single(fax.Messages(host));
         var choice = Assert.Single(message.Choices);

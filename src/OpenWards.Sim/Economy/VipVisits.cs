@@ -1,7 +1,7 @@
-// VIP visits, ported from CorsixTH CorsixTH/Lua/world.lua (World:onEndDay's VIP check, spawnVIP, nextVip,
-// _generateNextVipDate), app.lua (math.t_random), hospital.lua (vip_declined, num_vips, num_vips_ty, pleased_vips_ty),
-// hospitals/player_hospital.lua (PlayerHospital:createVip) and dialogs/fullscreen/fax.lua (UIFax:choice for
-// accept_vip and refuse_vip).
+// VIP visits. The visit's walk and the faxes started from CorsixTH CorsixTH/Lua/world.lua (spawnVIP),
+// hospitals/player_hospital.lua (PlayerHospital:createVip) and dialogs/fullscreen/fax.lua (UIFax:choice for accept_vip
+// and refuse_vip); math.t_random is app.lua's. When a VIP comes and how the visit is scored follow the community's
+// description of the original game (the logic specification), not CorsixTH.
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using OpenWards.Sim.Calendar;
@@ -11,21 +11,49 @@ using OpenWards.Sim.Serialization;
 
 namespace OpenWards.Sim.Economy;
 
+/// <summary>Where a hospital's VIP visit stands (the original game's states 0 to 4).</summary>
+public enum VipState : byte
+{
+    /// <summary>No visit: the days since the last VIP count up.</summary>
+    None = 0,
+
+    /// <summary>A fax asks whether the VIP may come.</summary>
+    Invited = 1,
+
+    /// <summary>The VIP accepted and is on the way.</summary>
+    Travelling = 2,
+
+    /// <summary>The VIP is in the hospital.</summary>
+    Visiting = 3,
+
+    /// <summary>The visit is over; the next comes when the timer runs out.</summary>
+    Over = 4,
+}
+
 /// <summary>
-/// A hospital's VIPs: when the next one asks to visit, the fax asking (which accepts itself after 20 days), and how
-/// many came and left pleased.
+/// A hospital's VIPs. A VIP asks to visit strictly by the timer: <see cref="LevelRules.MayorLaunch"/> days after the
+/// last one asked, once the hospital has a reception desk. Refusing costs nothing; accepting (or leaving the fax
+/// unanswered) brings the VIP <see cref="TravelTicks"/> ticks later. On leaving they score the whole hospital, the lower
+/// the better, and the score decides the grant and the reputation.
 /// </summary>
 /// <remarks>
-/// CorsixTH keeps the next VIP's date in the world and invites VIPs to the local player's hospital only; here each
-/// hospital has its own.
+/// CorsixTH draws each visit's date from a triangle 30 days around <c>MayorLaunch</c>, needs a room and a staffed desk,
+/// lets a VIP refused three times come anyway one time in two, and rates the visit from 1 to 15 by what the VIP saw on
+/// the way (litter, deaths, cures, queues, the rooms' furniture). Reputation does not change how often VIPs come.
 /// </remarks>
 public sealed class VipVisits
 {
-    /// <summary>How many VIP names there are (<c>_S.vip_names</c>).</summary>
-    public const int NameCount = 10;
+    /// <summary>How many VIP names there are.</summary>
+    public const int NameCount = 11;
 
-    /// <summary>The fax asking accepts the VIP after this many days (<c>Date.hoursPerDay() * 20</c>).</summary>
+    /// <summary>The fax asking accepts the VIP after this many days (CorsixTH's <c>Date.hoursPerDay() * 20</c>).</summary>
     public const int InvitationDays = 20;
+
+    /// <summary>Ticks from accepting to the VIP's arrival (about 30 days).</summary>
+    public const int TravelTicks = 1500;
+
+    /// <summary>The worst score that still raises reputation.</summary>
+    public const int PleasedScore = 3;
 
     /// <summary>A good VIP report brings this many percent of the visits in reputation points (about +20).</summary>
     public const int GoodReputationPercent = 4;
@@ -36,72 +64,61 @@ public sealed class VipVisits
     /// <summary>A bad VIP report costs this many percent of the visits (about −20).</summary>
     public const int BadReputationPercent = -4;
 
-    /// <summary>The worst rating that still counts as a middling report rather than a bad one.</summary>
-    public const int MiddlingRating = 10;
-
-    /// <summary>
-    /// The reputation of a VIP's report in percent of the visits, as the community describes the original game: good for a
-    /// pleased VIP (CorsixTH's ratings up to <see cref="VipBehaviour.PleasedRating"/>), middling for those CorsixTH still
-    /// gains reputation by, bad for the rest. CorsixTH instead adds 50 down to −25 by the rating.
-    /// </summary>
-    public static int ReputationPercent(int rating) =>
-        rating <= VipBehaviour.PleasedRating ? GoodReputationPercent : rating <= MiddlingRating ? MiddlingReputationPercent : BadReputationPercent;
-
-    /// <summary>What every VIP visit brings in free build mode (<c>Vip:onDestroy</c>).</summary>
+    /// <summary>What every VIP visit brings in free build mode (CorsixTH's <c>Vip:onDestroy</c>).</summary>
     public const int FreeBuildReputationReward = 20;
 
-    /// <summary>How far, in days, a visit may come before or after the level's average (<c>_generateNextVipDate</c>'s bound).</summary>
-    private const int Bound = 30;
+    /// <summary>The grant by score, from −5 or less up to 1; none from 2 on.</summary>
+    private static readonly int[] Grants = [4000, 2000, 1500, 1200, 800, 400, 200];
 
-    /// <summary>The day (counted from the start of the game) on which the next VIP asks to visit.</summary>
-    public long NextVipDay { get; internal set; }
+    /// <summary>The lowest score with a grant of its own; anything lower counts as this.</summary>
+    private const int BestScore = -5;
 
-    /// <summary>The name (1 to <see cref="NameCount"/>) of the VIP asking to visit, or 0 when nobody asks.</summary>
+    /// <summary>The visit's state.</summary>
+    public VipState State { get; internal set; }
+
+    /// <summary>Days since a VIP last asked to visit (or since the game began).</summary>
+    public int DaysSinceLast { get; internal set; }
+
+    /// <summary>The name (1 to <see cref="NameCount"/>) of the VIP asking, on the way or visiting, or 0 when there is none.</summary>
     public int InvitedName { get; internal set; }
 
     /// <summary>The tick at which the fax asking accepts the VIP by itself.</summary>
     public long InvitationExpires { get; internal set; }
 
-    /// <summary>VIPs refused in a row (<c>vip_declined</c>).</summary>
-    public int Declined { get; internal set; }
+    /// <summary>The tick at which an accepted VIP arrives.</summary>
+    public long ArrivalTick { get; internal set; }
 
-    /// <summary>VIPs who came (<c>num_vips</c>).</summary>
+    /// <summary>VIPs who came.</summary>
     public int Count { get; internal set; }
 
-    /// <summary>VIPs who made their report this year (<c>num_vips_ty</c>).</summary>
+    /// <summary>VIPs who made their report this year.</summary>
     public int ThisYear { get; internal set; }
 
-    /// <summary>VIPs who left pleased this year (<c>pleased_vips_ty</c>).</summary>
+    /// <summary>VIPs whose report raised reputation this year (a score up to <see cref="PleasedScore"/>).</summary>
     public int PleasedThisYear { get; internal set; }
 
+    /// <summary>The VIPs' scores this year added up, for the year's mayor trophy.</summary>
+    public int ScoreSumThisYear { get; internal set; }
+
     /// <summary>Whether a VIP is asking to visit.</summary>
-    public bool IsInvitationPending => InvitedName != 0;
+    public bool IsInvitationPending => State == VipState.Invited;
 
     /// <summary>
-    /// The last visit's report (<c>PlayerHospital:makeVipEndFax</c>), kept for the fax until it expires 20 days after
-    /// the VIP left, or null.
+    /// The last visit's report (CorsixTH's <c>PlayerHospital:makeVipEndFax</c>), kept for the fax until it expires 20
+    /// days after the VIP left, or null.
     /// </summary>
     public VipReport? Report { get; internal set; }
 
-    /// <summary><c>World:nextVip</c>: the next VIP comes some days after <paramref name="today"/>.</summary>
-    internal void ScheduleNext(SimRandom random, int mayorLaunch, long today) => NextVipDay = today + DaysUntilNext(random, mayorLaunch);
+    /// <summary>The grant a score brings: $4,000 for −5 or less, down to $200 for 1, nothing from 2 on.</summary>
+    public static int Grant(int score) => score > 1 ? 0 : Grants[Math.Max(score, BestScore) - BestScore];
 
-    /// <summary>
-    /// <c>World:_generateNextVipDate</c>: days drawn from a triangular distribution around the level's
-    /// <c>gbv.MayorLaunch</c>, 30 days either side (but at least a day), rounded.
-    /// </summary>
-    internal static long DaysUntilNext(SimRandom random, int mayorLaunch)
-    {
-        var mean = Math.Max(mayorLaunch, 1);
-        var lower = Math.Max(mean - Bound, 1);
-        var upper = mean + Bound;
-        var days = (long)Math.Floor(TriangularRandom(random, lower, mean, upper) + 0.5m);
-        return Math.Max(days, 1);
-    }
+    /// <summary>The reputation a score brings in percent of the visits: +4 up to −2, +2 up to 3, −4 from 4 on.</summary>
+    public static int ReputationPercent(int score) =>
+        score <= -2 ? GoodReputationPercent : score <= PleasedScore ? MiddlingReputationPercent : BadReputationPercent;
 
     /// <summary>
     /// <c>math.t_random(a, c, b)</c>: a number from <paramref name="a"/> to <paramref name="b"/>, most likely near
-    /// <paramref name="c"/>. CorsixTH asserts a &lt; c; with a = c (a level's <c>MayorLaunch</c> of 1) the peak is at a.
+    /// <paramref name="c"/>.
     /// </summary>
     internal static decimal TriangularRandom(SimRandom random, decimal a, decimal c, decimal b)
     {
@@ -114,87 +131,96 @@ public sealed class VipVisits
     }
 
     /// <summary>
-    /// The end of a day (<c>World:onEndDay</c>): on the day of the next visit a VIP asks to come, if the hospital has
-    /// a room and a staffed reception desk; otherwise the visit is put off.
+    /// The end of a day: the days since the last VIP count up, and once they reach <see cref="LevelRules.MayorLaunch"/>
+    /// with no visit under way and a reception desk in the hospital, a VIP asks to come. A visit whose VIP is gone from
+    /// the map some other way is over.
     /// </summary>
     internal static void OnEndDay(Simulation simulation, Hospital hospital)
     {
+        var vips = hospital.Vips;
+        vips.DaysSinceLast++;
+        if (vips.State == VipState.Visiting && !IsVipOnMap(simulation, hospital.Player))
+        {
+            vips.State = VipState.Over;
+            vips.InvitedName = 0;
+        }
+
         var shared = Disasters.Emergencies.IsShared(simulation);
         if (shared && hospital.Player != 0)
         {
             return;
         }
 
-        var vips = hospital.Vips;
-        var today = simulation.Hours / GameDate.HoursPerDay;
-        if (today != vips.NextVipDay)
+        if (vips.State is not (VipState.None or VipState.Over) || vips.DaysSinceLast < Math.Max(simulation.Rules.MayorLaunch, 1))
         {
             return;
         }
 
-        if (shared)
+        if (!shared)
         {
-            // The network game: the VIP asks every hospital that could receive them at once, planned by the first
-            // hospital's schedule; the first to accept receives the visit (NETPLAY.TXT, "Emergencies & VIP Visits").
-            int? name = null;
-            long expires = 0;
-            foreach (var each in simulation.Hospitals)
+            if (HasDesk(simulation, hospital.Player))
             {
-                if (!each.Vips.IsInvitationPending && HasRoom(simulation, each.Player) && ReceptionDesks.OfHospital(simulation, each.Player, staffedOnly: true).Any())
+                Invite(simulation, hospital);
+            }
+
+            return;
+        }
+
+        // The network game: the VIP asks every hospital that could receive them at once, by the first hospital's timer;
+        // the first to accept receives the visit (NETPLAY.TXT, "Emergencies & VIP Visits").
+        int? name = null;
+        foreach (var each in simulation.Hospitals)
+        {
+            if (each.Vips.State is (VipState.None or VipState.Over) && HasDesk(simulation, each.Player))
+            {
+                if (name is null)
                 {
-                    if (name is null)
-                    {
-                        Invite(simulation, each);
-                        (name, expires) = (each.Vips.InvitedName, each.Vips.InvitationExpires);
-                    }
-                    else
-                    {
-                        each.Vips.InvitedName = name.Value;
-                        each.Vips.InvitationExpires = expires;
-                    }
+                    Invite(simulation, each);
+                    name = each.Vips.InvitedName;
+                }
+                else
+                {
+                    each.Vips.State = VipState.Invited;
+                    each.Vips.InvitedName = name.Value;
+                    each.Vips.InvitationExpires = vips.InvitationExpires;
                 }
             }
-
-            if (name is null)
-            {
-                vips.ScheduleNext(simulation.Random, simulation.Rules.MayorLaunch, today);
-            }
-
-            return;
         }
 
-        if (HasRoom(simulation, hospital.Player) && ReceptionDesks.OfHospital(simulation, hospital.Player, staffedOnly: true).Any())
+        if (name is not null)
         {
-            Invite(simulation, hospital);
-        }
-        else
-        {
-            vips.ScheduleNext(simulation.Random, simulation.Rules.MayorLaunch, today);
+            vips.DaysSinceLast = 0;
         }
     }
 
-    /// <summary>
-    /// <c>PlayerHospital:createVip</c>: a fax from one of the VIPs asks to visit. The next visit is not planned until
-    /// this one is refused or over.
-    /// </summary>
+    /// <summary>A fax from one of the VIPs asks to visit, and the timer starts again.</summary>
     internal static void Invite(Simulation simulation, Hospital hospital)
     {
-        hospital.Vips.InvitedName = simulation.Random.NextInclusive(1, NameCount);
-        hospital.Vips.InvitationExpires = simulation.Tick + (InvitationDays * GameDate.HoursPerDay);
+        var vips = hospital.Vips;
+        vips.State = VipState.Invited;
+        vips.DaysSinceLast = 0;
+        vips.InvitedName = simulation.Random.NextInclusive(1, NameCount);
+        vips.InvitationExpires = simulation.Tick + (InvitationDays * GameDate.HoursPerDay);
     }
 
-    /// <summary>The fax runs out and takes its default choice, inviting the VIP (<c>queueMessage</c>'s timeout).</summary>
+    /// <summary>The fax runs out and takes its default choice, inviting the VIP; an invited VIP arrives on time.</summary>
     internal static void TickInvitation(Simulation simulation, Hospital hospital)
     {
-        if (hospital.Vips.IsInvitationPending && simulation.Tick >= hospital.Vips.InvitationExpires)
+        var vips = hospital.Vips;
+        if (vips.IsInvitationPending && simulation.Tick >= vips.InvitationExpires)
         {
             Answer(simulation, hospital.Player, accept: true);
         }
+        else if (vips.State == VipState.Travelling && simulation.Tick >= vips.ArrivalTick)
+        {
+            vips.Count++;
+            vips.State = Spawn(simulation, hospital, vips.InvitedName) is null ? VipState.Over : VipState.Visiting;
+        }
     }
 
     /// <summary>
-    /// <c>UIFax:choice</c>: an invited VIP comes; a refused one is put off, unless they were refused more than twice
-    /// before and decide, one time in two, to come anyway.
+    /// The fax's answer: an invited VIP sets off and arrives <see cref="TravelTicks"/> ticks later; a refused one does
+    /// not come, with no other consequence.
     /// </summary>
     internal static void Answer(Simulation simulation, int player, bool accept)
     {
@@ -203,112 +229,88 @@ public sealed class VipVisits
             return;
         }
 
-        var hospital = simulation.Hospitals[player];
-        var vips = hospital.Vips;
-        var name = vips.InvitedName;
-        if (Disasters.Emergencies.IsShared(simulation))
+        var vips = simulation.Hospitals[player].Vips;
+        if (Disasters.Emergencies.IsShared(simulation) && accept)
         {
-            // First come, first served: the first to accept receives the VIP and the others' invitations go; a refusal
-            // takes only this hospital's. The first hospital's schedule plans the next visit once nobody's is left.
-            var others = simulation.Hospitals.Where(other => other.Player != player && other.Vips.IsInvitationPending
-                && other.Vips.InvitedName == name && other.Vips.InvitationExpires == vips.InvitationExpires).ToList();
-            vips.InvitedName = 0;
-            if (accept)
+            // First come, first served: the first to accept receives the VIP and the others' invitations go.
+            foreach (var other in simulation.Hospitals)
             {
-                foreach (var other in others)
+                if (other.Player != player && other.Vips.IsInvitationPending && other.Vips.InvitedName == vips.InvitedName
+                    && other.Vips.InvitationExpires == vips.InvitationExpires)
                 {
+                    other.Vips.State = VipState.None;
                     other.Vips.InvitedName = 0;
                 }
             }
-
-            if (accept || others.Count == 0)
-            {
-                simulation.Hospitals[0].Vips.ScheduleNext(simulation.Random, simulation.Rules.MayorLaunch, simulation.Hours / GameDate.HoursPerDay);
-            }
-
-            if (accept)
-            {
-                vips.Count++;
-                Spawn(simulation, hospital, name);
-            }
-
-            return;
         }
 
-        vips.InvitedName = 0;
-        var ignoresRefusal = simulation.Random.NextInclusive(1, 2) == 2;
-        if (!accept && vips.Declined > 2 && ignoresRefusal)
+        if (accept)
         {
-            vips.Count++;
-            Spawn(simulation, hospital, name);
-            vips.Declined = 0;
-        }
-        else if (!accept)
-        {
-            vips.ScheduleNext(simulation.Random, simulation.Rules.MayorLaunch, simulation.Hours / GameDate.HoursPerDay);
-            vips.Declined++;
+            vips.State = VipState.Travelling;
+            vips.ArrivalTick = simulation.Tick + TravelTicks;
         }
         else
         {
-            vips.Count++;
-            Spawn(simulation, hospital, name);
+            vips.State = VipState.None;
+            vips.InvitedName = 0;
         }
     }
 
     /// <summary>
-    /// <c>World:spawnVIP</c>: the VIP comes in at a random spawn point and heads for reception, noting how the hospital
-    /// stands. In a hospital of more than 79 rooms they look into fewer of them.
+    /// CorsixTH's <c>World:spawnVIP</c>: the VIP comes in at a random spawn point and heads for reception. Without a
+    /// spawn point the visit is off.
     /// </summary>
     internal static Humanoid? Spawn(Simulation simulation, Hospital hospital, int name)
     {
         var points = simulation.Arrivals.SpawnPointsOf(simulation.Map);
         if (points.Count == 0)
         {
-            // CorsixTH needs a spawn point; without one the visit is off.
-            hospital.Vips.ScheduleNext(simulation.Random, simulation.Rules.MayorLaunch, simulation.Hours / GameDate.HoursPerDay);
             return null;
         }
 
-        // Vip:Vip draws the starting rating before the spawn point is chosen.
-        var rating = 12 - simulation.Random.NextInclusive(0, 5);
-        var rooms = RoomsOf(simulation, hospital.Player).Count();
         var spawn = points[simulation.Random.Next(points.Count)];
         var vip = simulation.AddEntity(id => Humanoid.CreateVip(id, spawn, hospital.Player));
-        vip.Behaviour = new VipBehaviour(name, rating)
-        {
-            EnterDeaths = hospital.Deaths,
-            EnterVisitors = hospital.Visitors,
-            EnterCures = hospital.Cured,
-            EnterPatients = PatientsOf(simulation, hospital.Player),
-            RoomVisitChance = rooms > 79 ? rooms / 40 : 1,
-        };
+        vip.Behaviour = new VipBehaviour(name);
         return vip;
     }
 
     /// <summary>
-    /// <c>Vip:onDestroy</c>: off the hospital grounds, the VIP's report brings a pleased hospital money and reputation,
-    /// and costs a displeased one reputation; in free build mode every visit brings 20 reputation and nothing else. Then
-    /// the next visit is planned.
+    /// Off the hospital grounds, the VIP's report: the grant for the score and the reputation in percent of the visits;
+    /// in free build mode every visit brings 20 reputation and nothing else. The visit is over.
     /// </summary>
     internal static void OnVipLeft(Simulation simulation, Hospital hospital, VipBehaviour vip)
     {
+        var vips = hospital.Vips;
+        var grant = 0;
+        var percent = 0;
         if (simulation.Rules.FreeBuild)
         {
             hospital.ShiftReputation(FreeBuildReputationReward);
         }
-        else if (vip.Rating <= VipBehaviour.PleasedRating)
-        {
-            hospital.Receive(simulation.Hours, vip.CashReward, TransactionKind.VipAward, string.Empty);
-            hospital.ChangeReputationPercent(ReputationPercent(vip.Rating));
-            hospital.Vips.PleasedThisYear++;
-        }
         else
         {
-            hospital.ChangeReputationPercent(ReputationPercent(vip.Rating));
+            grant = Grant(vip.Score);
+            percent = ReputationPercent(vip.Score);
+            if (grant > 0)
+            {
+                hospital.Receive(simulation.Hours, grant, TransactionKind.VipAward, string.Empty);
+            }
+
+            hospital.ChangeReputationPercent(percent);
+            vips.ScoreSumThisYear += vip.Score;
+            if (vip.Score <= PleasedScore)
+            {
+                vips.PleasedThisYear++;
+            }
         }
 
-        hospital.Vips.Report = new VipReport(vip.Name, vip.Rating, vip.CashReward, simulation.Tick + (InvitationDays * GameDate.HoursPerDay));
-        hospital.Vips.ScheduleNext(simulation.Random, simulation.Rules.MayorLaunch, simulation.Hours / GameDate.HoursPerDay);
+        vips.ThisYear++;
+        vips.Report = new VipReport(vip.Name, vip.Score, grant, percent, simulation.Tick + (InvitationDays * GameDate.HoursPerDay));
+        if (vips.State == VipState.Visiting)
+        {
+            vips.State = VipState.Over;
+            vips.InvitedName = 0;
+        }
     }
 
     /// <summary>Forgets the visit's report once its fax has expired.</summary>
@@ -332,63 +334,122 @@ public sealed class VipVisits
         }
     }
 
-    /// <summary>The patients of a hospital on the map (<c>#hospital.patients</c>).</summary>
-    internal static int PatientsOf(Simulation simulation, int player)
-    {
-        var count = 0;
-        foreach (var entity in simulation.Entities)
-        {
-            if (entity is Humanoid { Behaviour: PatientBehaviour, IsDespawning: false } patient && patient.HospitalPlayer == player)
-            {
-                count++;
-            }
-        }
-
-        return count;
-    }
-
     internal void Write(SimWriter writer)
     {
-        writer.WriteInt64(NextVipDay);
+        writer.WriteByte((byte)State);
+        writer.WriteInt32(DaysSinceLast);
         writer.WriteInt32(InvitedName);
         writer.WriteInt64(InvitationExpires);
-        writer.WriteInt32(Declined);
+        writer.WriteInt64(ArrivalTick);
         writer.WriteInt32(Count);
         writer.WriteInt32(ThisYear);
         writer.WriteInt32(PleasedThisYear);
+        writer.WriteInt32(ScoreSumThisYear);
         writer.WriteBool(Report is not null);
         if (Report is { } report)
         {
             writer.WriteInt32(report.Name);
-            writer.WriteInt32(report.Rating);
-            writer.WriteInt32(report.CashReward);
+            writer.WriteInt32(report.Score);
+            writer.WriteInt32(report.Grant);
+            writer.WriteInt32(report.ReputationPercent);
             writer.WriteInt64(report.Expires);
         }
     }
 
     internal static VipVisits Read(SimReader reader)
     {
+        var visits = reader.Version is 0 or >= SaveVersion ? ReadCurrent(reader) : ReadBeforeTimer(reader);
+        return visits.InvitedName is >= 0 and <= NameCount && visits.State <= VipState.Over
+            ? visits
+            : throw new InvalidDataException($"Unknown VIP name {visits.InvitedName} or state {visits.State}.");
+    }
+
+    /// <summary>The save version that brought the VIP timer and scores.</summary>
+    internal const int SaveVersion = 110;
+
+    private static VipVisits ReadCurrent(SimReader reader)
+    {
         var visits = new VipVisits
         {
-            NextVipDay = reader.ReadInt64(),
+            State = (VipState)reader.ReadByte(),
+            DaysSinceLast = reader.ReadInt32(),
             InvitedName = reader.ReadInt32(),
             InvitationExpires = reader.ReadInt64(),
-            Declined = reader.ReadInt32(),
+            ArrivalTick = reader.ReadInt64(),
+            Count = reader.ReadInt32(),
+            ThisYear = reader.ReadInt32(),
+            PleasedThisYear = reader.ReadInt32(),
+            ScoreSumThisYear = reader.ReadInt32(),
+        };
+        if (reader.ReadBool())
+        {
+            visits.Report = new VipReport(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt64());
+        }
+
+        return visits;
+    }
+
+    /// <summary>
+    /// A save from before the timer: the next VIP's day and the refusals are dropped and the timer starts afresh; a
+    /// report's rating from 1 to 15 becomes the score its remark stands for.
+    /// </summary>
+    private static VipVisits ReadBeforeTimer(SimReader reader)
+    {
+        _ = reader.ReadInt64();
+        var name = reader.ReadInt32();
+        var expires = reader.ReadInt64();
+        _ = reader.ReadInt32();
+        var visits = new VipVisits
+        {
+            State = name != 0 ? VipState.Invited : VipState.None,
+            InvitedName = name,
+            InvitationExpires = expires,
             Count = reader.ReadInt32(),
             ThisYear = reader.ReadInt32(),
             PleasedThisYear = reader.ReadInt32(),
         };
-        if ((reader.Version is 0 or >= 80) && reader.ReadBool())
+        if ((reader.Version >= 80) && reader.ReadBool())
         {
-            visits.Report = new VipReport(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt64());
+            var reportName = reader.ReadInt32();
+            var score = VipReport.ScoreOfRemark(reader.ReadInt32());
+            var grant = reader.ReadInt32();
+            visits.Report = new VipReport(reportName, score, grant, ReputationPercent(score), reader.ReadInt64());
         }
 
-        return visits.InvitedName is >= 0 and <= NameCount ? visits : throw new InvalidDataException($"Unknown VIP name {visits.InvitedName}.");
+        return visits;
     }
 
-    private static bool HasRoom(Simulation simulation, int player) => RoomsOf(simulation, player).Any();
+    private static bool HasDesk(Simulation simulation, int player) => ReceptionDesks.OfHospital(simulation, player, staffedOnly: false).Any();
+
+    private static bool IsVipOnMap(Simulation simulation, int player)
+    {
+        foreach (var entity in simulation.Entities)
+        {
+            if (entity is Humanoid { Behaviour: VipBehaviour, IsDespawning: false } vip && vip.HospitalPlayer == player)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
 
-/// <summary>A VIP's report on their visit: who, their rating (1 best to 15 worst), the grant, and when the fax expires.</summary>
-public readonly record struct VipReport(int Name, int Rating, int CashReward, long Expires);
+/// <summary>
+/// A VIP's report on their visit: who, their score (the lower the better), the grant, the reputation in percent of the
+/// visits, and when the fax expires.
+/// </summary>
+public readonly record struct VipReport(int Name, int Score, int Grant, int ReputationPercent, long Expires)
+{
+    /// <summary>How many remarks there are for a VIP's report (the original's strings 44, 196 to 210).</summary>
+    public const int RemarkCount = 15;
 
+    /// <summary>
+    /// Which of the 15 remarks, from 1 (glowing) to 15 (scathing), fits the score: −5 or less is 1, 3 is 9, and the
+    /// scores that cost reputation start at 11.
+    /// </summary>
+    public int Remark => Score <= VipVisits.PleasedScore ? Math.Clamp(Score + 6, 1, 9) : Math.Clamp(Score + 7, 11, RemarkCount);
+
+    /// <summary>The score a remark from an older save stands for.</summary>
+    internal static int ScoreOfRemark(int remark) => remark <= 9 ? remark - 6 : remark - 7;
+}
