@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 115;
+    private const int FormatVersion = 117;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -650,8 +650,8 @@ public sealed class Simulation
             simulation.MoneyRandom = SimRandom.FromState(reader.ReadUInt64(), reader.ReadUInt64());
         }
 
-        // Version 115 keeps the opponents' stream; older games start it from the game's.
-        if (version >= 115)
+        // Version 117 keeps the opponents' stream; older games start it from the game's.
+        if (version >= 117)
         {
             simulation.CompetitorRandom = SimRandom.FromState(reader.ReadUInt64(), reader.ReadUInt64());
         }

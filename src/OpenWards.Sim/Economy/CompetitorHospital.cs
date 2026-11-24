@@ -1079,12 +1079,12 @@ public sealed class CompetitorHospital
         var spawnAttempts = reader.ReadInt64();
         var visitors = reader.ReadInt32();
         var visitorsThisYear = reader.ReadInt32();
-        if (reader.Version is 0 or >= 115)
+        if (reader.Version is 0 or >= 117)
         {
             return ReadScenario(reader, number, name, spawnAttempts, visitors, visitorsThisYear);
         }
 
-        // Before version 115 an opponent was a model of its reputation and the year's charts; it keeps what the charts
+        // Before version 117 an opponent was a model of its reputation and the year's charts; it keeps what the charts
         // showed, and its scenario starts now, as after an import.
         var withReputation = reader.Version >= 103;
         var reputation = withReputation ? reader.ReadInt32() : startReputation;
