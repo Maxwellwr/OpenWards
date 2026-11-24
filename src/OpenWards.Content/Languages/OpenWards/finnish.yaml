@@ -260,9 +260,10 @@ strings:
     auction:
       caption: 'Tonttihuutokauppa'
       lot: 'Tontti %1%: tarjous $%2%, %3%'
-      hammer: 'Vasara lyö %1% tunnin päästä'
+      no_bids: 'Tontti %1%: ei vielä tarjouksia'
       bid: 'Tarjoa $%1%'
       sold: 'Tontti %1% myyty: %2%, $%3%'
+      unsold: 'Tonttia %1% ei myyty: kukaan ei tarjonnut'
     chat:
       caption: 'Keskustelu'
       none: 'Kukaan ei ole vielä sanonut mitään.'

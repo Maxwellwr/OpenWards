@@ -188,9 +188,10 @@ strings:
     auction:
       caption: 'Tomteauksjon'
       lot: 'Tomt %1%: bud på $%2% fra %3%'
-      hammer: 'Hammeren faller om %1% timer'
+      no_bids: 'Tomt %1%: ingen bud ennå'
       bid: 'By $%1%'
       sold: 'Tomt %1% solgt til %2% for $%3%'
+      unsold: 'Tomt %1% ble ikke solgt: ingen bød'
     chat:
       caption: 'Chat'
       none: 'Ingen har sagt noe ennå.'

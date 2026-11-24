@@ -2021,11 +2021,11 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
         var step = (shift ? 12 : 1) * ReplaySeekMonth;
         if (pressed(Keys.OemOpenBrackets))
         {
-            replay.Seek(replay.Simulation.Tick - step);
+            replay.Seek(replay.Simulation.Frame - step);
         }
         else if (pressed(Keys.OemCloseBrackets))
         {
-            replay.Seek(replay.Simulation.Tick + step);
+            replay.Seek(replay.Simulation.Frame + step);
         }
     }
 
@@ -3457,7 +3457,9 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
         {
             if (_lastAuctionSeen is not null || _auctionWatched)
             {
-                ShowNotice(UiText.Format("openwards.auction.sold", "Plot %1% sold to %2% for $%3%", sold.Parcel, ProgressReportScreen.HospitalName(this, sold.Winner), sold.Bid));
+                ShowNotice(sold.Winner < 0
+                    ? UiText.Format("openwards.auction.unsold", "Plot %1% was not sold: nobody bid", sold.Parcel)
+                    : UiText.Format("openwards.auction.sold", "Plot %1% sold to %2% for $%3%", sold.Parcel, ProgressReportScreen.HospitalName(this, sold.Winner), sold.Bid));
             }
 
             _lastAuctionSeen = sold;

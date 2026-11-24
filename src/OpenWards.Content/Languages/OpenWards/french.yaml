@@ -56,9 +56,10 @@ strings:
     auction:
       caption: 'Vente aux enchères'
       lot: 'Parcelle %1% : enchère de $%2% par %3%'
-      hammer: 'Adjugé dans %1% heures'
+      no_bids: 'Parcelle %1% : pas encore d''enchère'
       bid: 'Enchérir $%1%'
       sold: 'Parcelle %1% vendue à %2% pour $%3%'
+      unsold: 'Parcelle %1% invendue : personne n''a enchéri'
     chat:
       caption: 'Discussion'
       none: 'Personne n''a encore rien dit.'
