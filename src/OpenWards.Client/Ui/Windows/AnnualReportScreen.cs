@@ -334,7 +334,7 @@ internal sealed class AnnualReportScreen
         var entries = simulation.Hospitals
             .Select((h, i) => new ChartEntry(ProgressReportScreen.HospitalName(host, i), h.Balance - h.Loan, h.PlayerSalary, h.Cured, h.Deaths, h.Visitors, h.Value))
             .ToList();
-        entries.AddRange(simulation.Competitors.Select(c => new ChartEntry(c.Name, c.Balance, c.PlayerSalary, c.Cured, c.Deaths, c.Visitors, c.Value)));
+        entries.AddRange(simulation.Competitors.Select(c => new ChartEntry(c.Name, c.Balance - c.Loan, c.PlayerSalary, c.Cured, c.Deaths, c.Visitors, c.Value)));
         return entries;
     }
 

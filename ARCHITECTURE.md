@@ -400,11 +400,16 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   k = ⌊expected price × 100 / price⌋ from 50 to 150, as the original weighs it (not CorsixTH's
   `getDiseaseReputationPriceFactor`; `AllocTotalRep` is read but does not count). A patient sent to a
   hospital not yet open is lost. The level's computer opponents (`computer[n].Playing`, CorsixTH's
-  `AIHospital`) are `Simulation.Competitors`: not on the map, they count the patients sent to them as
-  visitors (`CompetitorHospital`). Unlike CorsixTH's they have a reputation, a model fitted to the computer
-  hospitals of the original's saves since nothing describes it: from `StartRep` it moves each month half way
-  to StartRep + 250 in the first three months, then to a standing drawn at the start (0 to +275 from
-  `StartRep`, ±50 for easy/hard), ±10 at random; they charge the expected price. Importing a save of the
+  `AIHospital`) are `Simulation.Competitors` (`CompetitorHospital`): not on the map, they play a scenario as the
+  logic specification describes the original. Once every 25 ticks, when its time has come, an opponent decides on an
+  action or carries it out (hire a receptionist, desk, 4 benches, GP's office, open, hire a doctor; then over and over
+  staff, a room, comfort objects and land, the loan), with ⌊clamp(Speed − rng % Skill, 1, 100) × delay / 10⌋ ticks
+  between; failed actions wait in 8 places to be tried again. It hires the most skilled candidate it can pay for from
+  the shared candidates, builds the rooms research has made available to the player, and borrows by the player's rules.
+  Its patients live through their stay at once (`Admit`): a room every five days, diagnosis by its staff's average
+  skill, leaving and dying by chance, guessing above its `GuessAt`; the outcomes reach it every five days.
+  Reputation (points × 500 / visits), value and the year's raise go by the player's rules. Its traits are drawn at
+  the start (the level files only name it), and it draws from a random stream of its own (`CompetitorRandom`). Importing a save of the
   original takes their reputations and patients from its computer players' blocks (by name, else in order). Each `Hospital` runs CorsixTH's opening
   watch (`UIWatch` "initial_opening"), 13 segments of 385 hours, and opens an hour after it has run
   down, 5006 hours (about 100 days) into the game. `OpenHospitalCommand` opens it early, as the watch's button does; the client's O

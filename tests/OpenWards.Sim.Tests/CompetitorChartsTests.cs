@@ -4,66 +4,9 @@ using OpenWards.Sim.Maps;
 
 namespace OpenWards.Sim.Tests;
 
-/// <summary>What the year's charts show of the computer opponents, fitted to saves of the original.</summary>
+/// <summary>What an imported save of the original brings of the players and the computer opponents for the year's charts.</summary>
 public class CompetitorChartsTests
 {
-    [Theory]
-
-    // MAXWELL.H3, level 4 in December: MULTIVAC (532) 91 cured and 5 dead of 169, DEEP THOUGHT (763) 131 and none of 178.
-    [InlineData(532, 169, 80, 100, 3, 8)]
-    [InlineData(763, 178, 115, 135, 0, 0)]
-
-    // MAXWELL.H6, level 2 in July: HAL (726) 61 cured and none dead of 77.
-    [InlineData(726, 77, 50, 62, 0, 1)]
-    public void AnOpponentCuresAndLosesPatientsByItsReputation(int reputation, int patients, int fewestCured, int mostCured, int fewestDeaths, int mostDeaths)
-    {
-        var opponent = new CompetitorHospital(1, "HAL", reputation, reputation);
-        for (var i = 0; i < patients; i++)
-        {
-            opponent.CountNewPatient();
-        }
-
-        Assert.Equal(patients, opponent.Visitors);
-        Assert.InRange(opponent.Cured, fewestCured, mostCured);
-        Assert.InRange(opponent.Deaths, fewestDeaths, mostDeaths);
-    }
-
-    [Fact]
-    public void AMonthPaysAnOpponentForItsCures()
-    {
-        var opponent = new CompetitorHospital(1, "HOLLY", reputation: 1000, standing: 700, balance: 50_000, tiles: 520);
-        Assert.Equal(0, opponent.Value);
-        Assert.Equal(Hospital.StartPlayerSalary, opponent.PlayerSalary);
-        while (opponent.CuredThisMonth < 20)
-        {
-            opponent.CountNewPatient();
-        }
-
-        opponent.OnEndMonth(1, new SimRandom(3));
-
-        Assert.Equal(50_000 + (20 * CompetitorHospital.CureIncome) - CompetitorHospital.MonthlyCosts, opponent.Balance);
-        Assert.Equal((520 * CompetitorHospital.ValuePerTile) + (200 * CompetitorHospital.ValuePerStanding), opponent.Value);
-        Assert.Equal(0, opponent.CuredThisMonth);
-
-        // A month without cures costs its running costs. The salary stays the same all year.
-        opponent.OnEndMonth(2, new SimRandom(3));
-        Assert.Equal(50_000 + (20 * CompetitorHospital.CureIncome) - (2 * CompetitorHospital.MonthlyCosts), opponent.Balance);
-        Assert.Equal(Hospital.StartPlayerSalary, opponent.PlayerSalary);
-    }
-
-    [Fact]
-    public void AYearsEndRaisesAnOpponentsSalaryAndValue()
-    {
-        // MULTIVAC on level 4: 11,236 and 51,660 on 31 December, 12,247 and 53,690 on 1 January.
-        var opponent = new CompetitorHospital(1, "MULTIVAC");
-        opponent.Import(new ImportedCompetitor("MULTIVAC", 532, 169, Value: 51_660, Salary: 11_236));
-        opponent.OnEndYear(90, 300);
-
-        Assert.Equal(51_660 + CompetitorHospital.YearEndValueRise, opponent.Value);
-        Assert.Equal(12_247, opponent.PlayerSalary);
-        Assert.Equal(0, opponent.VisitorsThisYear);
-    }
-
     [Fact]
     public void AnImportedGameKeepsThePlayersNameThroughASave()
     {
@@ -75,34 +18,6 @@ public class CompetitorChartsTests
         simulation.Save(stream);
         stream.Position = 0;
         Assert.Equal("MAXWELL", Simulation.Load(stream).Hospitals[0].Name);
-    }
-
-    [Fact]
-    public void AnOpponentStartsWithTheLevelsMoneyAndThePlayersPlotAndIsSaved()
-    {
-        var rules = new LevelRules(40_000, [], [], competitors: [new PlannedCompetitor(4, "MULTIVAC")]);
-        var simulation = NewSimulation(rules);
-        var opponent = simulation.Competitors[0];
-        Assert.Equal(40_000, opponent.Balance);
-        Assert.Equal(simulation.Map.ParcelTileCount(1), opponent.Tiles);
-        for (var i = 0; i < 9; i++)
-        {
-            opponent.CountNewPatient();
-        }
-
-        while (simulation.Date.MonthOfGame == 1)
-        {
-            simulation.Step();
-        }
-
-        Assert.NotEqual(0, opponent.Value);
-        using var stream = new MemoryStream();
-        simulation.Save(stream);
-        stream.Position = 0;
-        var restored = Simulation.Load(stream).Competitors[0];
-        Assert.Equal(
-            (opponent.Balance, opponent.Value, opponent.Cured, opponent.Deaths, opponent.CuredThisMonth, opponent.PlayerSalary, opponent.Tiles),
-            (restored.Balance, restored.Value, restored.Cured, restored.Deaths, restored.CuredThisMonth, restored.PlayerSalary, restored.Tiles));
     }
 
     [Fact]
@@ -120,7 +35,7 @@ public class CompetitorChartsTests
         });
 
         var opponent = simulation.Competitors[0];
-        Assert.Equal((50_852L, 51_660L, 91, 5, 11_236L, 520, 169, 90), (opponent.Balance, opponent.Value, opponent.Cured, opponent.Deaths, opponent.PlayerSalary, opponent.Tiles, opponent.Visitors, opponent.VisitorsThisYear));
+        Assert.Equal((50_852L, 91, 5, 11_236L, 520, 169, 90), (opponent.Balance, opponent.Cured, opponent.Deaths, opponent.PlayerSalary, opponent.Tiles, opponent.Visitors, opponent.VisitorsThisYear));
     }
 
     [Fact]

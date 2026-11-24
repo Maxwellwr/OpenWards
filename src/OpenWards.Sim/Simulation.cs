@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 114;
+    private const int FormatVersion = 115;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -100,7 +100,7 @@ public sealed class Simulation
         // World:World adds the computer opponents after the players' hospitals.
         foreach (var competitor in Rules.Competitors)
         {
-            _competitors.Add(CompetitorHospital.Create(competitor, Rules, Random, map.ParcelTileCount(1)));
+            _competitors.Add(CompetitorHospital.Create(competitor, Rules, CompetitorRandom, map.ParcelTileCount(1)));
         }
 
         // Then Hospital:initStaff, before the first candidates for hire.
@@ -125,6 +125,7 @@ public sealed class Simulation
         Temperatures = new TileTemperatures(map.Width, map.Height);
         Random = random;
         MoneyRandom = new SimRandom(random.State, MoneySequence);
+        CompetitorRandom = new SimRandom(random.State, CompetitorSequence);
         Content = content;
         Rules = rules;
         _hospitals = new Hospital[map.PlayerCount];
@@ -132,6 +133,9 @@ public sealed class Simulation
 
     /// <summary>The stream of <see cref="MoneyRandom"/>.</summary>
     private const ulong MoneySequence = 0x3A11E7u;
+
+    /// <summary>The stream of <see cref="CompetitorRandom"/>.</summary>
+    private const ulong CompetitorSequence = 0xC0B7E5u;
 
     /// <summary>The content definitions the rules refer to. Not part of the saved state.</summary>
     public GameContent Content { get; }
@@ -194,6 +198,12 @@ public sealed class Simulation
     /// that the game's other draws stay as they were.
     /// </summary>
     internal SimRandom MoneyRandom { get; private set; }
+
+    /// <summary>
+    /// The computer opponents' random numbers (<see cref="CompetitorHospital"/>): a stream of their own, so that what they
+    /// do leaves the draws of the players' hospitals as they were.
+    /// </summary>
+    internal SimRandom CompetitorRandom { get; private set; }
 
     /// <summary>All entities, in increasing id order.</summary>
     public IReadOnlyList<Entity> Entities => _entities;
@@ -283,6 +293,15 @@ public sealed class Simulation
         }
 
         Arrivals.SpawnPatients(this);
+
+        // The computer opponents decide and act once every so many ticks.
+        if (Tick % CompetitorHospital.DecisionInterval == 0)
+        {
+            foreach (var competitor in _competitors)
+            {
+                competitor.Think(this);
+            }
+        }
 
         // Entities added during this loop are updated from the next tick on.
         var count = _entities.Count;
@@ -601,6 +620,12 @@ public sealed class Simulation
             simulation.MoneyRandom = SimRandom.FromState(reader.ReadUInt64(), reader.ReadUInt64());
         }
 
+        // Version 115 keeps the opponents' stream; older games start it from the game's.
+        if (version >= 115)
+        {
+            simulation.CompetitorRandom = SimRandom.FromState(reader.ReadUInt64(), reader.ReadUInt64());
+        }
+
         return simulation;
     }
 
@@ -719,6 +744,8 @@ public sealed class Simulation
 
         writer.WriteUInt64(MoneyRandom.State);
         writer.WriteUInt64(MoneyRandom.Increment);
+        writer.WriteUInt64(CompetitorRandom.State);
+        writer.WriteUInt64(CompetitorRandom.Increment);
     }
 
     /// <summary>
@@ -891,6 +918,16 @@ public sealed class Simulation
         }
 
         Arrivals.OnEndDay(this);
+
+        // Every five days the opponents' patients' outcomes of the month so far reach their hospitals.
+        if (date.Day % CompetitorHospital.StepDays == 0 && !date.IsLastDayOfMonth)
+        {
+            foreach (var competitor in _competitors)
+            {
+                competitor.Transfer(this, date.MonthOfGame);
+            }
+        }
+
         if (!date.IsLastDayOfMonth)
         {
             return;
@@ -938,7 +975,7 @@ public sealed class Simulation
         YearEndAwards.OnEndMonth(this);
         foreach (var competitor in _competitors)
         {
-            competitor.OnEndMonth(date.MonthOfGame, Random);
+            competitor.OnEndMonth(this, date.MonthOfGame);
         }
 
         if (date.IsLastDayOfYear)
