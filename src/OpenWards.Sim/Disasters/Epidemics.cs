@@ -375,7 +375,7 @@ public static class Epidemics
     public const int FaxHours = 24 * 20;
 
     /// <summary>The save version that brought contagious strengths, the cover-up marks and the inspection table.</summary>
-    internal const int SaveVersion = 110;
+    internal const int SaveVersion = 111;
 
     /// <summary>The cover-up watch's segments, as the opening's (<c>TIMER_SEGMENTS</c>).</summary>
     public const int WatchSegments = 13;
