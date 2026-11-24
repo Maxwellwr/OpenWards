@@ -213,9 +213,10 @@ strings:
     auction:
       caption: 'Licytacja działki'
       lot: 'Działka %1%: oferta $%2% od %3%'
-      hammer: 'Młotek opadnie za %1% godz.'
+      no_bids: 'Działka %1%: jeszcze bez ofert'
       bid: 'Licytuj $%1%'
       sold: 'Działka %1% sprzedana: %2% za $%3%'
+      unsold: 'Działka %1% nie sprzedana: nikt nie licytował'
     chat:
       caption: 'Czat'
       none: 'Nikt jeszcze nic nie powiedział.'

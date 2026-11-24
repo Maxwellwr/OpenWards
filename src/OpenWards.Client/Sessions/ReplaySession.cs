@@ -34,7 +34,7 @@ internal sealed class ReplaySession : IGameSession
         _replay = replay;
         _content = content;
         Simulation = replay.StartingState(content);
-        _keyframes[Simulation.Tick] = (Save(Simulation), 0);
+        _keyframes[Simulation.Frame] = (Save(Simulation), 0);
         CheckEnd();
     }
 
@@ -60,13 +60,13 @@ internal sealed class ReplaySession : IGameSession
     public bool? Matches { get; private set; }
 
     /// <summary>Whether all the recorded commands have been run.</summary>
-    public bool IsFinished => _next >= _replay.Commands.Count && Simulation.Tick >= _replay.End.Tick;
+    public bool IsFinished => _next >= _replay.Commands.Count && Simulation.Frame >= _replay.End.Tick;
 
     public string Status => Matches switch
     {
-        true => string.Create(CultureInfo.InvariantCulture, $"replay tick {Simulation.Tick}: played out as recorded"),
-        false => string.Create(CultureInfo.InvariantCulture, $"replay tick {Simulation.Tick}: OUT OF STEP with the recording"),
-        _ => string.Create(CultureInfo.InvariantCulture, $"replay tick {Simulation.Tick} of {_replay.End.Tick}   [ ]: a month back or on, with Shift a year"),
+        true => string.Create(CultureInfo.InvariantCulture, $"replay tick {Simulation.Frame}: played out as recorded"),
+        false => string.Create(CultureInfo.InvariantCulture, $"replay tick {Simulation.Frame}: OUT OF STEP with the recording"),
+        _ => string.Create(CultureInfo.InvariantCulture, $"replay tick {Simulation.Frame} of {_replay.End.Tick}   [ ]: a month back or on, with Shift a year"),
     };
 
     public void SetSpeed(GameSpeed speed) => _clock.SetSpeed(speed);
@@ -91,16 +91,16 @@ internal sealed class ReplaySession : IGameSession
     internal void Step()
     {
         var commands = _replay.Commands;
-        while (_next < commands.Count && commands[_next].Tick <= Simulation.Tick)
+        while (_next < commands.Count && commands[_next].Tick <= Simulation.Frame)
         {
             Simulation.Schedule(commands[_next].Player, commands[_next].Command);
             _next++;
         }
 
         Simulation.Step();
-        if (Simulation.Tick % KeyframeInterval == 0 && !_keyframes.ContainsKey(Simulation.Tick))
+        if (Simulation.Frame % KeyframeInterval == 0 && !_keyframes.ContainsKey(Simulation.Frame))
         {
-            _keyframes[Simulation.Tick] = (Save(Simulation), _next);
+            _keyframes[Simulation.Frame] = (Save(Simulation), _next);
         }
 
         CheckEnd();
@@ -118,7 +118,7 @@ internal sealed class ReplaySession : IGameSession
             tick = Math.Min(tick, EndTick);
         }
 
-        if (tick < Simulation.Tick || _keyframes.Keys.LastOrDefault(t => t <= tick) > Simulation.Tick)
+        if (tick < Simulation.Frame || _keyframes.Keys.LastOrDefault(t => t <= tick) > Simulation.Frame)
         {
             var from = _keyframes.Keys.Last(t => t <= tick);
             var (state, next) = _keyframes[from];
@@ -130,7 +130,7 @@ internal sealed class ReplaySession : IGameSession
             _next = next;
         }
 
-        while (Simulation.Tick < tick)
+        while (Simulation.Frame < tick)
         {
             Step();
         }
@@ -145,7 +145,7 @@ internal sealed class ReplaySession : IGameSession
 
     private void CheckEnd()
     {
-        if (Matches is null && _replay.End.Tick > 0 && Simulation.Tick == _replay.End.Tick)
+        if (Matches is null && _replay.End.Tick > 0 && Simulation.Frame == _replay.End.Tick)
         {
             Matches = Simulation.ComputeStateHash() == _replay.End.Hash;
         }

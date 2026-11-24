@@ -103,7 +103,7 @@ public sealed class LockstepClient : IDisposable
                     Recording = Replay.Start(Level ?? RecordingName, Simulation);
 
                     // The hash of the state as sent, which the server checks first after switching levels.
-                    _connection.Send(new StateHashMessage(Simulation.Tick, Simulation.ComputeStateHash()));
+                    _connection.Send(new StateHashMessage(Simulation.Frame, Simulation.ComputeStateHash()));
                     break;
                 case LevelsMessage levels:
                     Levels = levels.Levels;
@@ -204,13 +204,13 @@ public sealed class LockstepClient : IDisposable
     public int StepAllowed(int maxTicks = int.MaxValue)
     {
         var ticks = 0;
-        while (Simulation is not null && Simulation.Tick < AllowedTick && ticks < maxTicks)
+        while (Simulation is not null && Simulation.Frame < AllowedTick && ticks < maxTicks)
         {
             Simulation.Step();
             ticks++;
-            if (Simulation.Tick % LockstepServer.HashInterval == 0)
+            if (Simulation.Frame % LockstepServer.HashInterval == 0)
             {
-                _connection.Send(new StateHashMessage(Simulation.Tick, Simulation.ComputeStateHash()));
+                _connection.Send(new StateHashMessage(Simulation.Frame, Simulation.ComputeStateHash()));
             }
         }
 
