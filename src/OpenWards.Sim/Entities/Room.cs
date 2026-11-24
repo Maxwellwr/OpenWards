@@ -206,6 +206,12 @@ public sealed class RoomObject : Entity
     /// <summary>For a machine, how worn it is; null for other objects.</summary>
     public Objects.MachineState? Machine { get; internal set; }
 
+    /// <summary>
+    /// What the hospital paid for the object when it was put up, which it adds to the hospital's value; null when not
+    /// known (the level's own objects, and objects in games saved before version 109), which count at today's price.
+    /// </summary>
+    public int? PurchasePrice { get; internal set; }
+
     public override void Update(Simulation simulation)
     {
         if (Desk is not null)
@@ -222,6 +228,7 @@ public sealed class RoomObject : Entity
             HangingClothes = reader.ReadBool() ? reader.ReadByte() : null,
             Plant = reader.ReadBool() ? PlantState.Read(reader) : null,
             Machine = reader.Version is 0 or >= 68 && reader.ReadBool() ? Objects.MachineState.Read(reader) : null,
+            PurchasePrice = reader.Version is 0 or >= 109 && reader.ReadBool() ? reader.ReadInt32() : null,
         };
     }
 
@@ -243,6 +250,11 @@ public sealed class RoomObject : Entity
         Plant?.Write(writer);
         writer.WriteBool(Machine is not null);
         Machine?.Write(writer);
+        writer.WriteBool(PurchasePrice is not null);
+        if (PurchasePrice is { } price)
+        {
+            writer.WriteInt32(price);
+        }
     }
 }
 

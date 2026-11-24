@@ -8,16 +8,31 @@ using OpenWards.Sim.Serialization;
 
 namespace OpenWards.Sim.Tests;
 
-/// <summary>Rat holes and rats (CorsixTH's dailyUpdateRatholes, dailyUpdateRats and entities/rat.lua).</summary>
+/// <summary>Rat holes and rats, as the logic specification has them, and the rats' running (entities/rat.lua).</summary>
 public class RatTests
 {
     private const int Size = 16;
 
     [Fact]
-    public void ACleanHospitalGetsTwoHolesWhenARatComesAndTheRatRunsBetweenThem()
+    public void ACleanHospitalGetsNoHolesAndNoRats()
+    {
+        var simulation = NewSimulation();
+        for (var day = 0; day < 200; day++)
+        {
+            StepDay(simulation);
+        }
+
+        Assert.Empty(simulation.Hospitals[0].Ratholes);
+        Assert.Empty(simulation.Entities.OfType<Rat>());
+    }
+
+    [Fact]
+    public void WithTwoHolesARatComesNowAndThenAndRunsBetweenThem()
     {
         var simulation = NewSimulation();
         var hospital = simulation.Hospitals[0];
+        hospital.AddRathole(new Rathole(new TilePosition(3, 2), Direction.North, 1));
+        hospital.AddRathole(new Rathole(new TilePosition(12, 2), Direction.North, 1));
         Rat? rat = null;
         for (var day = 0; day < 400 && rat is null; day++)
         {
@@ -26,9 +41,6 @@ public class RatTests
         }
 
         Assert.NotNull(rat);
-        Assert.Equal(2, hospital.Ratholes.Count);
-        Assert.NotEqual(hospital.Ratholes[0].Tile, hospital.Ratholes[1].Tile);
-        Assert.All(hospital.Ratholes, hole => Assert.Contains(hole, Rats.WallsAround(simulation.Map, hole.Tile)));
         Assert.NotEqual(rat!.Origin.Tile, rat.Target.Tile);
 
         using var stream = new MemoryStream();
@@ -59,34 +71,70 @@ public class RatTests
     }
 
     [Fact]
-    public void LitterBringsMoreHoles()
+    public void LitterOpensAHoleInTheFirstWallFromTheTileLitteredLast()
     {
         var simulation = NewSimulation();
         var hospital = simulation.Hospitals[0];
 
-        // 12 of the 144 corridor tiles: a twelfth, so round(200 / 12) = 17 holes are wanted.
+        // Litter on 12 tiles, (13, 8) last; litter on litter adds no tile.
         for (var x = 2; x < 14; x++)
         {
             Litter.Drop(simulation, 0, LitterType.Paper, new TilePosition(x, 8), isMirrored: false);
         }
 
-        Assert.Equal(12m / 144m, Rats.LitterFraction(simulation, 0));
-        for (var day = 0; day < 60; day++)
+        Litter.Drop(simulation, 0, LitterType.Puke, new TilePosition(5, 8), isMirrored: false);
+        Assert.Equal(12, Rats.LitteredTiles(simulation, 0));
+        Assert.Equal(new TilePosition(13, 8), hospital.LastLitterTile);
+
+        // Northwards the outside wall at y = 2 is met; the other ways leave the hospital's land first.
+        Assert.Equal(new Rathole(new TilePosition(13, 2), Direction.North, 1), Rats.FindRatholeWall(simulation, 0, new TilePosition(13, 8), Direction.North));
+        Assert.Null(Rats.FindRatholeWall(simulation, 0, new TilePosition(13, 8), Direction.East));
+        Assert.Null(Rats.FindRatholeWall(simulation, 0, new TilePosition(13, 8), Direction.South));
+        Assert.Null(Rats.FindRatholeWall(simulation, 0, new TilePosition(13, 8), Direction.West));
+
+        // At 12 % a day, in one of four ways, the hole comes within a year; it is never made twice.
+        for (var day = 0; day < 365 && hospital.Ratholes.Count == 0; day++)
         {
             StepDay(simulation);
         }
 
-        Assert.InRange(hospital.Ratholes.Count, 5, 17);
-        Assert.Equal(hospital.Ratholes.Count, hospital.Ratholes.Select(hole => (hole.Tile, hole.Wall)).Distinct().Count());
+        Assert.Equal([new Rathole(new TilePosition(13, 2), Direction.North, 1)], hospital.Ratholes);
 
         // Building over a hole closes it.
-        var hole = hospital.Ratholes[0];
-        Rats.RemoveRatholesAt(simulation, hole.Tile);
-        Assert.DoesNotContain(hospital.Ratholes, other => other.Tile == hole.Tile);
+        Rats.RemoveRatholesAt(simulation, new TilePosition(13, 2));
+        Assert.Empty(hospital.Ratholes);
     }
 
     [Fact]
-    public void AShotRatLeavesADeadRat()
+    public void ADoorIsNoPlaceForAHole()
+    {
+        var simulation = NewSimulation();
+        simulation.Map[7, 2].Set(TileFlags.TallNorth, true);
+        Assert.Null(Rats.FindRatholeWall(simulation, 0, new TilePosition(7, 9), Direction.North));
+        Assert.NotNull(Rats.FindRatholeWall(simulation, 0, new TilePosition(8, 9), Direction.North));
+    }
+
+    [Fact]
+    public void HolesCloseByThemselvesNowAndThen()
+    {
+        var simulation = NewSimulation();
+        var hospital = simulation.Hospitals[0];
+        for (var x = 2; x < 14; x++)
+        {
+            hospital.AddRathole(new Rathole(new TilePosition(x, 2), Direction.North, 1));
+        }
+
+        // A hole a day in 400: some of the 12 are gone after five years, not all.
+        for (var day = 0; day < 5 * 365; day++)
+        {
+            StepDay(simulation);
+        }
+
+        Assert.InRange(hospital.Ratholes.Count, 2, 11);
+    }
+
+    [Fact]
+    public void AShotRatLeavesADeadRatAndShotsAreCounted()
     {
         var simulation = NewSimulation();
         var hospital = simulation.Hospitals[0];
@@ -106,6 +154,13 @@ public class RatTests
         var dead = Assert.Single(simulation.Entities.OfType<Litter>());
         Assert.Equal(LitterType.DeadRat, dead.Type);
         Assert.Equal(2, dead.Tile.Y);
+        Assert.Equal(dead.Tile, hospital.LastLitterTile);
+        Assert.Equal(1, Rats.LitteredTiles(simulation, 0));
+
+        // A shot at a rat that is gone misses, but counts.
+        simulation.Schedule(0, new ShootRatCommand(rat.Id));
+        simulation.Step();
+        Assert.Equal((2, 1), (hospital.RatShotsThisYear, hospital.RatsKilledThisYear));
     }
 
     [Fact]

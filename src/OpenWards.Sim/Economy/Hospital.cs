@@ -415,13 +415,23 @@ public sealed class Hospital
     public const int DefaultInterestRate = 100;
 
     /// <summary>What overdrafts cost on top of the interest, likewise (<c>OverdraftDiff</c>, base_config.lua's 200).</summary>
+    /// <remarks>Read from the level files but not used: an overdraft costs twice the interest rate.</remarks>
     public const int DefaultOverdraftDifferential = 200;
+
+    /// <summary>The most a hospital may borrow, whatever it is worth.</summary>
+    public const int LoanCeiling = 100_000;
+
+    /// <summary>What a hospital may borrow on top of a third of its value.</summary>
+    public const int LoanAllowance = 10_000;
 
     /// <summary>The steps in which money is borrowed and paid back.</summary>
     public const int LoanStep = 5000;
 
-    /// <summary>What a hospital is worth at the start besides its land (CorsixTH's <c>+ 20000</c>).</summary>
-    public const int StartValueBesidesLand = 20000;
+    /// <summary>
+    /// What a hospital with nothing built and the average reputation is worth besides its land: 10,000 for reputation
+    /// 500 and 10,000 on top (<see cref="HospitalValue"/>).
+    /// </summary>
+    public const int StartValueBesidesLand = (AverageReputation / HospitalValue.ReputationStep * HospitalValue.ValuePerReputationStep) + HospitalValue.BaseValue;
 
     private const int MaxYearEndAwards = 64;
 
@@ -448,10 +458,9 @@ public sealed class Hospital
     private readonly SortedSet<string> _discoveredRooms = new(StringComparer.Ordinal);
     private readonly List<MonthStatistics> _statistics = [];
 
-    internal Hospital(int player, long balance, int reputation = AverageReputation, long value = 0, int interestRate = DefaultInterestRate, int overdraftDifferential = DefaultOverdraftDifferential)
+    internal Hospital(int player, long balance, int reputation = AverageReputation, long value = 0, int interestRate = DefaultInterestRate)
     {
         InterestRate = interestRate;
-        OverdraftDifferential = overdraftDifferential;
         Player = player;
         Balance = balance;
         ReputationVisits = StartReputationVisits;
@@ -473,11 +482,8 @@ public sealed class Hospital
     /// <summary>Money spent this month so far (CorsixTH's <c>money_out</c>).</summary>
     public long MoneyOutThisMonth { get; private set; }
 
-    /// <summary>
-    /// What the hospital is worth (CorsixTH's <c>value</c>): its land and 20,000 at the start, plus what was paid for
-    /// rooms and objects, less what objects were sold for.
-    /// </summary>
-    public long Value { get; private set; }
+    /// <summary>What the hospital is worth (<see cref="HospitalValue"/>), as last worked out.</summary>
+    public long Value { get; internal set; }
 
     /// <summary>What the hospital owes the bank (CorsixTH's <c>loan</c>).</summary>
     public long Loan { get; private set; }
@@ -485,15 +491,14 @@ public sealed class Hospital
     /// <summary>The bank's yearly interest on the loan, in hundredths of a percent.</summary>
     public int InterestRate { get; private set; }
 
-    /// <summary>What an overdraft costs a year on top of <see cref="InterestRate"/>, in hundredths of a percent.</summary>
-    public int OverdraftDifferential { get; private set; }
-
     /// <summary>
-    /// What the hospital may owe the bank (<c>UIBankManager:increaseLoan</c>): a third of its value, rounded down to
-    /// 5,000, and 10,000 more.
+    /// What the hospital may owe the bank: a third of its value, rounded down, and 10,000 more, at most 100,000.
     /// </summary>
-    /// <remarks>Nothing in free build mode (<c>UIBankManager:updateLoanCap</c>).</remarks>
-    public long MaxLoan => FreeBuild ? 0 : (long)decimal.Floor(Value * 0.33m / LoanStep) * LoanStep + 10000;
+    /// <remarks>
+    /// Nothing in free build mode. Departs from CorsixTH, whose limit is 33 % of the value rounded down to 5,000, and
+    /// 10,000 more, without a ceiling.
+    /// </remarks>
+    public long MaxLoan => FreeBuild ? 0 : Math.Clamp((Value / 3) + LoanAllowance, 0, LoanCeiling);
 
     /// <summary>
     /// Whether the level is played without money (<see cref="LevelRules.FreeBuild"/>): no money is spent or
@@ -501,11 +506,17 @@ public sealed class Hospital
     /// </summary>
     internal bool FreeBuild { get; set; }
 
-    /// <summary>Interest on the loan run up this month (CorsixTH's <c>acc_loan_interest</c>).</summary>
-    private decimal AccruedLoanInterest { get; set; }
+    /// <summary>
+    /// The tile of the hospital's land that last got litter where there was none, which new rat holes start from; null
+    /// before any.
+    /// </summary>
+    public TilePosition? LastLitterTile { get; internal set; }
 
-    /// <summary>Interest on the overdraft run up this month (<c>acc_overdraft</c>).</summary>
-    private decimal AccruedOverdraft { get; set; }
+    /// <summary>Shots at rats this year.</summary>
+    public int RatShotsThisYear { get; internal set; }
+
+    /// <summary>Rats shot dead this year.</summary>
+    public int RatsKilledThisYear { get; internal set; }
 
     /// <summary>Patients who came this year (CorsixTH's <c>num_visitors_ty</c>).</summary>
     public int VisitorsThisYear { get; internal set; }
@@ -886,17 +897,10 @@ public sealed class Hospital
     }
 
     /// <summary>
-    /// Pays money out, except in free build mode; what is paid for land, a room or an object adds to the hospital's value (CorsixTH's
-    /// <c>spendMoney</c> with <c>changeValue</c>).
-    /// </summary>
-    /// <summary>
     /// The object the player has picked up off the floor and not yet put down (CorsixTH's object made invisible while
     /// <c>picked_up</c>), or null; nobody uses it meanwhile.
     /// </summary>
     public Objects.CarriedObject? Carried { get; internal set; }
-
-    /// <summary>Changes the hospital's value without money changing hands, as a crashed room's loss (<c>Room:crashRoom</c>).</summary>
-    internal void ChangeValue(long amount) => Value += amount;
 
     /// <summary>
     /// Takes over the money of an imported save: what building the hospital up again cost is forgotten, and the
@@ -947,6 +951,7 @@ public sealed class Hospital
         }
     }
 
+    /// <summary>Pays money out, except in free build mode (<c>spendMoney</c>).</summary>
     internal void Spend(long tick, int amount, TransactionKind kind, string subject)
     {
         if (FreeBuild)
@@ -954,27 +959,17 @@ public sealed class Hospital
             return;
         }
 
-        if (kind is TransactionKind.BuyObject or TransactionKind.BuildRoom or TransactionKind.BuyLand)
-        {
-            Value += amount;
-        }
-
         Balance -= amount;
         MoneyOutThisMonth += amount;
         Log(new Transaction(tick, kind, subject, -amount, Balance));
     }
 
-    /// <summary>Takes money in, except in free build mode; what an object is sold for is taken off the hospital's value (<c>receiveMoney</c>).</summary>
+    /// <summary>Takes money in, except in free build mode (<c>receiveMoney</c>).</summary>
     internal void Receive(long tick, int amount, TransactionKind kind, string subject)
     {
         if (FreeBuild)
         {
             return;
-        }
-
-        if (kind == TransactionKind.SellObject)
-        {
-            Value -= amount;
         }
 
         Balance += amount;
@@ -1233,19 +1228,6 @@ public sealed class Hospital
     }
 
     /// <summary>
-    /// <c>Hospital:onEndDay</c>: a day's interest on the loan, and on the overdraft if the balance is below zero, is run
-    /// up (a year is 365 days).
-    /// </summary>
-    internal void OnEndDay()
-    {
-        AccruedLoanInterest += Loan * (InterestRate / 10000m) / 365;
-        if (Balance < 0)
-        {
-            AccruedOverdraft += -Balance * ((InterestRate + OverdraftDifferential) / 10000m) / 365;
-        }
-    }
-
-    /// <summary>
     /// The end of <c>Hospital:onEndMonth</c>, after the bills and insurance: the month's figures go into
     /// <see cref="Statistics"/> and the month's money in and out start afresh.
     /// </summary>
@@ -1355,23 +1337,29 @@ public sealed class Hospital
     }
 
     /// <summary>
-    /// <c>Hospital:onEndMonth</c> after the wages: the month's interest on the loan and the overdraft is paid, rounded,
-    /// unless it rounds to nothing, in which case it waits for the next month.
+    /// The end of the month, after the wages, insurance and heating: a month's interest on the loan,
+    /// ⌊rate × loan / 120,000⌋ (the rate being yearly, in hundredths of a percent), and then, if the balance is below
+    /// zero, twice that rate on the overdraft. Nothing is logged for an amount that rounds down to nothing.
     /// </summary>
+    /// <remarks>
+    /// Departs from CorsixTH, which runs the interest up day by day, rounds it, and charges the overdraft the rate plus
+    /// the level's <c>OverdraftDiff</c>.
+    /// </remarks>
     internal void PayInterest(long tick)
     {
-        var interest = RoundHalfUp(AccruedLoanInterest);
+        var interest = InterestRate * Loan / 120_000;
         if (interest > 0)
         {
-            Spend(tick, interest, TransactionKind.LoanInterest, string.Empty);
-            AccruedLoanInterest = 0;
+            Spend(tick, checked((int)interest), TransactionKind.LoanInterest, string.Empty);
         }
 
-        var overdraft = RoundHalfUp(AccruedOverdraft);
-        if (overdraft > 0)
+        if (Balance < 0)
         {
-            Spend(tick, overdraft, TransactionKind.Overdraft, string.Empty);
-            AccruedOverdraft = 0;
+            var overdraft = InterestRate * -Balance * 2 / 120_000;
+            if (overdraft > 0)
+            {
+                Spend(tick, checked((int)overdraft), TransactionKind.Overdraft, string.Empty);
+            }
         }
     }
 
@@ -1484,6 +1472,8 @@ public sealed class Hospital
     {
         JudgeYear(random, prices);
 
+        RatShotsThisYear = 0;
+        RatsKilledThisYear = 0;
         SodasSold = 0;
         VisitorsThisYear = 0;
         Vips.ThisYear = 0;
@@ -1654,9 +1644,6 @@ public sealed class Hospital
 
         writer.WriteInt64(Loan);
         writer.WriteInt32(InterestRate);
-        writer.WriteInt32(OverdraftDifferential);
-        writer.WriteDecimal(AccruedLoanInterest);
-        writer.WriteDecimal(AccruedOverdraft);
         writer.WriteByte((byte)Outcome);
         writer.WriteBool(LostTo is not null);
         if (LostTo is { } lostTo)
@@ -1800,6 +1787,14 @@ public sealed class Hospital
         }
 
         writer.WriteInt32(PriceLevel);
+        writer.WriteBool(LastLitterTile is not null);
+        if (LastLitterTile is { } lastLitter)
+        {
+            writer.WriteTile(lastLitter);
+        }
+
+        writer.WriteInt32(RatShotsThisYear);
+        writer.WriteInt32(RatsKilledThisYear);
     }
 
     internal static Hospital Read(SimReader reader, int player)
@@ -1845,9 +1840,13 @@ public sealed class Hospital
 
         hospital.Loan = reader.ReadInt64();
         hospital.InterestRate = reader.ReadInt32();
-        hospital.OverdraftDifferential = reader.ReadInt32();
-        hospital.AccruedLoanInterest = reader.ReadDecimal();
-        hospital.AccruedOverdraft = reader.ReadDecimal();
+        if (reader.Version is not 0 and < 109)
+        {
+            // The overdraft differential and the interest run up this month, which version 109 no longer has.
+            reader.ReadInt32();
+            reader.ReadDecimal();
+            reader.ReadDecimal();
+        }
         var outcome = reader.ReadByte();
         if (outcome > (byte)EndOutcome.Lost)
         {
@@ -2048,6 +2047,14 @@ public sealed class Hospital
         if (reader.Version is 0 or >= 106)
         {
             hospital.PriceLevel = Math.Clamp(reader.ReadInt32(), 0, MaxPriceLevel);
+        }
+
+        // Version 109 keeps the last littered tile and the year's shots at rats.
+        if (reader.Version is 0 or >= 109)
+        {
+            hospital.LastLitterTile = reader.ReadBool() ? reader.ReadTile() : null;
+            hospital.RatShotsThisYear = Math.Max(0, reader.ReadInt32());
+            hospital.RatsKilledThisYear = Math.Max(0, reader.ReadInt32());
         }
 
         return hospital;

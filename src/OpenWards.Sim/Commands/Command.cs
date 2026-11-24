@@ -1486,8 +1486,8 @@ public sealed record ReplaceMachineCommand(int MachineId) : Command
 }
 
 /// <summary>
-/// Shoots a rat of the issuing player's hospital (CorsixTH's click on a rat, <c>Rat:onClick</c>); a dead rat is left on
-/// the floor.
+/// Shoots at a rat of the issuing player's hospital (a click on a rat): the year's shots count it, and if the rat is
+/// still there it is killed, counted, and a dead rat is left on the floor.
 /// </summary>
 public sealed record ShootRatCommand(int RatId) : Command
 {
@@ -1495,10 +1495,8 @@ public sealed record ShootRatCommand(int RatId) : Command
 
     public override void Execute(Simulation simulation, int player)
     {
-        if (simulation.FindEntity(RatId) is Rat { IsGone: false } rat && rat.Player == player)
-        {
-            Disasters.Rats.Shoot(simulation, player, rat);
-        }
+        // A shot counts even when the rat got away into its hole before it was fired.
+        Disasters.Rats.Shoot(simulation, player, simulation.FindEntity(RatId) as Rat);
     }
 
     protected override void WriteArguments(SimWriter writer) => writer.WriteInt32(RatId);

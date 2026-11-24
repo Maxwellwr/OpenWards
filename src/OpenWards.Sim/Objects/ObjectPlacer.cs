@@ -465,12 +465,19 @@ public static class ObjectPlacer
         }
 
         var placed = simulation.AddEntity(id => new RoomObject(id, definition.Id, tile, orientation, roomId));
+        var owner = map.GetParcelOwner(map[tile.X, tile.Y].Parcel) - 1;
+        if (owner >= 0 && owner < simulation.Hospitals.Count)
+        {
+            // What it costs today goes into the hospital's value, and comes off again when it goes.
+            placed.PurchasePrice = simulation.Hospitals[owner].Research.ObjectCost(simulation.Rules, definition.Id);
+        }
+
         if (definition.Id == PlantType)
         {
             placed.Plant = new PlantState();
         }
 
-        Machines.OnPlaced(simulation, placed, map.GetParcelOwner(map[tile.X, tile.Y].Parcel) - 1);
+        Machines.OnPlaced(simulation, placed, owner);
 
         if (definition.Orientations[orientation].Footprint.Any(part => part.IsSide))
         {
@@ -550,7 +557,7 @@ public static class ObjectPlacer
             }
 
             simulation.RemoveEntity(placed.Id);
-            var adopted = simulation.AddEntity(id => new RoomObject(id, placed.ObjectType, placed.Tile, placed.Orientation, room.Id));
+            var adopted = simulation.AddEntity(id => new RoomObject(id, placed.ObjectType, placed.Tile, placed.Orientation, room.Id) { PurchasePrice = placed.PurchasePrice });
             OccupySide(map, placed.Tile, SideOf(definition, placed.Orientation), adopted.Id);
         }
     }
