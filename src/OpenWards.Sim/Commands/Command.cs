@@ -72,6 +72,7 @@ public enum CommandKind : ushort
     PutBackCarriedObject = 57,
     SellCarriedObject = 58,
     MakeDebugPatient = 59,
+    DeclineSalaryOffer = 60,
 }
 
 /// <summary>
@@ -155,6 +156,7 @@ public abstract record Command
             CommandKind.PutBackCarriedObject => new PutBackCarriedObjectCommand(),
             CommandKind.SellCarriedObject => new SellCarriedObjectCommand(),
             CommandKind.MakeDebugPatient => new MakeDebugPatientCommand(reader.ReadString(), reader.ReadTile()),
+            CommandKind.DeclineSalaryOffer => new DeclineSalaryOfferCommand(),
             _ => throw new InvalidDataException($"Unknown command kind {(ushort)kind}."),
         };
     }
@@ -518,6 +520,27 @@ public sealed record PutDownCarriedObjectCommand(TilePosition Tile, Direction Or
 }
 
 /// <summary>Puts the carried object back where it stood (<c>UIPlaceObjects:undo</c>).</summary>
+/// <summary>
+/// The player turns down the letter offering the next level and plays on (the fax's <c>decline_new_level</c>); the offer
+/// may come again at the end of a quarter (<see cref="Hospital.DeclineSalaryOffer"/>).
+/// </summary>
+public sealed record DeclineSalaryOfferCommand : Command
+{
+    public override CommandKind Kind => CommandKind.DeclineSalaryOffer;
+
+    public override void Execute(Simulation simulation, int player)
+    {
+        if (player >= 0 && player < simulation.Hospitals.Count)
+        {
+            simulation.Hospitals[player].DeclineSalaryOffer();
+        }
+    }
+
+    protected override void WriteArguments(SimWriter writer)
+    {
+    }
+}
+
 public sealed record PutBackCarriedObjectCommand : Command
 {
     public override CommandKind Kind => CommandKind.PutBackCarriedObject;
