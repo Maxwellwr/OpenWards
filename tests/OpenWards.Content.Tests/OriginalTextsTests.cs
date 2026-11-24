@@ -39,7 +39,8 @@ public class OriginalTextsTests
         Assert.Equal("VIP 2", texts.VipName(1));
         Assert.Equal("VIP 11", texts.VipName(10));
         Assert.Null(texts.VipName(0));
-        Assert.Null(texts.VipName(11));
+        Assert.Equal("VIP 1", texts.VipName(11));
+        Assert.Null(texts.VipName(12));
     }
 
     [Fact]

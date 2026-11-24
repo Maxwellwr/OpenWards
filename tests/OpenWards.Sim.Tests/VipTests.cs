@@ -5,23 +5,49 @@ using OpenWards.Sim.People;
 
 namespace OpenWards.Sim.Tests;
 
-/// <summary>When VIPs come (CorsixTH's World:_generateNextVipDate, math.t_random) and where they queue (Queue:push).</summary>
+/// <summary>How a VIP scores the hospital, what the score brings, and where VIPs queue (CorsixTH's Queue:push).</summary>
 public class VipTests
 {
     [Fact]
-    public void VipsComeWithinThirtyDaysOfTheLevelsAverage()
+    public void TheScoreDecidesTheGrantAndTheReputation()
     {
-        var random = new SimRandom(5);
-        var days = Enumerable.Range(0, 2000).Select(_ => VipVisits.DaysUntilNext(random, 150)).ToList();
+        int[] scores = [-9, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 12];
+        Assert.Equal([4000, 4000, 2000, 1500, 1200, 800, 400, 200, 0, 0, 0, 0], scores.Select(VipVisits.Grant));
+        Assert.Equal([4, 4, 4, 4, 4, 2, 2, 2, 2, 2, -4, -4], scores.Select(VipVisits.ReputationPercent));
+    }
 
-        Assert.All(days, day => Assert.InRange(day, 120, 180));
-        Assert.InRange(days.Average(), 145, 155);
+    [Fact]
+    public void EachScoreHasARemarkAndOlderRatingsComeBackAsScores()
+    {
+        Assert.Equal(1, new VipReport(1, -9, 0, 0, 0).Remark);
+        Assert.Equal(9, new VipReport(1, VipVisits.PleasedScore, 0, 0, 0).Remark);
+        Assert.Equal(11, new VipReport(1, VipVisits.PleasedScore + 1, 0, 0, 0).Remark);
+        Assert.Equal(VipReport.RemarkCount, new VipReport(1, 30, 0, 0, 0).Remark);
+        for (var score = -5; score <= 8; score++)
+        {
+            Assert.Equal(score, VipReport.ScoreOfRemark(new VipReport(1, score, 0, 0, 0).Remark));
+        }
+    }
 
-        // Most come near the average: the distribution is a triangle.
-        Assert.True(days.Count(day => Math.Abs(day - 150) <= 10) > days.Count(day => Math.Abs(day - 150) > 20));
+    [Fact]
+    public void AnEmptyHospitalScoresBadlyAndLitterOnElevenTilesMakesItWorse()
+    {
+        var map = TestMaps.FromRows("..................", "..................");
+        var simulation = new Simulation(map, seed: 1, rules: new LevelRules(10_000, [], []));
 
-        // At least a day away, however small the setting.
-        Assert.All(Enumerable.Range(0, 200).Select(_ => VipVisits.DaysUntilNext(random, 0)), day => Assert.InRange(day, 1, 31));
+        // Clean (−1), fewer than three staff (+4), no doctors (+4), no rooms (+4).
+        Assert.Equal(11, VipBehaviour.ScoreHospital(simulation, 0));
+
+        for (var x = 0; x < 10; x++)
+        {
+            Litter.Drop(simulation, 0, LitterType.SodaCan, new TilePosition(x, 0), isMirrored: false);
+        }
+
+        // Two pieces on one tile count once.
+        Litter.Drop(simulation, 0, LitterType.Paper, new TilePosition(0, 1), isMirrored: false);
+        Litter.Drop(simulation, 0, LitterType.Paper, new TilePosition(0, 1), isMirrored: false);
+        Assert.Equal(11, VipBehaviour.LitterTiles(simulation, 0));
+        Assert.Equal(13, VipBehaviour.ScoreHospital(simulation, 0));
     }
 
     [Fact]
@@ -54,50 +80,12 @@ public class VipTests
         queue.Push(simulation, second);
 
         var vip = simulation.AddEntity(id => Humanoid.CreateVip(id, new TilePosition(1, 1), 0));
-        vip.Behaviour = new VipBehaviour(1, 10);
+        vip.Behaviour = new VipBehaviour(1);
         queue.Push(simulation, vip);
         var third = Patient(simulation);
         queue.Push(simulation, third);
 
         Assert.Equal([vip.Id, first.Id, second.Id, third.Id], queue.Members);
-    }
-
-    [Fact]
-    public void AVipCountsEachPieceOfLitterWithinEightStepsOnce()
-    {
-        // Vip:tickDay's findObjectNear(self, "litter", 8): a wall at x = 8 keeps the litter beyond it out of sight.
-        var map = TestMaps.FromRows(
-            "..................",
-            "........#.........",
-            "........#.........");
-        var simulation = new Simulation(map, seed: 1, rules: new LevelRules(10_000, [], []));
-        var vip = simulation.AddEntity(id => Humanoid.CreateVip(id, new TilePosition(1, 1), 0));
-        var behaviour = new VipBehaviour(1, 10);
-        vip.Behaviour = behaviour;
-
-        Litter.Drop(simulation, 0, LitterType.SodaCan, new TilePosition(3, 1), isMirrored: false);
-        Litter.Drop(simulation, 0, LitterType.Puke, new TilePosition(1, 2), isMirrored: false);
-        Litter.Drop(simulation, 0, LitterType.Paper, new TilePosition(16, 1), isMirrored: false);
-        Litter.Drop(simulation, 0, LitterType.Banana, new TilePosition(9, 2), isMirrored: false);
-
-        behaviour.OnEndDay(simulation, vip);
-        behaviour.OnEndDay(simulation, vip);
-        Assert.Equal(1, behaviour.RubbishFound);
-        Assert.Equal(1, behaviour.VomitFound);
-
-        // New litter is counted on the next day; what was seen and saved is not counted again after loading.
-        Litter.Drop(simulation, 0, LitterType.Bottle, new TilePosition(2, 0), isMirrored: false);
-        using var stream = new MemoryStream();
-        simulation.Save(stream);
-        stream.Position = 0;
-        var restored = Simulation.Load(stream);
-        Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
-
-        var restoredVip = restored.Entities.OfType<Humanoid>().Single(h => h.Behaviour is VipBehaviour);
-        var restoredBehaviour = (VipBehaviour)restoredVip.Behaviour!;
-        restoredBehaviour.OnEndDay(restored, restoredVip);
-        Assert.Equal(2, restoredBehaviour.RubbishFound);
-        Assert.Equal(1, restoredBehaviour.VomitFound);
     }
 
     private static Humanoid Patient(Simulation simulation)

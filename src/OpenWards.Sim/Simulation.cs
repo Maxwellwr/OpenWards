@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 108;
+    private const int FormatVersion = 109;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -85,7 +85,6 @@ public sealed class Simulation
             _hospitals[player].ChooseInsurers(new SimRandom(seed, sequence: 0x1A5u + (ulong)player));
 
             _hospitals[player].ScheduleNextDisaster(Random, Rules.Difficulty);
-            _hospitals[player].Vips.ScheduleNext(Random, Rules.MayorLaunch, today: 0);
             Emergencies.Start(this, _hospitals[player]);
 
             // CorsixTH's Hospital:Hospital: the rooms of the level whose objects are all there from the start.

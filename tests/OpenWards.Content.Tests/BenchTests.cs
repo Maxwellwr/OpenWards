@@ -96,39 +96,49 @@ public class BenchTests
         }
 
         Assert.True(machinePlaced);
-        Humanoid? sitter = null;
-        for (var tick = 0; tick < 2 * 31 * GameDate.HoursPerDay && sitter is null; tick++)
-        {
-            simulation.Step();
-            sitter = simulation.Entities.OfType<Humanoid>().FirstOrDefault(h => h.Behaviour is PatientBehaviour { BenchId: not 0 } && h.ActionAnimation is { Id: 146 or 224 });
-        }
 
-        Assert.NotNull(sitter);
-        var patient = (PatientBehaviour)sitter.Behaviour!;
-        typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.DrinkStock))!.SetValue(patient, 10);
+        // A seated patient made thirsty gets up for a can; one called in before they have drunk is replaced by the next.
+        var tried = new HashSet<int>();
+        PatientBehaviour? patient = null;
         var drank = false;
-        var satAgain = false;
-        for (var tick = 0; tick < 20 * GameDate.HoursPerDay && !satAgain && simulation.FindEntity(sitter.Id) is not null; tick++)
+        for (var attempt = 0; attempt < 5 && !drank; attempt++)
         {
-            simulation.Step();
-            if (patient.DrinksMachineId != 0)
+            Humanoid? sitter = null;
+            for (var tick = 0; tick < 2 * 31 * GameDate.HoursPerDay && sitter is null; tick++)
             {
-                Assert.Equal(0, patient.BenchId);
-                drank = true;
-            }
-            else if (drank && patient.BenchId != 0 && benches.Contains(patient.BenchId))
-            {
-                satAgain = true;
+                simulation.Step();
+                sitter = simulation.Entities.OfType<Humanoid>().FirstOrDefault(h => !tried.Contains(h.Id) && h.Behaviour is PatientBehaviour { BenchId: not 0 } && h.ActionAnimation is { Id: 146 or 224 });
             }
 
-            if (patient.Phase is not (PatientPhase.InReceptionQueue or PatientPhase.InDoorQueue))
+            Assert.NotNull(sitter);
+            tried.Add(sitter.Id);
+            patient = (PatientBehaviour)sitter.Behaviour!;
+            typeof(PatientBehaviour).GetProperty(nameof(PatientBehaviour.DrinkStock))!.SetValue(patient, 10);
+            var headedForCan = false;
+            var satAgain = false;
+            for (var tick = 0; tick < 20 * GameDate.HoursPerDay && !satAgain && simulation.FindEntity(sitter.Id) is not null; tick++)
             {
-                break;
+                simulation.Step();
+                if (patient.DrinksMachineId != 0)
+                {
+                    Assert.Equal(0, patient.BenchId);
+                    headedForCan = true;
+                }
+                else if (headedForCan && patient.DrinkStock > 10)
+                {
+                    drank = true;
+                    satAgain = patient.BenchId != 0 && benches.Contains(patient.BenchId);
+                }
+
+                if (patient.Phase is not (PatientPhase.InReceptionQueue or PatientPhase.InDoorQueue))
+                {
+                    break;
+                }
             }
         }
 
-        Assert.True(drank, "The seated patient did not get up for a can.");
-        Assert.True(patient.Thirst < 0.9m);
+        Assert.True(drank, "No seated patient got up for a can.");
+        Assert.True(patient!.Thirst < 0.9m);
     }
 
     private static byte[] SaveBytes(Simulation simulation)

@@ -1488,6 +1488,7 @@ public sealed class Hospital
         VisitorsThisYear = 0;
         Vips.ThisYear = 0;
         Vips.PleasedThisYear = 0;
+        Vips.ScoreSumThisYear = 0;
         CuredThisYear = 0;
         NotCuredThisYear = 0;
         DeathsThisYear = 0;

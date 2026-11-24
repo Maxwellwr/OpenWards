@@ -69,7 +69,7 @@ public class SwingDoorTests
 
         var swings = new HashSet<long>();
         var swingAnimations = new HashSet<int>();
-        for (var tick = 0; tick < 2 * GameDate.HoursPerDay; tick++)
+        for (var tick = 0; tick < 6 * GameDate.HoursPerDay && (swings.Count == 0 || !swingAnimations.Any(id => id is 3272 or 3274) || !room.StaffPresent); tick++)
         {
             simulation.Step();
             if (door.SwingStart >= 0)

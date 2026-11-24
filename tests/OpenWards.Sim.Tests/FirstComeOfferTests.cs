@@ -43,6 +43,7 @@ public class FirstComeOfferTests
         var simulation = NewSimulation();
         foreach (var hospital in simulation.Hospitals)
         {
+            hospital.Vips.State = VipState.Invited;
             hospital.Vips.InvitedName = 3;
             hospital.Vips.InvitationExpires = 500;
         }
@@ -51,7 +52,7 @@ public class FirstComeOfferTests
 
         Assert.False(simulation.Hospitals[0].Vips.IsInvitationPending);
         Assert.False(simulation.Hospitals[1].Vips.IsInvitationPending);
-        Assert.Equal((0, 1), (simulation.Hospitals[0].Vips.Count, simulation.Hospitals[1].Vips.Count));
+        Assert.Equal((VipState.None, VipState.Travelling), (simulation.Hospitals[0].Vips.State, simulation.Hospitals[1].Vips.State));
     }
 
     private static Simulation NewSimulation()

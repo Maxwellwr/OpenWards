@@ -350,8 +350,8 @@ internal sealed class FaxWindow : UiWindow
     }
 
     /// <summary>
-    /// <c>PlayerHospital:makeVipEndFax</c>: who remarked, their remark for the rating, and for a pleased VIP the
-    /// reputation boost and the grant, for a displeased one the loss; in free build mode one of three remarks of its
+    /// <c>PlayerHospital:makeVipEndFax</c>: who remarked, their remark for the score, whether reputation went up or down,
+    /// and the grant if there was one; in free build mode one of three remarks of its
     /// own. The original's strings (section 44) are used when loaded; the English stand-ins are ours, except free build's.
     /// </summary>
     internal static IEnumerable<string> VipReportLines(IWindowHost host, VipReport report)
@@ -366,15 +366,19 @@ internal sealed class FaxWindow : UiWindow
             yield break;
         }
 
-        yield return new Advice(44, 195 + report.Rating, Remark(report.Rating)).Text(host.Texts);
-        if (report.Rating <= VipBehaviour.PleasedRating)
+        yield return new Advice(44, 195 + report.Remark, Remark(report.Remark)).Text(host.Texts);
+        if (report.ReputationPercent > 0)
         {
             yield return new Advice(44, 194, "Your reputation has gone up.").Text(host.Texts);
-            yield return new Advice(44, 193, "You have been given a grant of %d.").Text(host.Texts, report.CashReward);
         }
-        else if (report.Rating >= 11)
+        else if (report.ReputationPercent < 0)
         {
             yield return new Advice(44, 195, "Your reputation has gone down.").Text(host.Texts);
+        }
+
+        if (report.Grant > 0)
+        {
+            yield return new Advice(44, 193, "You have been given a grant of %d.").Text(host.Texts, report.Grant);
         }
     }
 
