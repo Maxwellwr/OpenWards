@@ -168,11 +168,11 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
     /// <summary>In the training room: the lecture chair, projector, skeleton or bookcase used or gone to, or 0 (<c>reserved_for</c>).</summary>
     public int TrainingObjectId { get; private set; }
 
-    /// <summary>
-    /// In the training room: rounds at the projector left before the consultant goes to a skeleton or bookcase
-    /// (<c>projector_use_time</c>), or uses of it left.
-    /// </summary>
-    private int _trainingRounds;
+    /// <summary>In the training room: the skeleton or bookcase the consultant leaves the projector for, or 0.</summary>
+    private int _nextAidId;
+
+    /// <summary>In the training room: whether the consultant has switched the projector on since coming in.</summary>
+    private bool _projectorOn;
 
     /// <summary>A surgeon leaving the operating theatre on the way to change back into a doctor, or changing.</summary>
     private enum ChangeBack : byte
@@ -455,6 +455,7 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
         Meander.Reset();
         if (room.StaffId == humanoid.Id)
         {
+            _projectorOn = false;
             StartLectureCycle(simulation, humanoid, room);
             return;
         }
@@ -481,19 +482,19 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
         RoomVisits.SettleIdleStaff(simulation, humanoid);
     }
 
-    /// <summary><c>TrainingRoom:doStaffUseCycle</c>: to the projector, to lecture there for 6 to 20 rounds.</summary>
+    /// <summary><c>TrainingRoom:doStaffUseCycle</c>: to the projector, to lecture there.</summary>
     private void StartLectureCycle(Simulation simulation, Humanoid humanoid, Room room)
     {
         Use = null;
         TrainingObjectId = 0;
-        if (RoomVisits.FindObject(simulation, room.Id, "projector") is not { } projector)
+        _nextAidId = 0;
+        if (RoomVisits.FindObject(simulation, room.Id, Staff.Training.Projector) is not { } projector)
         {
             Phase = DoctorPhase.Lecturing;
             return;
         }
 
         TrainingObjectId = projector.Id;
-        _trainingRounds = simulation.Random.NextInclusive(6, 20);
         Phase = DoctorPhase.WalkingToProjector;
         humanoid.WalkTo(simulation, RoomVisits.UseTile(simulation, projector));
     }
@@ -526,9 +527,11 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
     }
 
     /// <summary>
-    /// The training room's cycles. A student sits on the lecture chair for good. The consultant lectures at the projector;
-    /// once its rounds are up, they show a skeleton or read at a bookcase (either at random, when there are both) 3 to 10
-    /// times and go back (<c>loop_callback_training</c>); with neither, they lecture on.
+    /// The training room's cycles. A student sits on the lecture chair for good. The consultant teaches after the logic
+    /// specification: after each cycle of their animation they first switch the projector on if it is off; else the cycle
+    /// was a lesson (<see cref="Staff.Training.Lesson"/>) with the projector, skeleton or bookcase used, and then, one time
+    /// in ten, they give a lesson with a free bookcase in the room, else one time in ten with a free skeleton, else at the
+    /// projector.
     /// </summary>
     private void TrainingStep(Simulation simulation, Humanoid humanoid, Room room)
     {
@@ -572,23 +575,28 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
 
                 switch (Use.Update(simulation, humanoid))
                 {
-                    case ObjectUseEvent.Loop:
-                        _trainingRounds--;
-                        if (_trainingRounds == 0 && ChooseTrainingAid(simulation, room, humanoid) is not null)
+                    case ObjectUseEvent.Loop when _nextAidId == 0:
+                        if (!_projectorOn)
                         {
+                            _projectorOn = true;
+                        }
+                        else
+                        {
+                            Staff.Training.Lesson(simulation, room, humanoid, simulation.Rules.Staff.Training.ProjectorValue);
+                        }
+
+                        if (ChooseTrainingAid(simulation, room, humanoid) is { } chosen)
+                        {
+                            _nextAidId = chosen.Id;
                             Use.Interrupt();
                         }
 
-                        _trainingRounds = Math.Max(_trainingRounds, 0);
                         break;
                     case ObjectUseEvent.Done:
                         Use = null;
-                        if (ChooseTrainingAid(simulation, room, humanoid) is { } aid)
+                        if (simulation.FindEntity(_nextAidId) is RoomObject { IsDestroyed: false } aid && aid.RoomId == room.Id)
                         {
-                            TrainingObjectId = aid.Id;
-                            _trainingRounds = simulation.Random.NextInclusive(3, 10);
-                            Phase = DoctorPhase.WalkingToTrainingAid;
-                            humanoid.WalkTo(simulation, RoomVisits.UseTile(simulation, aid));
+                            GoToTrainingAid(simulation, humanoid, aid);
                         }
                         else
                         {
@@ -618,11 +626,18 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
 
                 if (Use.Update(simulation, humanoid) == ObjectUseEvent.Done)
                 {
-                    _trainingRounds--;
-                    Use = _trainingRounds > 0 ? ObjectUse.Start(simulation, humanoid, target) : null;
-                    if (Use is null)
+                    Staff.Training.Lesson(simulation, room, humanoid, Staff.Training.Value(simulation.Rules.Staff.Training, target.ObjectType));
+                    if (ChooseTrainingAid(simulation, room, humanoid) is not { } next)
                     {
                         StartLectureCycle(simulation, humanoid, room);
+                    }
+                    else if (next.Id == target.Id)
+                    {
+                        Use = ObjectUse.Start(simulation, humanoid, target);
+                    }
+                    else
+                    {
+                        GoToTrainingAid(simulation, humanoid, next);
                     }
                 }
 
@@ -630,17 +645,34 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
         }
     }
 
-    /// <summary>A free skeleton or bookcase nearby: the bookcase half the time when there are both.</summary>
+    private void GoToTrainingAid(Simulation simulation, Humanoid humanoid, RoomObject aid)
+    {
+        Use = null;
+        _nextAidId = 0;
+        TrainingObjectId = aid.Id;
+        Phase = DoctorPhase.WalkingToTrainingAid;
+        humanoid.WalkTo(simulation, RoomVisits.UseTile(simulation, aid));
+    }
+
+    /// <summary>
+    /// The next lesson's aid, or null for the projector: one time in ten a free bookcase in the room, if there is one;
+    /// else one time in ten a free skeleton.
+    /// </summary>
     private RoomObject? ChooseTrainingAid(Simulation simulation, Room room, Humanoid humanoid)
     {
-        var skeleton = FindFreeTrainingObject(simulation, room, humanoid, "skeleton");
-        var bookcase = FindFreeTrainingObject(simulation, room, humanoid, Bookcase);
-        if (simulation.Random.Next(2) == 0 && bookcase is not null)
+        if (simulation.Random.Next(10) < Staff.Training.AidChanceInTen
+            && FindFreeTrainingObject(simulation, room, humanoid, Staff.Training.Bookcase) is { } bookcase)
         {
-            skeleton = null;
+            return bookcase;
         }
 
-        return skeleton ?? bookcase;
+        if (simulation.Random.Next(10) < Staff.Training.AidChanceInTen
+            && FindFreeTrainingObject(simulation, room, humanoid, Staff.Training.Skeleton) is { } skeleton)
+        {
+            return skeleton;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -1347,7 +1379,8 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
         writer.WriteTile(_sequenceDrawTile);
         writer.WriteInt32(_sequenceObject);
         writer.WriteInt32(TrainingObjectId);
-        writer.WriteInt32(_trainingRounds);
+        writer.WriteInt32(_nextAidId);
+        writer.WriteBool(_projectorOn);
         writer.WriteByte((byte)_changeBack);
         writer.WriteInt32(_changeTimer);
         writer.WriteInt32(_changeScreen);
@@ -1397,7 +1430,17 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
         if (reader.Version is 0 or >= 70)
         {
             doctor.TrainingObjectId = reader.ReadInt32();
-            doctor._trainingRounds = reader.ReadInt32();
+            if (reader.Version is 0 or >= 111)
+            {
+                doctor._nextAidId = reader.ReadInt32();
+                doctor._projectorOn = reader.ReadBool();
+            }
+            else
+            {
+                // Before version 111: the rounds left at the projector or the training aid.
+                reader.ReadInt32();
+                doctor._projectorOn = doctor.Phase is DoctorPhase.Lecturing or DoctorPhase.WalkingToTrainingAid or DoctorPhase.UsingTrainingAid;
+            }
         }
 
         if (reader.Version is 0 or >= 82)

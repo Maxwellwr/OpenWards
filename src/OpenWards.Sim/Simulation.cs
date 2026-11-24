@@ -860,11 +860,9 @@ public sealed class Simulation
             }
         }
 
-        // Doctor:tickDay: students learn.
-        Training.OnEndDay(this);
-
         // The hospitals' value is worked out again each day, as their reputation changes.
         HospitalValue.Refresh(this);
+
         foreach (var hospital in _hospitals)
         {
             // Hospital:onEndDay: the day's research cost, by the researchers at work.

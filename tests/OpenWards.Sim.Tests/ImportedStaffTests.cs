@@ -19,7 +19,7 @@ public sealed class ImportedStaffTests
             researcher: false,
             wage: 161,
             layer5: 4,
-            [0m, 0.18m, 0.23m],
+            [0, 18, 27],
             name,
             LevelRules.Free.Staff,
             new SimRandom(1));
@@ -32,7 +32,10 @@ public sealed class ImportedStaffTests
         Assert.Equal(name, read.ImportedName);
         Assert.Equal((565, 700, 161, (byte)4), (read.Skill, read.AttentionToDetail, read.Wage, read.Layer5));
         Assert.True(read.IsSurgeon);
-        Assert.Equal(0.18m, read.SpecialismProgress(Specialism.Psychiatrist));
-        Assert.Equal(0.23m, read.SpecialismProgress(Specialism.Researcher));
+        Assert.Equal(18, read.SpecialismPoints(Specialism.Psychiatrist));
+
+        // The progress shown is the points over the level's threshold: 18 of 150 and 27 of 150.
+        Assert.Equal(0.12m, read.SpecialismProgress(Specialism.Psychiatrist, TrainingRules.Default));
+        Assert.Equal(0.18m, read.SpecialismProgress(Specialism.Researcher, TrainingRules.Default));
     }
 }

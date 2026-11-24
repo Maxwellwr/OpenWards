@@ -329,7 +329,7 @@ public class AdviserTests
         checks.Observe(host.Simulation, 0, null, 0);
 
         var specialism = profile.IsSurgeon ? (profile.IsPsychiatrist ? Specialism.Researcher : Specialism.Psychiatrist) : Specialism.Surgeon;
-        Assert.True(profile.TrainSpecialism(specialism, 1m));
+        Assert.True(profile.TrainSpecialism(specialism, 1, 0));
         checks.Observe(host.Simulation, 0, null, 0);
         var title = specialism switch { Specialism.Surgeon => "surgeon", Specialism.Psychiatrist => "psychiatrist", _ => "researcher" };
         Assert.Equal(AdviserChecks.PromotionToSpecialist.Text(null, title), host.Adviser.Current);

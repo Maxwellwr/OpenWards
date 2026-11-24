@@ -361,7 +361,7 @@ public class StaffEmploymentTests
         Assert.True(weak.Profile!.IsJunior);
 
         // One step a month: the new doctor is not yet a consultant.
-        junior.Profile.TrainSkill(1m);
+        junior.Profile.TrainSkill(StaffProfile.MaxSkill);
         Assert.False(junior.Profile.IsConsultant);
     }
 
@@ -371,7 +371,7 @@ public class StaffEmploymentTests
         var simulation = NewSimulation();
         var junior = Doctor(simulation, 100, junior: true);
 
-        junior.Profile!.TrainSkill(1m);
+        junior.Profile!.TrainSkill(StaffProfile.MaxSkill);
         for (var i = 0; i < 10; i++)
         {
             junior.Profile.GainProcedureSkill();

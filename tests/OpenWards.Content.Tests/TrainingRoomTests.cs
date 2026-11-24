@@ -58,7 +58,7 @@ public class TrainingRoomTests
         {
             var profile = students[i].Profile!;
             Assert.True(profile.Skill > skillsBefore[i], $"Student {i} did not learn: {skillsBefore[i]} -> {profile.Skill}.");
-            Assert.True(profile.SpecialismProgress(Specialism.Surgeon) > 0);
+            Assert.True(profile.SpecialismPoints(Specialism.Surgeon) > 0);
         }
 
         using var stream = new MemoryStream();
@@ -179,21 +179,67 @@ public class TrainingRoomTests
     }
 
     [Fact]
-    public void TheTrainingFactorGrowsWithTheTrainingAids()
+    public void ALessonTeachesTheStudentsBelowARandomThresholdWithDivisorsGrowingDownTheClass()
     {
         var simulation = NewHospital();
         var room = BuildTrainingRoom(simulation);
+        var students = new[] { HireStudent(simulation, new(15, 15)), HireStudent(simulation, new(16, 15)) };
+        var consultant = HireConsultant(simulation, new(17, 15));
+        foreach (var (doctor, index) in students.Select((d, i) => (d, i)).Append((consultant, 2)))
+        {
+            Run(simulation, new MoveStaffCommand(doctor.Id, new(Area.X + 1 + index, Area.Y + 2)));
+        }
 
-        // A projector (10), a skeleton (15) and a bookcase (20): 45 over three kinds or three objects.
-        Assert.Equal(15m, TrainingFactorOf(simulation, room));
+        StepFor(simulation, 2 * GameDate.HoursPerDay);
+        Assert.All(students, s => Assert.Equal(DoctorPhase.Studying, ((DoctorBehaviour)s.Behaviour!).Phase));
+        var ordered = simulation.Entities.OfType<Humanoid>().Where(students.Contains).Select(h => h.Profile!).ToArray();
+
+        // The logic specification's example: a consultant of skill 800, students of 300 lacking surgery. Two students:
+        // k = 1, and m is 2 for the first and 3 for the second, so +20 and +13 skill, +5 and +3 towards surgery.
+        SetSkill(consultant.Profile!, 800);
+        var taught = new int[2];
+        const int lessons = 400;
+        for (var lesson = 0; lesson < lessons; lesson++)
+        {
+            foreach (var profile in ordered)
+            {
+                SetSkill(profile, 300);
+                ((int[])typeof(StaffProfile).GetField("_specialismPoints", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(profile)!)[0] = 0;
+            }
+
+            Training.Lesson(simulation, room, consultant, simulation.Rules.Staff.Training.ProjectorValue);
+            var gains = new[] { (20, 5), (13, 3) };
+            for (var i = 0; i < ordered.Length; i++)
+            {
+                var skill = ordered[i].Skill - 300;
+                var points = ordered[i].SpecialismPoints(Specialism.Surgeon);
+                Assert.True((skill, points) == (0, 0) || (skill, points) == gains[i], $"Student {i}: +{skill}, +{points}.");
+                taught[i] += skill > 0 ? 1 : 0;
+            }
+
+            // Both learn together or neither: one threshold for the whole lesson.
+            Assert.Equal(ordered[0].Skill, ordered[1].Skill + 7 * (ordered[0].Skill > 300 ? 1 : 0));
+        }
+
+        // (800 − 300) / 800 = 62.5 % of the lessons.
+        Assert.All(taught, t => Assert.InRange(t, lessons * 52 / 100, lessons * 73 / 100));
+
+        // A student as good as the teacher learns nothing.
+        foreach (var profile in ordered)
+        {
+            SetSkill(profile, 800);
+        }
+
+        for (var lesson = 0; lesson < 50; lesson++)
+        {
+            Training.Lesson(simulation, room, consultant, simulation.Rules.Staff.Training.BookcaseValue);
+        }
+
+        Assert.All(ordered, p => Assert.Equal(800, p.Skill));
     }
 
-    private static decimal TrainingFactorOf(Simulation simulation, Room room)
-    {
-        var method = typeof(Simulation).Assembly.GetType("OpenWards.Sim.Staff.Training")!
-            .GetMethod("TrainingFactor", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
-        return (decimal)method.Invoke(null, [simulation, room])!;
-    }
+    private static void SetSkill(StaffProfile profile, int skill) =>
+        typeof(StaffProfile).GetProperty(nameof(StaffProfile.Skill))!.SetValue(profile, skill);
 
     private static Humanoid HireStudent(Simulation simulation, TilePosition tile)
     {

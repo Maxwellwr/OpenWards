@@ -81,7 +81,7 @@ public class LevelRulesLoaderTests
 
         var training = LevelRulesLoader.StaffFromConfig(config).Training;
 
-        Assert.Equal(new TrainingRules(30, 50, 60, 45, 10, 15, 25), training);
+        Assert.Equal(new TrainingRules(30, 50, 150, 150, 10, 15, 25), training);
         Assert.Equal(TrainingRules.Default, LevelRulesLoader.StaffFromConfig(LevelConfig.Parse([])).Training);
     }
 

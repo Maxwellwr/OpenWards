@@ -117,16 +117,25 @@ public sealed class StaffProfile
     public byte Layer5 { get; private set; } = 2;
 
     /// <summary>
-    /// What training has added to the skill beyond its thousandths, in millionths (CorsixTH keeps the skill as a fraction).
+    /// The points a doctor has been taught towards surgery, psychiatry and research; the ability comes once they pass the
+    /// level's threshold for it (<see cref="TrainingRules"/>).
     /// </summary>
-    private int _skillMillionths;
+    private readonly int[] _specialismPoints = new int[3];
 
-    /// <summary>How far a doctor has been taught surgery, psychiatry and research, in millionths of the ability.</summary>
-    private readonly int[] _specialismMillionths = new int[3];
+    /// <summary>
+    /// How far a doctor has been taught an ability they do not have yet, from 0 to 1: the points over the level's threshold
+    /// for the ability (the logic specification), not over 100.
+    /// </summary>
+    public decimal SpecialismProgress(Specialism specialism, TrainingRules rules)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        return Has(specialism) ? 1 : Math.Min(1, _specialismPoints[(int)specialism] / (decimal)Math.Max(1, rules.Threshold(specialism)));
+    }
 
-    /// <summary>How far a doctor has been taught an ability they do not have yet, from 0 to 1 (CorsixTH's <c>is_surgeon</c> etc.).</summary>
-    public decimal SpecialismProgress(Specialism specialism) =>
-        Has(specialism) ? 1 : _specialismMillionths[(int)specialism] / 1_000_000m;
+    private static int ProgressToPoints(decimal progress, int threshold) => (int)decimal.Floor(Math.Clamp(progress, 0m, 1m) * threshold);
+
+    /// <summary>The points taught towards an ability the doctor does not have yet.</summary>
+    public int SpecialismPoints(Specialism specialism) => _specialismPoints[(int)specialism];
 
     /// <summary>Whether the doctor has the ability (CorsixTH's <c>hasSpecialism</c>).</summary>
     public bool Has(Specialism specialism) => specialism switch
@@ -137,20 +146,13 @@ public sealed class StaffProfile
     };
 
     /// <summary>
-    /// <c>Doctor:updateSkill("skill", amount)</c>: the skill grows, up to 1. The rank stays: promotion comes at the end of
-    /// a month (<see cref="StaffEmployment.OnEndMonth"/>).
+    /// A lesson's gain (the logic specification): the skill grows by <paramref name="amount"/>, kept within
+    /// <see cref="MinProcedureSkill"/> to <see cref="MaxSkill"/>. The rank stays: promotion comes at the end of a month
+    /// (<see cref="StaffEmployment.OnEndMonth"/>).
     /// </summary>
-    internal void TrainSkill(decimal amount)
+    internal void TrainSkill(int amount)
     {
-        if (Skill >= MaxSkill)
-        {
-            return;
-        }
-
-        var total = ((long)Skill * 1000) + _skillMillionths + (long)decimal.Floor(amount * 1_000_000);
-        total = Math.Min(total, (long)MaxSkill * 1000);
-        Skill = (int)(total / 1000);
-        _skillMillionths = (int)(total % 1000);
+        Skill = Math.Clamp(Skill + amount, MinProcedureSkill, MaxSkill);
     }
 
     /// <summary>
@@ -176,9 +178,12 @@ public sealed class StaffProfile
         }
     }
 
-    /// <summary><c>Doctor:updateSkill("is_surgeon", amount)</c> and so on: at 1 the doctor has the ability.</summary>
+    /// <summary>
+    /// A lesson's gain towards an ability (the logic specification): the points grow by <paramref name="points"/>, and once
+    /// they are more than <paramref name="threshold"/> the doctor has the ability.
+    /// </summary>
     /// <returns>Whether the doctor has just gained the ability.</returns>
-    internal bool TrainSpecialism(Specialism specialism, decimal amount)
+    internal bool TrainSpecialism(Specialism specialism, int points, int threshold)
     {
         if (Has(specialism))
         {
@@ -186,13 +191,13 @@ public sealed class StaffProfile
         }
 
         var index = (int)specialism;
-        _specialismMillionths[index] = (int)Math.Min(1_000_000, _specialismMillionths[index] + (long)decimal.Floor(amount * 1_000_000));
-        if (_specialismMillionths[index] < 1_000_000)
+        _specialismPoints[index] += points;
+        if (_specialismPoints[index] <= threshold)
         {
             return false;
         }
 
-        _specialismMillionths[index] = 0;
+        _specialismPoints[index] = 0;
         switch (specialism)
         {
             case Specialism.Surgeon:
@@ -269,12 +274,12 @@ public sealed class StaffProfile
         bool researcher,
         int wage,
         byte layer5,
-        IReadOnlyList<decimal> specialismProgress,
+        IReadOnlyList<int> specialismPoints,
         ImportedStaffName name,
         StaffRules rules,
         SimRandom random)
     {
-        ArgumentNullException.ThrowIfNull(specialismProgress);
+        ArgumentNullException.ThrowIfNull(specialismPoints);
         var profile = new StaffProfile(staffClass)
         {
             NameSeed = random.NextInclusive(1, 1009),
@@ -293,9 +298,9 @@ public sealed class StaffProfile
             profile.Layer5 = layer5;
         }
 
-        for (var i = 0; i < profile._specialismMillionths.Length && i < specialismProgress.Count; i++)
+        for (var i = 0; i < profile._specialismPoints.Length && i < specialismPoints.Count; i++)
         {
-            profile._specialismMillionths[i] = (int)(Math.Clamp(specialismProgress[i], 0m, 1m) * 1_000_000m);
+            profile._specialismPoints[i] = Math.Max(0, specialismPoints[i]);
         }
 
         return profile;
@@ -344,10 +349,9 @@ public sealed class StaffProfile
         writer.WriteInt32(FaceIndex);
         writer.WriteInt32(ChinIndex);
         writer.WriteByte(Layer5);
-        writer.WriteInt32(_skillMillionths);
-        foreach (var progress in _specialismMillionths)
+        foreach (var points in _specialismPoints)
         {
-            writer.WriteInt32(progress);
+            writer.WriteInt32(points);
         }
 
         writer.WriteBool(ImportedName is not null);
@@ -385,12 +389,21 @@ public sealed class StaffProfile
             ChinIndex = reader.ReadInt32(),
             Layer5 = reader.ReadByte(),
         };
-        if (reader.Version is 0 or >= 70)
+        if (reader.Version is 0 or >= 111)
         {
-            profile._skillMillionths = reader.ReadInt32();
-            for (var i = 0; i < profile._specialismMillionths.Length; i++)
+            for (var i = 0; i < profile._specialismPoints.Length; i++)
             {
-                profile._specialismMillionths[i] = reader.ReadInt32();
+                profile._specialismPoints[i] = reader.ReadInt32();
+            }
+        }
+        else if (reader.Version >= 70)
+        {
+            // Before version 111: the skill's millionths, then each ability's progress in millionths of the ability. The
+            // save holds no thresholds here, so the progress becomes points of the default ones.
+            reader.ReadInt32();
+            for (var i = 0; i < profile._specialismPoints.Length; i++)
+            {
+                profile._specialismPoints[i] = ProgressToPoints(reader.ReadInt32() / 1_000_000m, TrainingRules.Default.Threshold((Specialism)i));
             }
         }
 
