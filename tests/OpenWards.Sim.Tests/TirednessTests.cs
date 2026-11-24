@@ -157,26 +157,48 @@ public class TirednessTests
         Assert.Equal(recovered, RestRules.Default.Recovery(value, fatigue));
 
     [Fact]
-    public void RestStandingOrOnTheSofaComesEveryEightFramesOfOneOrTwoTicksBySkillAndFatigue()
+    public void ThePaceFollowsSkillAndFatigueAndTheRestComesEveryEightFrames()
     {
         var simulation = NewSimulation(new TirednessRules(600, 700, 800, 300));
         var doctor = Hire(simulation, StaffClass.Doctor, new TilePosition(6, 6));
         var staff = simulation.Rules.Staff;
-        int Period(int skill, decimal fatigue)
+        (int Frame, int Tile, int RestTicks) Pace(int skill, decimal fatigue)
         {
             typeof(StaffProfile).GetProperty(nameof(StaffProfile.Skill))!.SetValue(doctor.Profile, skill);
             doctor.Fatigue = fatigue;
-            return Tiredness.RestPeriod(simulation, doctor);
+            Tiredness.UpdateSpeed(simulation, doctor);
+            var tile = doctor.IsFast ? 4 : doctor.IsSlow ? 16 : 8;
+            return (doctor.FrameTicks, tile, Tiredness.RestPeriod(doctor));
         }
 
-        // Up to DoctorThreshold: always 16.
-        Assert.Equal((16, 16, 16), (Period(staff.DoctorThreshold, 0.5m), Period(staff.DoctorThreshold, 0.75m), Period(staff.DoctorThreshold, 0.9m)));
+        // Up to DoctorThreshold: frame 2, tile 16, whatever the fatigue.
+        Assert.Equal((2, 16, 16), Pace(staff.DoctorThreshold, 0.5m));
+        Assert.Equal((2, 16, 16), Pace(staff.DoctorThreshold, 0.9m));
 
-        // Between the thresholds: 8 until very tired.
-        Assert.Equal((8, 8, 16, 16), (Period(staff.DoctorThreshold + 1, 0.7m), Period(staff.ConsultantThreshold - 1, 0.5m), Period(staff.DoctorThreshold + 1, 0.701m), Period(staff.DoctorThreshold + 1, 0.9m)));
+        // Between the thresholds: frame 1, tile 8 until very tired.
+        Assert.Equal((1, 8, 8), Pace(staff.DoctorThreshold + 1, 0.7m));
+        Assert.Equal((1, 8, 8), Pace(staff.ConsultantThreshold - 1, 0.5m));
+        Assert.Equal((2, 16, 16), Pace(staff.DoctorThreshold + 1, 0.701m));
+        Assert.Equal((2, 16, 16), Pace(staff.DoctorThreshold + 1, 0.9m));
 
-        // Consultants: 8 until tired enough to crack up.
-        Assert.Equal((8, 8, 16), (Period(staff.ConsultantThreshold, 0.75m), Period(staff.ConsultantThreshold, 0.8m), Period(staff.ConsultantThreshold, 0.801m)));
+        // From ConsultantThreshold: tile 4; very tired tile 8; past CrackUpTired frame 2, tile 16.
+        Assert.Equal((1, 4, 8), Pace(staff.ConsultantThreshold, 0.7m));
+        Assert.Equal((1, 8, 8), Pace(staff.ConsultantThreshold, 0.8m));
+        Assert.Equal((2, 16, 16), Pace(staff.ConsultantThreshold, 0.801m));
+    }
+
+    [Fact]
+    public void ASlowMemberOfStaffsAnimationsLastTwiceAsLong()
+    {
+        var simulation = NewSimulation();
+        var doctor = Hire(simulation, StaffClass.Doctor, new TilePosition(6, 6));
+        var animation = new Definitions.AnimationRef(1, 12);
+        doctor.FrameTicks = 1;
+        Assert.Equal(12, doctor.AnimationTicks(animation));
+        doctor.FrameTicks = 2;
+        Assert.Equal(24, doctor.AnimationTicks(animation));
+        doctor.SetActionAnimation(simulation, animation, false, doctor.Tile, doctor.Tile, 0);
+        Assert.Equal(2, doctor.ActionAnimationFrameTicks);
     }
 
     [Fact]

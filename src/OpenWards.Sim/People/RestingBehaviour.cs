@@ -91,7 +91,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
     {
         if (simulation.FindEntity(RoomId) is not Room { IsActive: true } room || simulation.FindEntity(room.DoorId) is not RoomDoor door)
         {
-            BackToWork(humanoid);
+            BackToWork(simulation, humanoid);
             return;
         }
 
@@ -102,7 +102,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
                 {
                     if (!humanoid.WalkTo(simulation, door.InsideTile(room.Area)))
                     {
-                        BackToWork(humanoid);
+                        BackToWork(simulation, humanoid);
                     }
 
                     return;
@@ -134,7 +134,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
                 break;
             case RestingPhase.Meandering:
                 Meander.Update(simulation, humanoid, loop: () => false);
-                if (++_restTicks >= Tiredness.RestPeriod(simulation, humanoid))
+                if (++_restTicks >= Tiredness.RestPeriod(humanoid))
                 {
                     _restTicks = 0;
                     if (Rest(simulation, humanoid, simulation.Rules.Tiredness.Rest.RestStanding))
@@ -153,13 +153,13 @@ public sealed class RestingBehaviour : HumanoidBehaviour
                 {
                     if (!humanoid.WalkTo(simulation, RoomVisits.OutsideTile(room, door)))
                     {
-                        BackToWork(humanoid);
+                        BackToWork(simulation, humanoid);
                     }
 
                     return;
                 }
 
-                BackToWork(humanoid);
+                BackToWork(simulation, humanoid);
                 if (ReturnRoomId != 0)
                 {
                     // Back to the research department or training room if it still has room for them.
@@ -190,7 +190,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
                 break;
             case ObjectUseEvent.None or ObjectUseEvent.Loop when _nextTargetId == 0 && Phase == RestingPhase.UsingObject && Use is not null:
                 // On the sofa: a rest every eight frames of the sitting animation.
-                if (++_restTicks >= Tiredness.RestPeriod(simulation, humanoid))
+                if (++_restTicks >= Tiredness.RestPeriod(humanoid))
                 {
                     _restTicks = 0;
                     AfterRest(simulation, humanoid, room, target, simulation.Rules.Tiredness.Rest.RestSofa);
@@ -358,8 +358,10 @@ public sealed class RestingBehaviour : HumanoidBehaviour
     };
 
     /// <summary>Rested (or the staff room gone): back to their usual work, free for any room.</summary>
-    private void BackToWork(Humanoid humanoid)
+    private void BackToWork(Simulation simulation, Humanoid humanoid)
     {
+        // The pace is worked out again after a rest.
+        Tiredness.UpdateSpeed(simulation, humanoid);
         humanoid.Behaviour = StaffHiring.NewBehaviour(humanoid.Profile!.Class);
         if (humanoid.Behaviour is HandymanBehaviour handyman)
         {

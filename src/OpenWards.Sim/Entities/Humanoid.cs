@@ -266,6 +266,20 @@ public sealed class Humanoid : Entity
     /// </summary>
     public int ActionAnimationSpeed { get; private set; } = 1;
 
+    /// <summary>
+    /// How many ticks each frame of <see cref="ActionAnimation"/> lasts: the <see cref="FrameTicks"/> it started with.
+    /// </summary>
+    public int ActionAnimationFrameTicks { get; private set; } = 1;
+
+    /// <summary>
+    /// How many ticks a frame of the humanoid's animations lasts, 1 or 2: a member of staff's pace
+    /// (<see cref="Staff.Tiredness.UpdateSpeed"/>); always 1 for patients and others.
+    /// </summary>
+    public int FrameTicks { get; internal set; } = 1;
+
+    /// <summary>The ticks <paramref name="animation"/> lasts at the humanoid's pace.</summary>
+    internal int AnimationTicks(AnimationRef animation) => animation.Length * FrameTicks;
+
     /// <summary>The tile <see cref="ActionAnimation"/> is drawn from.</summary>
     public TilePosition ActionAnimationTile { get; private set; }
 
@@ -444,6 +458,7 @@ public sealed class Humanoid : Entity
         ActionAnimationFlip = flip;
         ActionAnimationStart = simulation.Tick;
         ActionAnimationSpeed = speed;
+        ActionAnimationFrameTicks = FrameTicks;
         ActionAnimationTile = tile;
         ActionDrawTile = drawTile;
         HiddenObjectId = hiddenObject;
@@ -836,6 +851,11 @@ public sealed class Humanoid : Entity
             humanoid.RaiseRequestCount = reader.ReadInt32();
             humanoid.RaiseReason = (Staff.RaiseReason)reader.ReadByte();
         }
+
+        if (reader.Version is 0 or >= 114)
+        {
+            humanoid.FrameTicks = Math.Clamp(reader.ReadInt32(), 1, 2);
+        }
         else if (humanoid.RaiseRequest > 0)
         {
             // A request of the old model was always for a rise.
@@ -864,6 +884,7 @@ public sealed class Humanoid : Entity
             }
 
             humanoid.ActionAnimationSpeed = reader.Version is 0 or >= 101 ? reader.ReadInt32() : 1;
+            humanoid.ActionAnimationFrameTicks = reader.Version is 0 or >= 114 ? reader.ReadInt32() : 1;
         }
 
         humanoid.Behaviour = HumanoidBehaviour.Read(reader);
@@ -912,6 +933,7 @@ public sealed class Humanoid : Entity
         writer.WriteInt64(HiredAt);
         writer.WriteInt32(RaiseRequestCount);
         writer.WriteByte((byte)RaiseReason);
+        writer.WriteInt32(FrameTicks);
 
         writer.WriteInt32(_path.Count);
         foreach (var tile in _path)
@@ -939,6 +961,7 @@ public sealed class Humanoid : Entity
             }
 
             writer.WriteInt32(ActionAnimationSpeed);
+            writer.WriteInt32(ActionAnimationFrameTicks);
         }
 
         HumanoidBehaviour.Write(writer, Behaviour);

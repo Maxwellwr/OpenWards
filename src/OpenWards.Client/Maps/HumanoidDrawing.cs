@@ -236,7 +236,8 @@ internal sealed class HumanoidDrawing
 
         var set = _renderer.Animations;
         var first = set.FirstFrame(animation);
-        var elapsed = Math.Max(0, tick - state.StartTick);
+        // Walking and standing frames change at the humanoid's pace (a member of staff's frames last one or two ticks).
+        var elapsed = Math.Max(0, tick - state.StartTick) / Math.Max(1, humanoid.FrameTicks);
         var frame = set.Advance(first, (int)(elapsed % set.Length(first)));
 
         Span<byte> layers = stackalloc byte[Humanoid.LayerCount];
@@ -270,7 +271,8 @@ internal sealed class HumanoidDrawing
         var elapsed = ActionElapsed(tick, humanoid.ActionAnimationStart);
 
         // num_animation_ticks: some uses (the cardiogram's monitor) move on more than one frame a tick.
-        var played = (int)(elapsed * humanoid.ActionAnimationSpeed % set.Length(first));
+        // A member of staff's frames last one or two ticks (their pace, Humanoid.FrameTicks).
+        var played = (int)(elapsed * humanoid.ActionAnimationSpeed / Math.Max(1, humanoid.ActionAnimationFrameTicks) % set.Length(first));
         var frame = set.Advance(first, played);
         Span<byte> layers = stackalloc byte[Humanoid.LayerCount];
         for (var i = 0; i < layers.Length; i++)

@@ -232,12 +232,12 @@ public sealed class ObjectUse
                 // {"morph", A, B}: A shown first, then morphing into B; the use lasts length times B's frames.
                 humanoid.SetActionAnimation(simulation, animation, flip, tile, drawTile, morph.ObjectVisible ? 0 : hidden);
                 humanoid.SetMorph(morph.Into, flip ^ morph.FlipInto, morph.Rounds);
-                Timer = morph.Rounds * morph.Into.Length;
+                Timer = morph.Rounds * humanoid.AnimationTicks(morph.Into);
                 return;
             }
 
             humanoid.SetActionAnimation(simulation, animation, flip, tile, drawTile, hidden);
-            Timer = animation.Length;
+            Timer = humanoid.AnimationTicks(animation);
             return;
         }
     }

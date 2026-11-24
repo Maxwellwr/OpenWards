@@ -148,6 +148,12 @@ internal static class Tiredness
             humanoid.IsTiredMoodShown = false;
             ComeRound(humanoid);
         }
+
+        // The pace changes only at the middle of a tile.
+        if (!humanoid.IsStepping)
+        {
+            UpdateSpeed(simulation, humanoid);
+        }
     }
 
     /// <summary>The frames of the resting animation between two rests standing or on the sofa.</summary>
@@ -155,28 +161,9 @@ internal static class Tiredness
 
     /// <summary>
     /// The ticks between two rests standing or on the sofa: eight frames of the one-frame resting animation, each lasting
-    /// <see cref="FrameTicks"/>.
+    /// <see cref="Humanoid.FrameTicks"/>.
     /// </summary>
-    internal static int RestPeriod(Simulation simulation, Humanoid humanoid) => RestFrames * FrameTicks(simulation, humanoid);
-
-    /// <summary>
-    /// How long a frame of a member of staff's animation lasts (the maintainer's description of the original): two ticks
-    /// up to <see cref="StaffRules.DoctorThreshold"/> skill; one tick below <see cref="StaffRules.ConsultantThreshold"/>
-    /// unless very tired, and from it unless tired enough to crack up; always two in the training room.
-    /// </summary>
-    internal static int FrameTicks(Simulation simulation, Humanoid humanoid)
-    {
-        var staff = simulation.Rules.Staff;
-        var tiredness = simulation.Rules.Tiredness;
-        var skill = humanoid.Profile?.Skill ?? 0;
-        var fatigue = humanoid.Fatigue * 1000;
-        if (skill <= staff.DoctorThreshold || RoomOf(simulation, humanoid) is { RoomType: TrainingRoomType })
-        {
-            return 2;
-        }
-
-        return fatigue > (skill < staff.ConsultantThreshold ? tiredness.VeryTired : tiredness.CrackUpTired) ? 2 : 1;
-    }
+    internal static int RestPeriod(Humanoid humanoid) => RestFrames * humanoid.FrameTicks;
 
     /// <summary>
     /// Standing idle, with nowhere to work: a doctor or nurse without a room (and a nurse not off to vaccinate), a handyman
@@ -211,36 +198,47 @@ internal static class Tiredness
     }
 
     /// <summary>
-    /// <c>Staff:updateSpeed</c>, at the end of every tick: juniors walk slowly and consultants fast; very tired staff
-    /// one step slower and those tired enough to crack up two (receptionists never); a doctor in the training room
-    /// slowly; with the no-rest cheat everyone fast.
+    /// A member of staff's pace (the maintainer's description of the original): how long a frame of their animations lasts
+    /// (<see cref="Humanoid.FrameTicks"/>) and how many ticks a tile of walking takes (16 slow, 8, 4 fast), by skill and
+    /// fatigue. Up to <see cref="StaffRules.DoctorThreshold"/> skill: frame 2, tile 16. Below
+    /// <see cref="StaffRules.ConsultantThreshold"/>: frame 1, tile 8, but 2 and 16 once very tired. From it: frame 1, tile
+    /// 4; very tired tile 8; past <see cref="TirednessRules.CrackUpTired"/> frame 2, tile 16. In the training room a doctor
+    /// is always at frame 2, tile 16; receptionists keep a patient's pace (frame 1, tile 8); with the no-rest cheat
+    /// everyone is fast. Worked out again in the update every <see cref="PatientNeeds.ModifyFreq"/> ticks while at the
+    /// middle of a tile (<see cref="Modify"/>), after a rest, and when placed.
     /// </summary>
     internal static void UpdateSpeed(Simulation simulation, Humanoid humanoid)
     {
         var profile = humanoid.Profile!;
-        var level = profile.IsJunior ? 1 : profile.IsConsultant ? 3 : 2;
-        if (RoomOf(simulation, humanoid) is { RoomType: TrainingRoomType } && profile.Class == StaffClass.Doctor)
+        var staff = simulation.Rules.Staff;
+        var tiredness = simulation.Rules.Tiredness;
+        var fatigue = humanoid.Fatigue * 1000;
+        int frame, tile;
+        if (HasNoRestCheat(simulation, humanoid))
         {
-            level = 1;
+            (frame, tile) = (1, 4);
         }
-        else if (HasNoRestCheat(simulation, humanoid))
+        else if (profile.Class == StaffClass.Receptionist)
         {
-            level = 3;
+            (frame, tile) = (1, 8);
         }
-        else if (profile.Class != StaffClass.Receptionist)
+        else if (profile.Skill <= staff.DoctorThreshold
+            || (profile.Class == StaffClass.Doctor && RoomOf(simulation, humanoid) is { RoomType: TrainingRoomType }))
         {
-            if (IsCrackUpTired(simulation, humanoid.Fatigue))
-            {
-                level -= 2;
-            }
-            else if (IsVeryTired(simulation, humanoid.Fatigue))
-            {
-                level--;
-            }
+            (frame, tile) = (2, 16);
+        }
+        else if (profile.Skill < staff.ConsultantThreshold)
+        {
+            (frame, tile) = fatigue > tiredness.VeryTired ? (2, 16) : (1, 8);
+        }
+        else
+        {
+            (frame, tile) = fatigue > tiredness.CrackUpTired ? (2, 16) : fatigue > tiredness.VeryTired ? (1, 8) : (1, 4);
         }
 
-        humanoid.IsFast = level >= 3;
-        humanoid.IsSlow = level <= 1;
+        humanoid.FrameTicks = frame;
+        humanoid.IsFast = tile == 4;
+        humanoid.IsSlow = tile == 16;
     }
 
     private static bool HasNoRestCheat(Simulation simulation, Humanoid humanoid) =>

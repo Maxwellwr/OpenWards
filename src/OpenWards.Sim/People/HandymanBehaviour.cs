@@ -216,7 +216,7 @@ public sealed class HandymanBehaviour : HumanoidBehaviour
                 // action_sweep_floor_start: the task is his for good now.
                 Phase = HandymanPhase.Sweeping;
                 _stage = 0;
-                _timer = TakeBroomOut.Length;
+                _timer = humanoid.AnimationTicks(TakeBroomOut);
                 humanoid.SetActionAnimation(simulation, TakeBroomOut, flip: false, humanoid.Tile, humanoid.Tile, hiddenObject: 0);
                 break;
             case HandymanPhase.Sweeping:
@@ -435,7 +435,7 @@ public sealed class HandymanBehaviour : HumanoidBehaviour
         var flip = machine.Orientation is Direction.East or Direction.West;
         var hidden = objectDefinition.VisibleWhileUsed ? 0 : machine.Id;
         humanoid.SetActionAnimation(simulation, animation, flip, tile, drawTile, hidden);
-        _timer = animation.Length;
+        _timer = humanoid.AnimationTicks(animation);
     }
 
     private static AnimationRef PickInUse(Simulation simulation, UseAnimations repair) =>
@@ -452,7 +452,7 @@ public sealed class HandymanBehaviour : HumanoidBehaviour
         {
             case 1:
                 humanoid.SetActionAnimation(simulation, Sweep, flip: false, humanoid.Tile, humanoid.Tile, hiddenObject: 0);
-                _timer = Sweep.Length * 2;
+                _timer = humanoid.AnimationTicks(Sweep) * 2;
                 break;
             case 2:
                 if (simulation.FindEntity(TargetId) is Litter litter)
@@ -461,7 +461,7 @@ public sealed class HandymanBehaviour : HumanoidBehaviour
                 }
 
                 TargetId = 0;
-                _timer = Sweep.Length * 2;
+                _timer = humanoid.AnimationTicks(Sweep) * 2;
                 break;
             default:
                 humanoid.ClearActionAnimation();
@@ -478,7 +478,7 @@ public sealed class HandymanBehaviour : HumanoidBehaviour
         _stage = 0;
         humanoid.FaceTowards(plant.Tile);
         var (animation, flip) = WaterAnimation(humanoid.Facing, begin: true);
-        _timer = animation.Length;
+        _timer = humanoid.AnimationTicks(animation);
         humanoid.SetActionAnimation(simulation, animation, flip, humanoid.Tile, humanoid.Tile, hiddenObject: 0);
     }
 
@@ -488,7 +488,7 @@ public sealed class HandymanBehaviour : HumanoidBehaviour
         if (_stage == 1)
         {
             var (animation, flip) = WaterAnimation(humanoid.Facing, begin: false);
-            _timer = animation.Length;
+            _timer = humanoid.AnimationTicks(animation);
             humanoid.SetActionAnimation(simulation, animation, flip, humanoid.Tile, humanoid.Tile, hiddenObject: 0);
             return;
         }
