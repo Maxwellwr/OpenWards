@@ -15,8 +15,8 @@ namespace OpenWards.Client.Ui.Windows;
 /// </summary>
 internal sealed class AuctionWindow : UiWindow
 {
-    /// <summary>The sound of the hammer striking.</summary>
-    private const string HammerSound = "sack.wav";
+    /// <summary>The sound of the hammer striking: the game's own AUCTION.WAV.</summary>
+    private const string HammerSound = "auction.wav";
 
     private int _hammerHeight;
     private bool _struck;
