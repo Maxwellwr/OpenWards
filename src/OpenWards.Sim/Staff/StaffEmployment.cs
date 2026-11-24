@@ -72,7 +72,6 @@ internal static class StaffEmployment
             return;
         }
 
-        Tiredness.TireIfWorking(simulation, humanoid);
         Tiredness.UpdateSpeed(simulation, humanoid);
     }
 

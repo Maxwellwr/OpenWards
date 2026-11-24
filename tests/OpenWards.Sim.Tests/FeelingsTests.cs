@@ -37,6 +37,7 @@ public class FeelingsTests
         var nurse = Hire(simulation, StaffClass.Nurse, new TilePosition(2, 2));
         nurse.Warmth = 0.2m;
         nurse.Happiness = 0.5m;
+        nurse.Fatigue = 0.5m; // Between the thresholds: fatigue leaves the mood alone.
 
         // Without radiators the warmth heads for 0, a point at a time; below 20 it costs a point of mood.
         PatientNeeds.Modify(simulation);
@@ -56,8 +57,13 @@ public class FeelingsTests
         var receptionist = Hire(simulation, StaffClass.Receptionist, new TilePosition(2, 2));
         receptionist.Warmth = 0m;
         receptionist.Happiness = 0.5m;
-        PatientNeeds.Modify(simulation);
+        Feelings.ChangeHappiness(simulation, receptionist, -0.1m);
         Assert.Equal(1m, receptionist.Happiness);
+
+        // The needs update leaves receptionists out altogether.
+        receptionist.Happiness = 0.5m;
+        PatientNeeds.Modify(simulation);
+        Assert.Equal((0m, 0.5m), (receptionist.Warmth, receptionist.Happiness));
 
         var rich = NewSimulation(maxSalary: 1);
         var doctor = Hire(rich, StaffClass.Doctor, new TilePosition(2, 2));
