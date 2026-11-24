@@ -34,8 +34,11 @@ public sealed class LevelRules
     /// <summary>CorsixTH's base_config.lua <c>payroll.MaxSalary</c>.</summary>
     public const int DefaultMaxSalary = 2000;
 
-    /// <summary>CorsixTH's base_config.lua <c>gbv.MayorLaunch</c>.</summary>
-    public const int DefaultMayorLaunch = 150;
+    /// <summary>
+    /// <c>gbv.MayorLaunch</c> when the level files set none: 130 days, as the community describes the original game
+    /// (CorsixTH's base_config.lua has 150).
+    /// </summary>
+    public const int DefaultMayorLaunch = 130;
 
     /// <summary>CorsixTH's base_config.lua's <c>gbv.ScoreMaxInc</c>.</summary>
     public const int DefaultScoreMaxIncrease = 300;
@@ -77,7 +80,7 @@ public sealed class LevelRules
     /// <param name="earthquakes">The level's planned earthquakes in order (<c>quake_control</c>); by default none.</param>
     /// <param name="maxSalary">The highest salary (<c>payroll.MaxSalary</c>); staff earning it are always happy.</param>
     /// <param name="tiredness">When staff count as tired; by default <see cref="TirednessRules.Default"/>.</param>
-    /// <param name="mayorLaunch">Days on average between VIP visits (<c>gbv.MayorLaunch</c>).</param>
+    /// <param name="mayorLaunch">Days between VIP visits (<c>gbv.MayorLaunch</c>).</param>
     /// <param name="emergencies">The level's planned emergencies (<c>emergency_control</c>); by default none.</param>
     /// <param name="epidemics">How contagious diseases are and the epidemics' fines; by default <see cref="EpidemicRules.Default"/>.</param>
     /// <param name="competitors">The computer opponents that play, in the order CorsixTH adds them; by default none.</param>
@@ -203,7 +206,7 @@ public sealed class LevelRules
     /// <summary>When staff count as tired, very tired and crack-up tired.</summary>
     public TirednessRules Tiredness { get; }
 
-    /// <summary>Days on average between VIP visits (<c>gbv.MayorLaunch</c>).</summary>
+    /// <summary>Days between VIP visits (<c>gbv.MayorLaunch</c>).</summary>
     public int MayorLaunch { get; }
 
     /// <summary>The level's planned emergencies, by their number in the level files.</summary>

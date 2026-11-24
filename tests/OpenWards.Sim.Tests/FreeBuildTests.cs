@@ -109,9 +109,9 @@ public class FreeBuildTests
         var hospital = simulation.Hospitals[0];
         var reputation = hospital.Reputation;
 
-        // Rating 10 would cost reputation outside free build mode; rating 1 would bring money.
-        VipVisits.OnVipLeft(simulation, hospital, new VipBehaviour(1, 10));
-        VipVisits.OnVipLeft(simulation, hospital, new VipBehaviour(1, 1));
+        // A score of 5 would cost reputation outside free build mode; −5 would bring money.
+        VipVisits.OnVipLeft(simulation, hospital, new VipBehaviour(1) { Score = 5 });
+        VipVisits.OnVipLeft(simulation, hospital, new VipBehaviour(1) { Score = -5 });
 
         Assert.Equal(reputation + (2 * VipVisits.FreeBuildReputationReward), hospital.Reputation);
         Assert.Equal(0, hospital.Balance);

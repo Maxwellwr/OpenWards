@@ -45,7 +45,7 @@ public class HospitalAnnouncementsTests
 
         // A VIP walking into the hospital is announced once.
         var vip = simulation.AddEntity(id => Humanoid.CreatePatient(id, new TilePosition(10, 10), simulation.Random, Sim.Diseases.PatientLook.Standard, 0));
-        vip.Behaviour = new Sim.People.VipBehaviour(1, 5);
+        vip.Behaviour = new Sim.People.VipBehaviour(1);
         announcements.Update(simulation, 0);
         Assert.Contains(announcements.TakeAnnouncements(), heard => heard.Name.StartsWith("vip00", StringComparison.Ordinal));
         announcements.Update(simulation, 0);

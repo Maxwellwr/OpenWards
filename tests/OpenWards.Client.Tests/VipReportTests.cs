@@ -15,14 +15,14 @@ public sealed class VipReportTests
         var host = new WindowTestHost();
         var hospital = host.Simulation.Hospitals[0];
 
-        VipVisits.OnVipLeft(host.Simulation, hospital, new VipBehaviour(3, 2));
+        VipVisits.OnVipLeft(host.Simulation, hospital, new VipBehaviour(3) { Score = -4 });
 
         Assert.NotNull(hospital.Vips.Report);
         Assert.Contains(FaxWindow.Pending(host.Simulation, 0), key => key.StartsWith("vipreport:", StringComparison.Ordinal));
         var lines = host.Lines(new FaxWindow());
         Assert.Equal("VIP 3 has made a report on your hospital:", lines[0]);
         Assert.Contains("Your reputation has gone up.", lines);
-        Assert.Contains("You have been given a grant of 0.", lines);
+        Assert.Contains("You have been given a grant of 2000.", lines);
 
         // It goes when its 20 days are up.
         var expires = hospital.Vips.Report!.Value.Expires;
@@ -39,7 +39,7 @@ public sealed class VipReportTests
     {
         var host = new WindowTestHost();
         var hospital = host.Simulation.Hospitals[0];
-        VipVisits.OnVipLeft(host.Simulation, hospital, new VipBehaviour(1, 12));
+        VipVisits.OnVipLeft(host.Simulation, hospital, new VipBehaviour(1) { Score = 5 });
 
         var lines = FaxWindow.VipReportLines(host, hospital.Vips.Report!.Value).ToList();
         Assert.Equal(["VIP 1 has made a report on your hospital:", "A poor hospital. Things must improve.", "Your reputation has gone down."], lines);
@@ -65,7 +65,7 @@ public sealed class VipReportTests
     {
         var host = new WindowTestHost();
         var hospital = host.Simulation.Hospitals[0];
-        VipVisits.OnVipLeft(host.Simulation, hospital, new VipBehaviour(3, 2));
+        VipVisits.OnVipLeft(host.Simulation, hospital, new VipBehaviour(3) { Score = -4 });
         var fax = new FaxWindow();
 
         host.Click(fax, "Close");

@@ -132,10 +132,10 @@ public class ReputationTests
     [Fact]
     public void AVipsReportIsGoodMiddlingOrBad()
     {
-        Assert.Equal(VipVisits.GoodReputationPercent, VipVisits.ReputationPercent(People.VipBehaviour.PleasedRating));
-        Assert.Equal(VipVisits.MiddlingReputationPercent, VipVisits.ReputationPercent(People.VipBehaviour.PleasedRating + 1));
-        Assert.Equal(VipVisits.MiddlingReputationPercent, VipVisits.ReputationPercent(VipVisits.MiddlingRating));
-        Assert.Equal(VipVisits.BadReputationPercent, VipVisits.ReputationPercent(VipVisits.MiddlingRating + 1));
+        Assert.Equal(VipVisits.GoodReputationPercent, VipVisits.ReputationPercent(-2));
+        Assert.Equal(VipVisits.MiddlingReputationPercent, VipVisits.ReputationPercent(-1));
+        Assert.Equal(VipVisits.MiddlingReputationPercent, VipVisits.ReputationPercent(VipVisits.PleasedScore));
+        Assert.Equal(VipVisits.BadReputationPercent, VipVisits.ReputationPercent(VipVisits.PleasedScore + 1));
     }
 
     [Fact]

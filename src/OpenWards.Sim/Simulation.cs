@@ -83,7 +83,6 @@ public sealed class Simulation
             _hospitals[player].ChooseInsurers(new SimRandom(seed, sequence: 0x1A5u + (ulong)player));
 
             _hospitals[player].ScheduleNextDisaster(Random, Rules.Difficulty);
-            _hospitals[player].Vips.ScheduleNext(Random, Rules.MayorLaunch, today: 0);
             Emergencies.Start(this, _hospitals[player]);
 
             // CorsixTH's Hospital:Hospital: the rooms of the level whose objects are all there from the start.
