@@ -309,7 +309,7 @@ internal sealed class StaffManagementScreen
 
         foreach (var (specialism, x, progressSprite, qualifiedSprite) in Specialisms)
         {
-            var progress = profile.SpecialismProgress(specialism);
+            var progress = profile.SpecialismProgress(specialism, host.Simulation.Rules.Staff.Training);
             if (progress >= 1)
             {
                 Panel(qualifiedSprite, x, 408);
@@ -494,7 +494,7 @@ internal sealed class StaffManagementScreen
         {
             foreach (var (specialism, x, _, _) in Specialisms)
             {
-                var progress = profile.SpecialismProgress(specialism);
+                var progress = profile.SpecialismProgress(specialism, host.Simulation.Rules.Staff.Training);
                 if (progress > 0 && (progress >= 1 || !profile.IsConsultant) && new Rectangle(x, 408, 40, 52).Contains(local))
                 {
                     var index = specialism switch { Specialism.Surgeon => 64, Specialism.Psychiatrist => 65, _ => 66 };

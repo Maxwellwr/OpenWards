@@ -25,9 +25,6 @@ public static class OriginalSaveImporter
     /// </summary>
     private static readonly byte[] SkippedTypes = [58, 59, 34, 12, 62, 63, 64];
 
-    /// <summary>Training progress as the original stores it for a whole ability (assumed; seen growing a few points a month).</summary>
-    private const decimal TrainingScale = 100m;
-
     /// <summary>The radiation shield: both halves carry its type; the first one in the save is placed.</summary>
     private const byte RadiationShield = 28;
 
@@ -121,7 +118,7 @@ public static class OriginalSaveImporter
                 researcher: (flags & 256) != 0,
                 entity.Salary,
                 (byte)entity.Layers[5],
-                [surgery / TrainingScale, psychiatry / TrainingScale, research / TrainingScale],
+                [surgery, psychiatry, research],
                 name,
                 simulation.Rules.Staff,
                 simulation.Random);

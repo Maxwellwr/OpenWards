@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 110;
+    private const int FormatVersion = 111;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -861,11 +861,9 @@ public sealed class Simulation
             }
         }
 
-        // Doctor:tickDay: students learn.
-        Training.OnEndDay(this);
-
         // The hospitals' value is worked out again each day, as their reputation changes.
         HospitalValue.Refresh(this);
+
         foreach (var hospital in _hospitals)
         {
             // Hospital:onEndDay: the day's research cost, by the researchers at work.
