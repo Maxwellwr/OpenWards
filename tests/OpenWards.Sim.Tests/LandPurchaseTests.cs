@@ -73,54 +73,113 @@ public class LandPurchaseTests
     public void WithSeveralHospitalsAParcelGoesToAuctionAndTheHighestBidderGetsItWhenTheHammerFalls()
     {
         var simulation = NewSimulation(10_000, players: 2);
-        Assert.Equal(500, LandAuction.Increment(120));
+        Assert.Equal(12, LandAuction.StepFor(120));
+        Assert.Equal(10, LandAuction.StepFor(60));
 
-        // Player 1 wishes to buy parcel 2: the auction starts at its price, nothing is bought yet.
+        // Player 1 wishes to buy parcel 2: the auction opens at its price without a bid of theirs, and time stands still.
         simulation.Schedule(0, new PurchaseParcelCommand(2));
         simulation.Step();
         var auction = Assert.IsType<LandAuction>(simulation.Auction);
-        Assert.Equal((2, 120L, 0, 48L), (auction.Parcel, auction.Bid, auction.Leader, auction.HammerHour));
-        Assert.Equal(0, simulation.Map.GetParcelOwner(2));
+        Assert.Equal((2, 0, 120L, 12L, -1, 0L, 0), (auction.Parcel, auction.Opener, auction.Price, auction.Step, auction.Leader, auction.Bid, auction.BidCount));
+        Assert.Equal(LandAuction.HammerFrames - 1, auction.Hammer);
+        Assert.Equal((0L, 1L, 1L), (simulation.Tick, simulation.Frame, simulation.AuctionFrames));
 
-        // The leader cannot outbid themself; player 2 bids 500 more and the hammer waits two days again.
-        simulation.Schedule(0, new BidForParcelCommand(2), tick: 10);
-        simulation.Schedule(1, new BidForParcelCommand(2), tick: 10);
-        RunTo(simulation, 11);
-        Assert.Equal((620L, 1, 58L), (auction.Bid, auction.Leader, auction.HammerHour));
+        // In one frame player 2 bids the price and player 1 a step more; then player 1 outbids themself.
+        simulation.Schedule(1, new BidForParcelCommand(2), tick: 5);
+        simulation.Schedule(0, new BidForParcelCommand(2), tick: 5);
+        simulation.Schedule(0, new BidForParcelCommand(2), tick: 6);
 
-        // A second wish to buy waits for this auction to end.
-        simulation.Schedule(0, new PurchaseParcelCommand(3), tick: 11);
-        RunTo(simulation, 58);
+        // On the bidding screen nothing else happens: a wish to buy another parcel is dropped.
+        simulation.Schedule(1, new PurchaseParcelCommand(3), tick: 6);
+        RunToFrame(simulation, 7);
+        Assert.Equal((0, 144L, 156L, 3), (auction.Leader, auction.Bid, auction.Price, auction.BidCount));
+        Assert.Equal((120L, 144L), (auction.BidOf(1), auction.BidOf(0)));
+        Assert.Equal(LandAuction.HammerFrames - 1, auction.Hammer);
+
+        // The hammer rests, then rises every ten frames and strikes three frames before it falls.
+        Assert.Equal(0, auction.HammerHeight);
+        RunToFrame(simulation, 7 + 29);
+        Assert.Equal((70, 1), (auction.Hammer, auction.HammerHeight));
+        RunToFrame(simulation, 7 + 96);
+        Assert.Equal((3, true), (auction.Hammer, auction.HammerHasStruck));
+        RunToFrame(simulation, 7 + 98);
         Assert.Same(auction, simulation.Auction);
 
+        // The hammer falls: the leader pays their bid, the price and a step for each bid after the first.
         simulation.Step();
         Assert.Null(simulation.Auction);
-        Assert.Equal(2, simulation.Map.GetParcelOwner(2));
-        Assert.Equal(10_000 - 620, simulation.Hospitals[1].Balance);
-        Assert.Equal(10_000, simulation.Hospitals[0].Balance);
-        Assert.Equal(new AuctionResult(2, 1, 620), simulation.LastAuction);
+        Assert.Equal(0L, simulation.Tick);
+        Assert.Equal(1, simulation.Map.GetParcelOwner(2));
+        Assert.Equal(0, simulation.Map.GetParcelOwner(3));
+        Assert.Equal(10_000 - 120 - (2 * 12), simulation.Hospitals[0].Balance);
+        Assert.Equal(10_000, simulation.Hospitals[1].Balance);
+        Assert.Equal(new AuctionResult(2, 0, 144), simulation.LastAuction);
+
+        // Then the game's time goes on.
+        simulation.Step();
+        Assert.Equal(1L, simulation.Tick);
+    }
+
+    [Fact]
+    public void WithoutABidTheParcelStaysForSale()
+    {
+        var simulation = NewSimulation(10_000, players: 2);
+        simulation.Schedule(1, new PurchaseParcelCommand(2));
+        simulation.Step();
+        for (var i = 1; i < LandAuction.HammerFrames; i++)
+        {
+            Assert.NotNull(simulation.Auction);
+            simulation.Step();
+        }
+
+        Assert.Null(simulation.Auction);
+        Assert.Equal((0L, (long)LandAuction.HammerFrames), (simulation.Tick, simulation.AuctionFrames));
+        Assert.Equal(0, simulation.Map.GetParcelOwner(2));
+        Assert.Equal(new AuctionResult(2, -1, 0), simulation.LastAuction);
+        Assert.True(simulation.IsParcelPurchasable(2, 0));
+        Assert.All(simulation.Hospitals, hospital => Assert.Equal(10_000, hospital.Balance));
+    }
+
+    [Fact]
+    public void OpeningAnAuctionTakesMoreMoneyThanThePrice()
+    {
+        var even = NewSimulation(120, players: 2);
+        even.Schedule(0, new PurchaseParcelCommand(2));
+        even.Step();
+        Assert.Null(even.Auction);
+        Assert.Equal(1L, even.Tick);
+
+        var more = NewSimulation(121, players: 2);
+        more.Schedule(0, new PurchaseParcelCommand(2));
+        more.Step();
+        Assert.NotNull(more.Auction);
     }
 
     [Fact]
     public void ABidTooDearForTheBidderIsNotMadeAndAnAuctionIsSaved()
     {
-        var simulation = NewSimulation(600, players: 2);
+        var simulation = NewSimulation(130, players: 2);
         simulation.Schedule(0, new PurchaseParcelCommand(2));
-        simulation.Schedule(1, new BidForParcelCommand(2));
-        simulation.Step();
-        Assert.Equal(0, simulation.Auction!.Leader);
+        simulation.Schedule(1, new BidForParcelCommand(2), tick: 1);
+        simulation.Schedule(0, new BidForParcelCommand(2), tick: 1);
+        RunToFrame(simulation, 2);
+
+        // Player 1 had 130 for the opening but not the 132 of the next bid by the time it ran.
+        Assert.Equal((1, 120L, 132L, 1), (simulation.Auction!.Leader, simulation.Auction.Bid, simulation.Auction.Price, simulation.Auction.BidCount));
 
         using var stream = new MemoryStream();
         simulation.Save(stream);
         stream.Position = 0;
         var restored = Simulation.Load(stream);
         Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
-        Assert.Equal((2, 120L, 0), (restored.Auction!.Parcel, restored.Auction.Bid, restored.Auction.Leader));
+        var auction = restored.Auction!;
+        Assert.Equal((2, 0, 120L, 12L, 132L, 1, 120L), (auction.Parcel, auction.Opener, auction.StartPrice, auction.Step, auction.Price, auction.Leader, auction.Bid));
+        Assert.Equal((simulation.Auction.Hammer, 1, 2L), (auction.Hammer, auction.BidCount, restored.AuctionFrames));
     }
 
-    private static void RunTo(Simulation simulation, long tick)
+    private static void RunToFrame(Simulation simulation, long frame)
     {
-        while (simulation.Tick < tick)
+        while (simulation.Frame < frame)
         {
             simulation.Step();
         }

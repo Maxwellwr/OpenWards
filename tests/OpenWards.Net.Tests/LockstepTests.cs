@@ -353,6 +353,83 @@ public sealed class LockstepTests : IDisposable
     }
 
     [Fact]
+    public void ALandAuctionRunsItsFramesAtItsOwnPaceEvenWhilePausedAndStopsTheGamesTime()
+    {
+        var map = new LevelMap(4, 4, playerCount: 2) { ParcelCount = 3 };
+        for (var y = 0; y < map.Height; y++)
+        {
+            for (var x = 0; x < map.Width; x++)
+            {
+                ref var tile = ref map[x, y];
+                tile.Set(TileFlags.Passable, true);
+                tile.Parcel = (ushort)(y == 0 ? 2 : 1);
+            }
+        }
+
+        map.SetParcelOwner(1, 1);
+        using var server = new LockstepServer(new Simulation(map, seed: 7, rules: new Sim.Economy.LevelRules(10_000, [], [], landCostPerTile: 10)));
+        var clients = new[] { NewClient(server, "Alice"), NewClient(server, "Bob") };
+        void Exchange()
+        {
+            server.ProcessMessages();
+            foreach (var client in clients)
+            {
+                client.ProcessMessages();
+                client.StepAllowed();
+            }
+
+            server.ProcessMessages();
+        }
+
+        try
+        {
+            Exchange();
+            clients[0].Submit(new PurchaseParcelCommand(2));
+            Exchange();
+            server.AdvanceTick();
+            Exchange();
+            Assert.NotNull(server.Simulation.Auction);
+            var tick = server.Simulation.Tick;
+
+            // Paused or not, a frame every 0.1 s; the hours of the game do not move.
+            server.SetSpeed(GameSpeed.Pause);
+            Assert.Equal(10, server.Run(LockstepServer.AuctionFrameInterval * 10));
+            clients[1].Submit(new BidForParcelCommand(2));
+            Exchange();
+            // At most GameClock.MaxTicksPerUpdate frames a call, as for ticks.
+            Assert.Equal(GameClock.MaxTicksPerUpdate, server.Run(LockstepServer.AuctionFrameInterval * 200));
+            server.Run(LockstepServer.AuctionFrameInterval * 30);
+            Exchange();
+
+            Assert.Null(server.Simulation.Auction);
+            Assert.Equal(tick, server.Simulation.Tick);
+            Assert.Equal(2, server.Simulation.Map.GetParcelOwner(2));
+            foreach (var client in clients)
+            {
+                Assert.Equal(server.Simulation.Frame, client.Simulation!.Frame);
+                Assert.Equal(server.Simulation.ComputeStateHash(), client.Simulation.ComputeStateHash());
+            }
+
+            // Back at the paused game, nothing runs.
+            Assert.Equal(0, server.Run(TimeSpan.FromSeconds(1)));
+        }
+        finally
+        {
+            foreach (var client in clients)
+            {
+                client.Dispose();
+            }
+        }
+    }
+
+    private static LockstepClient NewClient(LockstepServer server, string name)
+    {
+        var (serverEnd, clientEnd) = InMemoryConnection.CreatePair();
+        server.AddConnection(serverEnd);
+        return new LockstepClient(clientEnd, name);
+    }
+
+    [Fact]
     public void TheServersSpeedSetsHowManyTicksRealTimeIsWorth()
     {
         Connect("Alice");

@@ -224,9 +224,10 @@ strings:
     auction:
       caption: '토지 경매'
       lot: '구획 %1%: %3%의 $%2% 입찰'
-      hammer: '%1%시간 후 낙찰'
+      no_bids: '구획 %1%: 아직 입찰 없음'
       bid: '$%1% 입찰'
       sold: '구획 %1%: %2%에게 $%3%에 낙찰'
+      unsold: '구획 %1%: 입찰이 없어 팔리지 않음'
     chat:
       caption: '채팅'
       none: '아직 아무도 말하지 않았습니다.'

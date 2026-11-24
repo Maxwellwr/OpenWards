@@ -91,9 +91,10 @@ strings:
     auction:
       caption: 'Leilão de terreno'
       lot: 'Lote %1%: lance de $%2% de %3%'
-      hammer: 'O martelo cai em %1% horas'
+      no_bids: 'Lote %1%: nenhum lance ainda'
       bid: 'Dar lance de $%1%'
       sold: 'Lote %1% vendido para %2% por $%3%'
+      unsold: 'Lote %1% não foi vendido: ninguém deu lance'
     chat:
       caption: 'Bate-papo'
       none: 'Ninguém disse nada ainda.'

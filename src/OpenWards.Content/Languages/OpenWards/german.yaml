@@ -123,9 +123,10 @@ strings:
     auction:
       caption: 'Grundstücksauktion'
       lot: 'Grundstück %1%: Gebot $%2% von %3%'
-      hammer: 'Der Hammer fällt in %1% Stunden'
+      no_bids: 'Grundstück %1%: noch kein Gebot'
       bid: '$%1% bieten'
       sold: 'Grundstück %1% an %2% für $%3% verkauft'
+      unsold: 'Grundstück %1% nicht verkauft: niemand hat geboten'
     chat:
       caption: 'Chat'
       none: 'Bisher hat niemand etwas gesagt.'

@@ -110,9 +110,10 @@ strings:
     auction:
       caption: 'Grondveiling'
       lot: 'Perceel %1%: bod van $%2% door %3%'
-      hammer: 'De hamer valt over %1% uur'
+      no_bids: 'Perceel %1%: nog geen bod'
       bid: 'Bied $%1%'
       sold: 'Perceel %1% verkocht aan %2% voor $%3%'
+      unsold: 'Perceel %1% is niet verkocht: niemand bood'
     chat:
       caption: 'Chat'
       none: 'Nog niemand heeft iets gezegd.'

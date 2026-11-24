@@ -103,9 +103,10 @@ strings:
     auction:
       caption: 'Asta del terreno'
       lot: 'Lotto %1%: offerta di $%2% da %3%'
-      hammer: 'Il martelletto cade tra %1% ore'
+      no_bids: 'Lotto %1%: ancora nessuna offerta'
       bid: 'Offri $%1%'
       sold: 'Lotto %1% venduto a %2% per $%3%'
+      unsold: 'Lotto %1% invenduto: nessuno ha offerto'
     chat:
       caption: 'Chat'
       none: 'Nessuno ha ancora detto niente.'
