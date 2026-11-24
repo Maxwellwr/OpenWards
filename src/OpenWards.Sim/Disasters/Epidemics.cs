@@ -35,6 +35,11 @@ public sealed class EpidemicRules
     /// <param name="reputationLossMinimum"><c>gbv.EpidemicRepLossMinimum</c>: from this many still infected the fax speaks of reputation too.</param>
     /// <param name="evacuationMinimum"><c>gbv.EpidemicEvacMinimum</c>: from this many still infected the hospital is evacuated.</param>
     /// <param name="concurrentLimit"><c>gbv.EpidemicConcurrentLimit</c>: how many epidemics there may be at once, revealed or not.</param>
+    /// <param name="howContagious"><c>gbv.HowContagious</c>: a contagious patient's strength is drawn from 1 to this.</param>
+    /// <param name="reduceContagiousDivisorPercent">
+    /// <c>gbv.ReduceContRate</c>: early in the level each disease's <c>ContRate</c> is multiplied by this percentage; at 0
+    /// nobody is contagious then.
+    /// </param>
     public EpidemicRules(
         IReadOnlyList<int> contagiousRates,
         int spreadFactor = 25,
@@ -46,7 +51,9 @@ public sealed class EpidemicRules
         int compensationHigh = 15000,
         int reputationLossMinimum = 5,
         int evacuationMinimum = 10,
-        int concurrentLimit = 1)
+        int concurrentLimit = 1,
+        int howContagious = DefaultHowContagious,
+        int reduceContagiousDivisorPercent = 0)
     {
         if (contagiousRates.Count != DiseaseRules.ExpertiseCount + 1)
         {
@@ -64,7 +71,12 @@ public sealed class EpidemicRules
         ReputationLossMinimum = reputationLossMinimum;
         EvacuationMinimum = evacuationMinimum;
         ConcurrentLimit = concurrentLimit;
+        HowContagious = howContagious;
+        ReduceContagiousDivisorPercent = reduceContagiousDivisorPercent;
     }
+
+    /// <summary><c>gbv.HowContagious</c> when the level files set none.</summary>
+    public const int DefaultHowContagious = 10;
 
     /// <summary>base_config.lua: no disease contagious, and the <c>gbv</c> defaults.</summary>
     public static EpidemicRules Default { get; } = new(new int[DiseaseRules.ExpertiseCount + 1]);
@@ -89,6 +101,15 @@ public sealed class EpidemicRules
 
     public int ConcurrentLimit { get; }
 
+    /// <summary>The most a contagious patient's strength can be (<c>gbv.HowContagious</c>).</summary>
+    public int HowContagious { get; }
+
+    /// <summary>
+    /// <c>gbv.ReduceContRate</c>: the percentage each disease's <c>ContRate</c> is multiplied by early in the level. As in
+    /// the original game, 1 to 99 shrinks the divisor and so makes contagious patients more likely, despite the name.
+    /// </summary>
+    public int ReduceContagiousDivisorPercent { get; }
+
     /// <summary>The <c>ContRate</c> of an <c>expertise</c> entry: one patient in that many is contagious, 0 for none.</summary>
     public int ContagiousRate(int expertiseId) => expertiseId >= 1 && expertiseId < _contagiousRates.Length ? _contagiousRates[expertiseId] : 0;
 
@@ -109,6 +130,8 @@ public sealed class EpidemicRules
         writer.WriteInt32(ReputationLossMinimum);
         writer.WriteInt32(EvacuationMinimum);
         writer.WriteInt32(ConcurrentLimit);
+        writer.WriteInt32(HowContagious);
+        writer.WriteInt32(ReduceContagiousDivisorPercent);
     }
 
     internal static EpidemicRules Read(SimReader reader)
@@ -121,7 +144,9 @@ public sealed class EpidemicRules
 
         return new EpidemicRules(
             rates, reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(),
-            reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32());
+            reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(),
+            reader.Version is 0 or >= Epidemics.SaveVersion ? reader.ReadInt32() : DefaultHowContagious,
+            reader.Version is 0 or >= Epidemics.SaveVersion ? reader.ReadInt32() : 0);
     }
 }
 
@@ -137,11 +162,14 @@ public enum EpidemicOutcome : byte
     /// <summary>Covered up with nobody left infected: compensation.</summary>
     CoveredUp,
 
-    /// <summary>Covered up with some still infected: a fine and reputation lost.</summary>
+    /// <summary>Covered up, and the inspector fined the hospital for those still infected.</summary>
     Fined,
 
-    /// <summary>Covered up with so many still infected that the hospital is evacuated: a fine and a third of the reputation.</summary>
+    /// <summary>Covered up, and with ten or more still infected the inspector evacuated the hospital: reputation lost, no fine.</summary>
     Evacuated,
+
+    /// <summary>Covered up, and the inspector fined the hospital and cost it reputation.</summary>
+    FinedWithReputation,
 }
 
 /// <summary>
@@ -267,7 +295,7 @@ public sealed class Epidemic
         epidemic.Compensation = reader.ReadInt32();
         epidemic.ReputationHit = reader.ReadInt32();
         var outcome = reader.ReadByte();
-        epidemic.Outcome = outcome <= (byte)EpidemicOutcome.Evacuated ? (EpidemicOutcome)outcome : throw new InvalidDataException($"Unknown epidemic outcome {outcome}.");
+        epidemic.Outcome = outcome <= (byte)EpidemicOutcome.FinedWithReputation ? (EpidemicOutcome)outcome : throw new InvalidDataException($"Unknown epidemic outcome {outcome}.");
         epidemic.CheatAlwaysShowMood = reader.Version is 0 or >= 94 && reader.ReadBool();
         return epidemic;
     }
@@ -334,7 +362,7 @@ public sealed class HospitalEpidemics
 
         epidemics.IsDisabled = reader.ReadBool();
         var outcome = reader.ReadByte();
-        epidemics.LastOutcome = outcome <= (byte)EpidemicOutcome.Evacuated ? (EpidemicOutcome)outcome : throw new InvalidDataException($"Unknown epidemic outcome {outcome}.");
+        epidemics.LastOutcome = outcome <= (byte)EpidemicOutcome.FinedWithReputation ? (EpidemicOutcome)outcome : throw new InvalidDataException($"Unknown epidemic outcome {outcome}.");
         epidemics.LastAmount = reader.ReadInt32();
         return epidemics;
     }
@@ -346,40 +374,152 @@ public static class Epidemics
     /// <summary>The fax asking whether to declare or cover up runs out after this many hours, and the epidemic is covered up (<c>24*20</c>).</summary>
     public const int FaxHours = 24 * 20;
 
-    /// <summary>The cover-up watch: 100 days in 13 segments, as the opening's (<c>TICK_DAYS</c>, <c>TIMER_SEGMENTS</c>).</summary>
+    /// <summary>The save version that brought contagious strengths, the cover-up marks and the inspection table.</summary>
+    internal const int SaveVersion = 111;
+
+    /// <summary>The cover-up watch's segments, as the opening's (<c>TIMER_SEGMENTS</c>).</summary>
     public const int WatchSegments = 13;
 
-    /// <summary>Hours of one segment of the cover-up watch: 384.</summary>
-    public const int WatchTickRate = 100 * GameDate.HoursPerDay / WatchSegments;
+    /// <summary>The cover-up lasts this many ticks: 100 counts of 25 (about 50 days).</summary>
+    public const int CoverUpTicks = 100 * 25;
+
+    /// <summary>Hours of one segment of the cover-up watch: 192.</summary>
+    public const int WatchTickRate = CoverUpTicks / WatchSegments;
+
+    /// <summary>A cover-up fails for this many times the level's fine for each patient the inspector finds.</summary>
+    public const int CoverUpFineMultiplier = 2;
+
+    /// <summary>From this many infected patients found the inspector evacuates the hospital.</summary>
+    public const int EvacuationCount = 10;
 
     /// <summary>
-    /// The spread factor is divided by this, for balance (<c>spread_scale_factor</c>): a patient passes the disease on when
-    /// that keeps the epidemic's share of successful infections below <c>spread_factor / 200</c>.
+    /// The inspector's verdicts by the infected patients found, in tenths of a percent: success, fine, fine and
+    /// reputation, evacuation. Nobody found always succeeds.
     /// </summary>
-    private const int SpreadScaleFactor = 200;
+    private static readonly (int MaxFound, int Success, int Fine, int FineAndReputation)[] InspectionTable =
+    [
+        (2, 200, 800, 0),
+        (5, 50, 95, 855),
+        (9, 20, 39, 941),
+    ];
 
-    /// <summary>The least fine (<c>calculateInfectedFine</c>'s 2,000).</summary>
-    private const int MinimumFine = 2000;
+    /// <summary>With <see cref="EvacuationCount"/> or more found, the inspector lets it pass this often in a thousand.</summary>
+    private const int EvacuationSuccess = 20;
 
     /// <summary>
-    /// <c>Hospital:determineIfContagious</c>, when a patient comes: one in the disease's <c>ContRate</c> is contagious,
-    /// once the game is past <c>ReduceContMonths</c> and more than <c>ReduceContPeepCount</c> patients came; not
-    /// emergency patients, and not while epidemics are off.
+    /// When a patient comes: with a disease whose <c>ContRate</c> is set, they are contagious one time in
+    /// <c>ContRate</c>, with a strength from 1 to <c>HowContagious</c>. Until <c>ReduceContMonths</c> months have passed
+    /// and more than <c>ReduceContPeepCount</c> patients came, the divisor is multiplied by <c>ReduceContRate</c> percent
+    /// (at 0 nobody is contagious). Not emergency patients nor special diseases, not during a cover-up, and not while
+    /// epidemics are off.
     /// </summary>
     internal static void DetermineIfContagious(Simulation simulation, Hospital hospital, Humanoid humanoid, PatientBehaviour patient)
     {
-        if (hospital.Epidemics.IsDisabled || patient.EmergencyIndex > 0 || patient.Disease is not { IsContagious: true } disease)
+        if (hospital.Epidemics.IsDisabled || patient.EmergencyIndex > 0 || patient.Disease is not { IsSpecial: false } disease
+            || hospital.Epidemics.Current is { IsCoverUp: true })
         {
             return;
         }
 
         var rules = simulation.Rules.Epidemics;
         var rate = rules.ContagiousRate(disease.ExpertiseId);
-        var potentiallyContagious = rate > 0 && simulation.Random.NextInclusive(1, rate) == rate;
-        if (potentiallyContagious && simulation.Date.MonthOfGame > rules.ReduceContagiousMonths && hospital.Visitors > rules.ReduceContagiousPeopleCount)
+        if (simulation.Date.MonthOfGame <= rules.ReduceContagiousMonths || hospital.Visitors <= rules.ReduceContagiousPeopleCount)
         {
+            rate = rate * rules.ReduceContagiousDivisorPercent / 100;
+        }
+
+        if (rate > 0 && simulation.Random.NextInclusive(1, rate) == rate)
+        {
+            patient.ContagiousStrength = simulation.Random.NextInclusive(1, Math.Max(rules.HowContagious, 1));
             AddToEpidemic(simulation, hospital, humanoid, patient);
         }
+    }
+
+    /// <summary>
+    /// Step 4 of a patient's update: a contagious patient of strength above 1, in the hospital, looks for a victim with a
+    /// chance of (warmth / 2 + <c>ContagiousSpreadFactor</c>) percent, among the patients without a diagnosis on their own
+    /// tile and the four next to it (in the same room or both outside). One in two times the victim catches the disease,
+    /// with half the strength. Nobody catches anything during a cover-up.
+    /// </summary>
+    internal static void Spread(Simulation simulation, Humanoid humanoid, PatientBehaviour patient)
+    {
+        if (!patient.IsInfected || patient.IsVaccinated || patient.IsCured || patient.ContagiousStrength <= 1
+            || humanoid.HospitalPlayer < 0 || humanoid.HospitalPlayer >= simulation.Hospitals.Count)
+        {
+            return;
+        }
+
+        var hospital = simulation.Hospitals[humanoid.HospitalPlayer];
+        if (hospital.Epidemics.IsDisabled || hospital.Epidemics.Current is { IsCoverUp: true } || EpidemicOf(hospital, humanoid.Id) is not { } epidemic
+            || !IsInHospital(simulation, hospital.Player, humanoid.Tile))
+        {
+            return;
+        }
+
+        var chance = (PatientNeeds.Warmth(humanoid) / 2) + simulation.Rules.Epidemics.SpreadFactor;
+        if (simulation.Random.Next(100) >= chance)
+        {
+            return;
+        }
+
+        var map = simulation.Map;
+        var x = humanoid.Tile.X;
+        var y = humanoid.Tile.Y;
+        var roomId = map[x, y].RoomId;
+        var victims = new List<(Humanoid Humanoid, PatientBehaviour Patient)>();
+        foreach (var entity in simulation.Entities)
+        {
+            if (entity is Humanoid { Behaviour: PatientBehaviour victim, IsDespawning: false } other && other.Id != humanoid.Id
+                && Math.Abs(other.Tile.X - x) + Math.Abs(other.Tile.Y - y) <= 1 && map[other.Tile.X, other.Tile.Y].RoomId == roomId
+                && other.HospitalPlayer == hospital.Player && CanCatch(victim) && IsInHospital(simulation, hospital.Player, other.Tile))
+            {
+                victims.Add((other, victim));
+            }
+        }
+
+        if (victims.Count == 0)
+        {
+            return;
+        }
+
+        var (victimHumanoid, victimPatient) = victims[simulation.Random.Next(victims.Count)];
+        if (simulation.Random.Next(2) != 0)
+        {
+            return;
+        }
+
+        if (victimPatient.DiseaseId != patient.DiseaseId)
+        {
+            victimPatient.ChangeDisease(patient.Disease!);
+        }
+
+        victimPatient.ContagiousStrength = patient.ContagiousStrength / 2;
+        AddContagiousPatient(epidemic, victimHumanoid, victimPatient);
+        epidemic.TotalInfections++;
+    }
+
+    /// <summary>Whether a patient may catch an epidemic's disease: not diagnosed, infected, vaccinated, cured, an emergency patient or ill with a special disease.</summary>
+    private static bool CanCatch(PatientBehaviour victim) =>
+        !victim.IsDiagnosed && !victim.IsInfected && !victim.IsVaccinated && !victim.IsCured && victim.EmergencyIndex == 0
+        && victim.Disease is { IsSpecial: false } && victim.Phase is not (PatientPhase.GoingHome or PatientPhase.Dying) && !victim.IsSetToDie;
+
+    /// <summary>The shown or hidden epidemic an infected patient belongs to, or null.</summary>
+    private static Epidemic? EpidemicOf(Hospital hospital, int patientId)
+    {
+        if (hospital.Epidemics.Current is { } current && current.InfectedIds.Contains(patientId))
+        {
+            return current;
+        }
+
+        foreach (var future in hospital.Epidemics.Future)
+        {
+            if (future.InfectedIds.Contains(patientId))
+            {
+                return future;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -471,16 +611,23 @@ public static class Epidemics
             return;
         }
 
-        // Epidemic:startCoverUp.
+        // Epidemic:startCoverUp: every infected patient not vaccinated is marked, and the inspector counts those left.
         epidemic.WatchTimer = WatchSegments - 1;
         epidemic.WatchTickTimer = WatchTickRate;
         CheckPatientsForRemoval(simulation, epidemic);
         epidemic.IsCoverUp = true;
+        foreach (var id in epidemic.InfectedIds)
+        {
+            if (simulation.FindEntity(id) is Humanoid { Behaviour: PatientBehaviour { IsInfected: true, IsVaccinated: false, IsCured: false } patient })
+            {
+                patient.IsCoverUpMarked = true;
+            }
+        }
     }
 
     /// <summary>
-    /// <c>Inspector:checkForReceptionDesk</c> and <c>handleInspector</c>: the inspector has reported at reception, or
-    /// found none; those still infected decide the outcome, and everyone infected counts as vaccinated.
+    /// The inspector has reported at reception, or found none: the marked patients still in the building decide the
+    /// outcome by the inspection table, and everyone infected counts as vaccinated.
     /// </summary>
     internal static void InspectorArrived(Simulation simulation, Hospital hospital)
     {
@@ -489,15 +636,14 @@ public static class Epidemics
             return;
         }
 
-        var stillInfected = CountInfectedPatients(simulation, epidemic);
-        DetermineFines(simulation, epidemic, stillInfected);
-        ClearAllInfectedPatients(simulation, epidemic);
+        var found = CountMarkedInBuilding(simulation, hospital, epidemic);
+        DetermineOutcome(simulation, epidemic, found);
         ApplyOutcome(simulation, hospital, epidemic);
     }
 
     /// <summary>
-    /// <c>Hospital:spawnContagiousPatient</c> for the cheat: a patient with a random contagious disease of the level, by
-    /// the heliport or at a spawn point, starts or joins an epidemic. Needs a staffed desk.
+    /// <c>Hospital:spawnContagiousPatient</c> for the cheat: a patient with a random contagious disease of the level, as
+    /// contagious as the level allows, by the heliport or at a spawn point, starts or joins an epidemic. Needs a staffed desk.
     /// </summary>
     internal static bool SpawnContagiousPatient(Simulation simulation, Hospital hospital)
     {
@@ -537,6 +683,7 @@ public static class Epidemics
         humanoid.Behaviour = patient;
         hospital.Visitors++;
         hospital.VisitorsThisYear++;
+        patient.ContagiousStrength = Math.Max(simulation.Rules.Epidemics.HowContagious, 2);
         AddToEpidemic(simulation, hospital, humanoid, patient);
         return true;
     }
@@ -568,18 +715,15 @@ public static class Epidemics
     }
 
     /// <summary>
-    /// <c>UIBottomPanel:canQueueFax</c> and <c>cancelFax</c>: the epidemic's fax cannot come while an emergency's is
-    /// waiting, and the epidemic is then dropped.
+    /// An epidemic shows once one of its patients is diagnosed, unless another epidemic or an emergency (offered or under
+    /// way) is on; it then waits. CorsixTH drops the epidemic when an emergency's fax is waiting.
     /// </summary>
-    private static bool CanQueueFax(Hospital hospital) => hospital.Emergencies.Current is not { IsAccepted: false };
-
     private static bool CanBeRevealed(Hospital hospital, Epidemic epidemic) =>
-        hospital.IsOpen && hospital.Emergencies.Current is not { IsAccepted: true } && hospital.Epidemics.Current is null && epidemic.IsReadyToReveal;
+        hospital.IsOpen && hospital.Emergencies.Current is null && hospital.Epidemics.Current is null && epidemic.IsReadyToReveal;
 
     /// <summary><c>Epidemic:tick</c>.</summary>
     private static void TickEpidemic(Simulation simulation, Hospital hospital, Epidemic epidemic)
     {
-        InfectOtherPatients(simulation, hospital, epidemic);
         CheckIfReadyToReveal(simulation, epidemic);
         TickFaxAndWatch(simulation, hospital, epidemic);
         if (hospital.Epidemics.Current != epidemic && !hospital.Epidemics.Future.Contains(epidemic))
@@ -588,9 +732,7 @@ public static class Epidemics
         }
 
         MarkedPatientsCallForVaccination(simulation, hospital, epidemic);
-
-        CheckInfectedLeftHospital(simulation, hospital, epidemic);
-        CheckNoInfectedPatients(simulation, hospital, epidemic);
+        CheckNoMarkedPatients(simulation, hospital, epidemic);
         CheckPatientsForRemoval(simulation, epidemic);
     }
 
@@ -773,83 +915,20 @@ public static class Epidemics
         epidemic.InfectedIds.Add(humanoid.Id);
     }
 
-    /// <summary>
-    /// <c>Epidemic:infectOtherPatients</c>: each infected patient may pass the disease on to patients on the four tiles
-    /// next to them, in the same room or both in corridors, inside the hospital. Each patient is tried only once.
-    /// </summary>
-    private static void InfectOtherPatients(Simulation simulation, Hospital hospital, Epidemic epidemic)
+    /// <summary>The marked patients the inspector would count: still in the building, not vaccinated and not cured.</summary>
+    public static int CountMarkedInBuilding(Simulation simulation, Hospital hospital, Epidemic epidemic)
     {
-        var rules = simulation.Rules.Epidemics;
-        var map = simulation.Map;
-
-        // Patients infected on the way are walked too, as CorsixTH's ipairs over the growing list.
-        for (var i = 0; i < epidemic.InfectedIds.Count; i++)
+        var count = 0;
+        foreach (var id in epidemic.InfectedIds)
         {
-            if (simulation.FindEntity(epidemic.InfectedIds[i]) is not Humanoid { Behaviour: PatientBehaviour infectorPatient, IsDespawning: false } infector)
+            if (simulation.FindEntity(id) is Humanoid { Behaviour: PatientBehaviour { IsCoverUpMarked: true, IsVaccinated: false, IsCured: false } patient, IsDespawning: false } humanoid
+                && patient.Phase is not (PatientPhase.GoingHome or PatientPhase.Dying) && IsInHospital(simulation, hospital.Player, humanoid.Tile))
             {
-                continue;
-            }
-
-            var x = infector.Tile.X;
-            var y = infector.Tile.Y;
-            ReadOnlySpan<TilePosition> squares = [new(x - 1, y), new(x + 1, y), new(x, y - 1), new(x, y + 1)];
-            foreach (var square in squares)
-            {
-                if (!map.Contains(square.X, square.Y))
-                {
-                    continue;
-                }
-
-                foreach (var entity in simulation.Entities)
-                {
-                    if (entity is not Humanoid { Behaviour: PatientBehaviour victimPatient, IsDespawning: false } victim || victim.Tile != square
-                        || !CanInfect(simulation, hospital, infector, infectorPatient, victim, victimPatient))
-                    {
-                        continue;
-                    }
-
-                    victimPatient.IsUnderInfectionAttempt = true;
-                    epidemic.AttemptedInfections++;
-                    if (epidemic.TotalInfections * SpreadScaleFactor < rules.SpreadFactor * epidemic.AttemptedInfections)
-                    {
-                        if (victimPatient.DiseaseId != infectorPatient.DiseaseId)
-                        {
-                            victimPatient.ChangeDisease(infectorPatient.Disease!);
-                        }
-
-                        AddContagiousPatient(epidemic, victim, victimPatient);
-                        epidemic.TotalInfections++;
-                    }
-                }
+                count++;
             }
         }
-    }
 
-    /// <summary><c>canInfectOther</c>.</summary>
-    private static bool CanInfect(Simulation simulation, Hospital hospital, Humanoid infector, PatientBehaviour infectorPatient, Humanoid victim, PatientBehaviour victimPatient)
-    {
-        if (infectorPatient.IsCured || infectorPatient.IsVaccinated)
-        {
-            return false;
-        }
-
-        if (!IsInHospital(simulation, hospital.Player, infector.Tile) || !IsInHospital(simulation, hospital.Player, victim.Tile))
-        {
-            return false;
-        }
-
-        if (victimPatient.IsInfected || victimPatient.IsCured || victimPatient.IsVaccinated || victimPatient.IsUnderInfectionAttempt || victimPatient.EmergencyIndex > 0)
-        {
-            return false;
-        }
-
-        if (infectorPatient.DiseaseId != victimPatient.DiseaseId && (victimPatient.Disease is not { IsContagious: true } || victimPatient.IsDiagnosed))
-        {
-            return false;
-        }
-
-        var map = simulation.Map;
-        return map[infector.Tile.X, infector.Tile.Y].RoomId == map[victim.Tile.X, victim.Tile.Y].RoomId;
+        return count;
     }
 
     /// <summary><c>Epidemic:checkIfReadyToReveal</c>: once an infected patient is diagnosed.</summary>
@@ -871,25 +950,17 @@ public static class Epidemics
     }
 
     /// <summary>
-    /// <c>Epidemic:revealEpidemic</c> and <c>sendInitialFax</c>: the fax asks whether to declare, for a fine of 2,000 or
-    /// <c>EpidemicFine</c> for each infected patient, or to cover up. It cannot come while an emergency's fax waits; the
-    /// epidemic is then dropped.
+    /// <c>Epidemic:revealEpidemic</c>: the fax asks whether to declare, for <c>EpidemicFine</c> for each contagious
+    /// patient, or to cover up.
     /// </summary>
     private static void Reveal(Simulation simulation, Hospital hospital, Epidemic epidemic)
     {
         epidemic.IsRevealed = true;
-        epidemic.DeclareFine = CalculateFine(simulation, CountInfectedPatients(simulation, epidemic));
-        if (!CanQueueFax(hospital))
-        {
-            ClearAllInfectedPatients(simulation, epidemic);
-            hospital.Epidemics.Current = null;
-            return;
-        }
-
+        epidemic.DeclareFine = CountInfectedPatients(simulation, epidemic) * simulation.Rules.Epidemics.Fine;
         epidemic.FaxExpires = simulation.Tick + FaxHours;
     }
 
-    /// <summary><c>Epidemic:resolveDeclaration</c>: everyone infected counts as vaccinated; the fine and reputation (a hundredth of it) go.</summary>
+    /// <summary>Declared: everyone infected stops being contagious and the epidemic is over; the fine and reputation go.</summary>
     private static void ResolveDeclaration(Simulation simulation, Hospital hospital, Epidemic epidemic)
     {
         ClearAllInfectedPatients(simulation, epidemic);
@@ -930,32 +1001,13 @@ public static class Epidemics
     }
 
     /// <summary>
-    /// <c>Epidemic:checkInfectedLeftHospital</c>: during the cover-up, an infected patient not cured who leaves the grounds
-    /// gives it away, and the inspector comes at once.
+    /// During the cover-up, once no marked patient is left in the building (vaccinated, cured or gone) the inspector comes
+    /// at once. CorsixTH also calls him at once when an infected patient leaves the grounds uncured; here leaving takes the
+    /// patient off the count.
     /// </summary>
-    private static void CheckInfectedLeftHospital(Simulation simulation, Hospital hospital, Epidemic epidemic)
+    private static void CheckNoMarkedPatients(Simulation simulation, Hospital hospital, Epidemic epidemic)
     {
-        if (!epidemic.IsCoverUpActive)
-        {
-            return;
-        }
-
-        foreach (var id in epidemic.InfectedIds)
-        {
-            if (simulation.FindEntity(id) is Humanoid { Behaviour: PatientBehaviour patient } humanoid
-                && (patient.Phase == PatientPhase.GoingHome || patient.IsSetToDie) && !patient.IsCured
-                && !IsInHospital(simulation, hospital.Player, humanoid.Tile))
-            {
-                FinishCoverUp(simulation, hospital, epidemic);
-                return;
-            }
-        }
-    }
-
-    /// <summary><c>Epidemic:checkNoInfectedPatients</c>: during the cover-up, with nobody left infected the inspector comes at once.</summary>
-    private static void CheckNoInfectedPatients(Simulation simulation, Hospital hospital, Epidemic epidemic)
-    {
-        if (epidemic.IsCoverUpActive && CountInfectedPatients(simulation, epidemic) == 0)
+        if (epidemic.IsCoverUpActive && CountMarkedInBuilding(simulation, hospital, epidemic) == 0)
         {
             FinishCoverUp(simulation, hospital, epidemic);
         }
@@ -1002,6 +1054,7 @@ public static class Epidemics
             if (simulation.FindEntity(id) is Humanoid { Behaviour: PatientBehaviour patient })
             {
                 patient.IsVaccinated = true;
+                patient.IsCoverUpMarked = false;
                 patient.VaccinatingNurseId = 0;
             }
         }
@@ -1020,65 +1073,105 @@ public static class Epidemics
     }
 
     /// <summary>
-    /// <c>Epidemic:determineFaxAndFines</c>: the fine for those still infected; nobody infected brings compensation from
-    /// <c>EpidemicCompLo</c> to <c>EpidemicCompHi</c>; <c>EpidemicEvacMinimum</c> or more evacuate the hospital.
+    /// The inspector's verdict on <paramref name="found"/> marked patients still in the building: nobody found always
+    /// succeeds; otherwise by the inspection table (1–2: 20 % success, 80 % fine; 3–5: 5 %, 9.5 %, 85.5 % fine and
+    /// reputation; 6–9: 2 %, 3.9 %, 94.1 %; 10 or more: 2 % success, 98 % evacuation). The fine is twice
+    /// <c>EpidemicFine</c> for each found; success brings compensation from <c>EpidemicCompLo</c> to <c>EpidemicCompHi</c>.
     /// </summary>
-    private static void DetermineFines(Simulation simulation, Epidemic epidemic, int stillInfected)
+    internal static void DetermineOutcome(Simulation simulation, Epidemic epidemic, int found)
     {
         var rules = simulation.Rules.Epidemics;
-        epidemic.CoverUpFine = CalculateFine(simulation, stillInfected);
-        if (stillInfected == 0)
+        epidemic.CoverUpFine = CoverUpFineMultiplier * rules.Fine * found;
+        epidemic.Outcome = Verdict(simulation.Random, found);
+        if (epidemic.Outcome == EpidemicOutcome.CoveredUp)
         {
-            epidemic.Compensation = simulation.Random.NextInclusive(rules.CompensationLow, rules.CompensationHigh);
-            epidemic.Outcome = EpidemicOutcome.CoveredUp;
+            epidemic.Compensation = simulation.Random.NextInclusive(Math.Min(rules.CompensationLow, rules.CompensationHigh), Math.Max(rules.CompensationLow, rules.CompensationHigh));
         }
-        else if (stillInfected < rules.EvacuationMinimum)
+    }
+
+    /// <summary>The inspection table's draw for <paramref name="found"/> patients found.</summary>
+    internal static EpidemicOutcome Verdict(SimRandom random, int found)
+    {
+        if (found <= 0)
         {
-            epidemic.Outcome = EpidemicOutcome.Fined;
+            return EpidemicOutcome.CoveredUp;
         }
-        else
+
+        var roll = random.Next(1000);
+        if (found >= EvacuationCount)
         {
-            epidemic.Outcome = EpidemicOutcome.Evacuated;
+            return roll < EvacuationSuccess ? EpidemicOutcome.CoveredUp : EpidemicOutcome.Evacuated;
         }
+
+        foreach (var (maxFound, success, fine, _) in InspectionTable)
+        {
+            if (found <= maxFound)
+            {
+                return roll < success ? EpidemicOutcome.CoveredUp
+                    : roll < success + fine ? EpidemicOutcome.Fined
+                    : EpidemicOutcome.FinedWithReputation;
+            }
+        }
+
+        return EpidemicOutcome.FinedWithReputation;
     }
 
     /// <summary>
-    /// <c>Epidemic:applyOutcome</c>: a failed cover-up costs the fine and reputation (a hundredth of the fine, or a third
-    /// of the reputation when the hospital is evacuated); one that worked brings the compensation.
+    /// The verdict's effect: compensation for a cover-up that worked; a fine, the infected sent home, and for the worse
+    /// verdicts −10 % of the visits in reputation; an evacuation costs that reputation and empties the hospital, without a
+    /// fine. Everyone infected stops being contagious.
     /// </summary>
     private static void ApplyOutcome(Simulation simulation, Hospital hospital, Epidemic epidemic)
     {
-        if (epidemic.Compensation == 0)
+        var state = hospital.Epidemics;
+        switch (epidemic.Outcome)
         {
-            if (epidemic.Outcome == EpidemicOutcome.Evacuated)
-            {
+            case EpidemicOutcome.CoveredUp:
+                hospital.Receive(simulation.Hours, epidemic.Compensation, TransactionKind.EpidemicCompensation, epidemic.DiseaseId);
+                state.LastAmount = epidemic.Compensation;
+                break;
+            case EpidemicOutcome.Evacuated:
+                epidemic.ReputationHit = -hospital.ChangeReputationPercent(InspectionReputationPercent);
                 EvacuateHospital(simulation, hospital);
-            }
+                state.LastAmount = 0;
+                break;
+            default:
+                hospital.Spend(simulation.Hours, epidemic.CoverUpFine, TransactionKind.EpidemicCoverUpFine, epidemic.DiseaseId);
+                if (epidemic.Outcome == EpidemicOutcome.FinedWithReputation)
+                {
+                    epidemic.ReputationHit = -hospital.ChangeReputationPercent(InspectionReputationPercent);
+                }
 
-            // Unlike CorsixTH (a hundredth of the fine, or a third of the reputation on evacuation), an inspector who
-            // finds the infected costs a fixed share of the visits.
-            hospital.Spend(simulation.Hours, epidemic.CoverUpFine, TransactionKind.EpidemicCoverUpFine, epidemic.DiseaseId);
-            epidemic.ReputationHit = -hospital.ChangeReputationPercent(InspectionReputationPercent);
-            hospital.Epidemics.LastAmount = epidemic.CoverUpFine;
-        }
-        else
-        {
-            hospital.Receive(simulation.Hours, epidemic.Compensation, TransactionKind.EpidemicCompensation, epidemic.DiseaseId);
-            hospital.Epidemics.LastAmount = epidemic.Compensation;
+                SendInfectedHome(simulation, hospital, epidemic);
+                state.LastAmount = epidemic.CoverUpFine;
+                break;
         }
 
-        hospital.Epidemics.LastOutcome = epidemic.Outcome;
-        hospital.Epidemics.Report = new EpidemicReport(epidemic.DiseaseId, epidemic.Outcome, hospital.Epidemics.LastAmount, simulation.Tick + (HospitalEpidemics.ReportDays * GameDate.HoursPerDay));
-        hospital.Epidemics.Current = null;
+        ClearAllInfectedPatients(simulation, epidemic);
+        state.LastOutcome = epidemic.Outcome;
+        state.Report = new EpidemicReport(epidemic.DiseaseId, epidemic.Outcome, state.LastAmount, simulation.Tick + (HospitalEpidemics.ReportDays * GameDate.HoursPerDay));
+        state.Current = null;
     }
 
-    /// <summary><c>Epidemic:evacuateHospital</c>: every patient past reception and not already leaving goes home.</summary>
+    /// <summary>A fined hospital's infected patients still in the building are sent home.</summary>
+    private static void SendInfectedHome(Simulation simulation, Hospital hospital, Epidemic epidemic)
+    {
+        foreach (var id in epidemic.InfectedIds)
+        {
+            if (simulation.FindEntity(id) is Humanoid { Behaviour: PatientBehaviour { IsCured: false } patient, IsDespawning: false } humanoid
+                && IsInHospital(simulation, hospital.Player, humanoid.Tile))
+            {
+                patient.Evacuate(simulation, humanoid);
+            }
+        }
+    }
+
+    /// <summary>The evacuation: every patient of the hospital leaves (one in a room once done there).</summary>
     private static void EvacuateHospital(Simulation simulation, Hospital hospital)
     {
         foreach (var entity in simulation.Entities.ToList())
         {
-            if (entity is Humanoid { Behaviour: PatientBehaviour { HasPassedReception: true } patient, IsDespawning: false } humanoid
-                && humanoid.HospitalPlayer == hospital.Player)
+            if (entity is Humanoid { Behaviour: PatientBehaviour patient, IsDespawning: false } humanoid && humanoid.HospitalPlayer == hospital.Player)
             {
                 patient.Evacuate(simulation, humanoid);
             }
@@ -1101,10 +1194,6 @@ public static class Epidemics
         }
     }
 
-    /// <summary><c>calculateInfectedFine</c>.</summary>
-    private static int CalculateFine(Simulation simulation, int infected) => Math.Max(MinimumFine, infected * simulation.Rules.Epidemics.Fine);
-
-    /// <summary><c>getBaseReputationFromFine</c>: a hundredth of the fine, rounded.</summary>
     /// <summary>Declaring an epidemic costs this many percent of the visits in reputation points (about −10).</summary>
     public const int DeclaredReputationPercent = -2;
 

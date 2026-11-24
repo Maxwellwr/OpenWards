@@ -100,7 +100,7 @@ internal sealed class HospitalAnnouncements(Random random)
             _announcements.Add(($"EPID00{random.Next(1, 5)}.wav", AnnouncementPriority.Critical));
         }
 
-        if (_watching && _epidemic is { Outcome: EpidemicOutcome.CoveredUp or EpidemicOutcome.Fined or EpidemicOutcome.Evacuated } ended && !ReferenceEquals(epidemic, ended))
+        if (_watching && _epidemic is { Outcome: EpidemicOutcome.CoveredUp or EpidemicOutcome.Fined or EpidemicOutcome.FinedWithReputation or EpidemicOutcome.Evacuated } ended && !ReferenceEquals(epidemic, ended))
         {
             _announcements.Add(($"EPID00{random.Next(5, 9)}.wav", AnnouncementPriority.Critical));
         }

@@ -298,6 +298,8 @@ public class LevelRulesLoaderTests
             #gbv.EpidemicFine 3000
             #gbv.EpidemicCompHi 9000
             #gbv.EpidemicConcurrentLimit 2
+            #gbv.HowContagious 7
+            #gbv.ReduceContRate 50
             """));
 
         var epidemics = LevelRulesLoader.FromConfig(config, null, BaseGameContent.Create()).Epidemics;
@@ -311,6 +313,8 @@ public class LevelRulesLoaderTests
         Assert.Equal(2, epidemics.ConcurrentLimit);
         Assert.Equal(14, epidemics.ReduceContagiousMonths);
         Assert.Equal(50, epidemics.VaccinationCost);
+        Assert.Equal(7, epidemics.HowContagious);
+        Assert.Equal(50, epidemics.ReduceContagiousDivisorPercent);
     }
 
     [Fact]

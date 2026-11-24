@@ -1,8 +1,10 @@
-// Emergencies, ported from CorsixTH CorsixTH/Lua/world.lua (World:onEndDay's emergency check, nextEmergency,
-// scheduleRandomEmergency, computeNextEmergencyDates, wasEmergencySkipped), hospital.lua (createEmergency, resolveEmergency, checkEmergencyOver,
+// Emergencies, started from CorsixTH CorsixTH/Lua/world.lua (World:onEndDay's emergency check, nextEmergency,
+// computeNextEmergencyDates, wasEmergencySkipped), hospital.lua (createEmergency, resolveEmergency, checkEmergencyOver,
 // getHeliportPosition, getHeliportSpawnPosition, reputation_changes), objects/helicopter.lua, dialogs/watch.lua
 // (UIWatch for "emergency"), hospitals/player_hospital.lua (makeEmergencyStartFax's timeout) and
-// dialogs/fullscreen/fax.lua (accept_emergency, refuse_emergency).
+// dialogs/fullscreen/fax.lua (accept_emergency, refuse_emergency). When an emergency waits, the watch, the helicopter's
+// timing and the end of random emergencies follow the community's description of the original game (the logic
+// specification), not CorsixTH.
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using OpenWards.Sim.Calendar;
@@ -40,8 +42,8 @@ public readonly record struct PlannedEmergency(int Index, int StartMonth, int En
 }
 
 /// <summary>
-/// A level's random emergencies (<c>emergency_control[0].Random</c> or <c>Mean</c> set, whatever the value): instead of
-/// the planned ones, each comes about <see cref="Mean"/> days after the last, give or take <see cref="Variance"/>.
+/// A level's random emergencies as CorsixTH reads them (<c>emergency_control[0].Random</c> or <c>Mean</c> set): kept in
+/// the rules but not used, since the original game has no random emergencies, only the level's schedule.
 /// </summary>
 /// <param name="Mean">Days on average between emergencies (<c>Mean</c>, by default 180).</param>
 /// <param name="Variance">Their standard deviation in days (<c>Variance</c>, by default 30).</param>
@@ -153,8 +155,8 @@ public sealed class Emergency
 /// </remarks>
 public sealed class HospitalEmergencies
 {
-    /// <summary>Days the watch runs (<c>TICK_DAYS_EMERGENCY</c>).</summary>
-    public const int WatchDays = 52;
+    /// <summary>Days the watch runs: 50 (100 half-days). CorsixTH's <c>TICK_DAYS_EMERGENCY</c> is 52.</summary>
+    public const int WatchDays = 50;
 
     /// <summary>The watch's segments (<c>TIMER_SEGMENTS</c>).</summary>
     public const int WatchSegments = 13;
@@ -162,11 +164,11 @@ public sealed class HospitalEmergencies
     /// <summary>The fax refuses the emergency by itself after this many days.</summary>
     public const int OfferDays = 16;
 
-    /// <summary>Hours of one segment of the watch: 200.</summary>
+    /// <summary>Hours of one segment of the watch: 192.</summary>
     public const int WatchTickRate = WatchDays * GameDate.HoursPerDay / WatchSegments;
 
-    /// <summary>The helicopter's phase when it is called: 120 hours before it shows.</summary>
-    public const int HelicopterStart = -120;
+    /// <summary>The helicopter's phase when it is called: it sets off 5 days (250 hours) later. CorsixTH waits 120 hours.</summary>
+    public const int HelicopterStart = -5 * GameDate.HoursPerDay;
 
     /// <summary>The helicopter's phase when it has landed and the adviser says the patients have arrived.</summary>
     public const int HelicopterLanded = 60;
@@ -187,7 +189,7 @@ public sealed class HospitalEmergencies
     public Emergency? Current { get; internal set; }
 
     /// <summary>
-    /// The helicopter's phase: from −120 while on the way, 0 when it shows, landed from 60, gone after 147
+    /// The helicopter's phase: from −250 while on the way, 0 when it shows, landed from 60, gone after 147
     /// (CorsixTH's <c>Helicopter.phase</c>), or null when there is none.
     /// </summary>
     public int? HelicopterPhase { get; internal set; }
@@ -260,9 +262,9 @@ public sealed class HospitalEmergencies
 }
 
 /// <summary>
-/// Emergencies as CorsixTH has them: on the planned day the hospital is offered one by fax; accepted, a helicopter
-/// lands at the heliport and lets out the patients, already diagnosed and on their way to treatment, and a watch
-/// runs for 52 days. When time is up, or every patient is cured, dead or gone, the patients not yet cured are set to
+/// Emergencies by the level's schedule only: from the planned day, once nothing else is on, the hospital is offered one
+/// by fax; accepted, a helicopter sets off 5 days later, lands at the heliport and lets out a patient every 25 hours,
+/// already diagnosed and on their way to treatment, and a watch runs for 50 days. When time is up, or every patient is cured, dead or gone, the patients not yet cured are set to
 /// die, and the hospital gains reputation and a bonus for each cured patient if enough were cured, or loses
 /// reputation.
 /// </summary>
@@ -274,7 +276,7 @@ public static class Emergencies
     /// <summary>An emergency handled badly costs this many percent of the visits for each patient not cured (about −20 each).</summary>
     public const int FailureReputationPercent = -4;
 
-    /// <summary>The planned emergencies' bonus when the level does not say (a random emergency's).</summary>
+    /// <summary>The cheat's emergency's bonus.</summary>
     private const int RandomBonus = 1000;
 
     /// <summary>A random emergency's percentage to cure.</summary>
@@ -290,12 +292,6 @@ public static class Emergencies
     internal static void NextEmergency(Simulation simulation, Hospital hospital)
     {
         var state = hospital.Emergencies;
-        if (simulation.Rules.RandomEmergencies is { } random)
-        {
-            ScheduleRandom(simulation, state, random);
-            return;
-        }
-
         var planned = simulation.Rules.Emergencies;
         while (true)
         {
@@ -323,19 +319,6 @@ public static class Emergencies
     }
 
     /// <summary>
-    /// <c>World:scheduleRandomEmergency</c>: a level with random emergencies has the next one a normally distributed
-    /// number of days from now (rounded, at least one), of a random disease.
-    /// </summary>
-    private static void ScheduleRandom(Simulation simulation, HospitalEmergencies state, RandomEmergencies random)
-    {
-        var days = Math.Max(DecimalMath.Round(DecimalMath.NormalRandom(simulation.Random, random.Mean, random.Variance)), 1);
-        var date = GameDate.FromHours(simulation.Hours + (days * GameDate.HoursPerDay));
-        state.NextIndex = -1;
-        state.NextMonth = date.MonthOfGame;
-        state.NextDay = date.Day;
-    }
-
-    /// <summary>
     /// <c>World:wasEmergencySkipped</c>: when a cheat moved the calendar on from <paramref name="previous"/> past the
     /// start of the planned emergency's day, the next one is planned instead (<c>setEndMonth</c>, <c>setEndYear</c>).
     /// </summary>
@@ -356,8 +339,10 @@ public static class Emergencies
     }
 
     /// <summary>
-    /// The end of a day (<c>World:onEndDay</c>): on the planned day an emergency is offered, or put off to a random day
-    /// of the next month while a watch is running (the opening's or another emergency's).
+    /// The end of a day: from the planned day on, the emergency waits while the hospital is not open yet, another fax is
+    /// waiting, an epidemic is being covered up, another emergency is under way or its result's fax is still open. Then,
+    /// if the player knows the disease and has a heliport and a staffed desk, the fax offers it; otherwise the level's
+    /// entry is used up all the same and the next one planned.
     /// </summary>
     internal static void OnEndDay(Simulation simulation, Hospital hospital)
     {
@@ -370,16 +355,13 @@ public static class Emergencies
 
         var state = hospital.Emergencies;
         var date = simulation.Date;
-        if (date.MonthOfGame != state.NextMonth || date.Day != state.NextDay)
+        if (state.NextMonth <= 0 || (date.MonthOfGame, date.Day).CompareTo((state.NextMonth, state.NextDay)) < 0)
         {
             return;
         }
 
-        if (!hospital.IsOpen || state.Current is { IsAccepted: true })
+        if (IsShared(simulation) ? simulation.Hospitals.All(IsBusy) : IsBusy(hospital))
         {
-            state.NextMonth++;
-            var monthOfYear = 1 + ((state.NextMonth - 1) % 12);
-            state.NextDay = simulation.Random.NextInclusive(1, GameDate.DaysIn(monthOfYear));
             return;
         }
 
@@ -388,7 +370,13 @@ public static class Emergencies
         if (Find(simulation.Rules.Emergencies, state.NextIndex) is { } next
             && available.FirstOrDefault(disease => disease.ExpertiseId == next.Illness) is { } disease)
         {
-            planned = new Emergency(disease.Id, simulation.Random.NextInclusive(next.Min, next.Max), next.Bonus, next.PercWin);
+            planned = new Emergency(disease.Id, simulation.Random.NextInclusive(next.Min, Math.Max(next.Min, next.Max)), next.Bonus, next.PercWin);
+        }
+
+        if (planned is null)
+        {
+            NextEmergency(simulation, hospital);
+            return;
         }
 
         if (IsShared(simulation))
@@ -397,10 +385,8 @@ public static class Emergencies
             var offered = false;
             foreach (var each in simulation.Hospitals)
             {
-                if (each.IsOpen && each.Emergencies.Current is not { IsAccepted: true }
-                    && Create(simulation, each, planned is null ? null : Copy(planned), available))
+                if (!IsBusy(each) && Offer(simulation, each, Copy(planned)))
                 {
-                    planned ??= Copy(each.Emergencies.Current!);
                     offered = true;
                 }
             }
@@ -413,13 +399,19 @@ public static class Emergencies
             return;
         }
 
-        // CorsixTH gives up the emergency without planning the next, which ends the level's emergencies; here the
-        // next one is planned.
-        if (!Create(simulation, hospital, planned, available))
+        if (!Offer(simulation, hospital, planned))
         {
             NextEmergency(simulation, hospital);
         }
     }
+
+    /// <summary>
+    /// Whether an emergency due now has to wait: the hospital not open yet, a fax waiting (a VIP's, an epidemic's or
+    /// an emergency's), an epidemic being covered up, an emergency under way, or the last result's fax still open.
+    /// </summary>
+    internal static bool IsBusy(Hospital hospital) =>
+        !hospital.IsOpen || hospital.Emergencies.Current is not null || hospital.Emergencies.Report is not null
+        || hospital.Vips.IsInvitationPending || hospital.Epidemics.IsFaxPending || hospital.Epidemics.Current is { IsCoverUpActive: true };
 
     /// <summary>Whether emergencies and VIP visits go to all the hospitals at once: a game of several hospitals.</summary>
     internal static bool IsShared(Simulation simulation) => simulation.Hospitals.Count > 1;
@@ -432,31 +424,14 @@ public static class Emergencies
             && other.Emergencies.Current is { IsAccepted: false } offer && offer.DiseaseId == emergency.DiseaseId && offer.OfferExpires == emergency.OfferExpires);
 
     /// <summary>
-    /// <c>Hospital:createEmergency</c>: a random disease and number are drawn either way; with a heliport and a staffed
-    /// desk the emergency is offered, unless its disease is not known yet.
+    /// The fax offers the emergency, if the hospital has a heliport and a staffed desk and knows the disease. A refused
+    /// or unanswered offer frees its place: the original game keeps it, so that after four offers no more emergencies
+    /// come on the level.
     /// </summary>
-    private static bool Create(Simulation simulation, Hospital hospital, Emergency? emergency, List<DiseaseDefinition> available)
+    private static bool Offer(Simulation simulation, Hospital hospital, Emergency emergency)
     {
-        if (available.Count == 0)
-        {
-            return false;
-        }
-
-        var random = available[simulation.Random.Next(available.Count)];
-        var number = simulation.Random.NextInclusive(2, Math.Max(random.EmergencyNumber, 2));
-        if (HeliportSpawnTile(simulation, hospital.Player) is null || !ReceptionDesks.OfHospital(simulation, hospital.Player, staffedOnly: true).Any())
-        {
-            return false;
-        }
-
-        // UIBottomPanel:canQueueFax: not while an epidemic's fax waits; the emergency is dropped (cancelFax).
-        if (hospital.Epidemics.IsFaxPending)
-        {
-            return false;
-        }
-
-        emergency ??= new Emergency(random.Id, number, RandomBonus, RandomPercentage);
-        if (!hospital.CaseOf(DiseaseCatalog.Find(emergency.DiseaseId)!, simulation.Rules.Diseases).Discovered)
+        if (HeliportSpawnTile(simulation, hospital.Player) is null || !ReceptionDesks.OfHospital(simulation, hospital.Player, staffedOnly: true).Any()
+            || !hospital.CaseOf(DiseaseCatalog.Find(emergency.DiseaseId)!, simulation.Rules.Diseases).Discovered)
         {
             return false;
         }
@@ -467,12 +442,22 @@ public static class Emergencies
     }
 
     /// <summary>
-    /// <c>Cheats:cheatEmergency</c>: a random emergency is offered now, if the hospital has a heliport and a staffed desk
-    /// and knows the disease. Not while one is under way, which CorsixTH would overwrite.
+    /// <c>Cheats:cheatEmergency</c>: an emergency of a random known disease, 2 to its <c>EmergencyNumber</c> patients, is
+    /// offered now, if the hospital has a heliport and a staffed desk. Not while one is under way. The level's own
+    /// emergencies come only by its schedule.
     /// </summary>
-    internal static bool CreateRandom(Simulation simulation, Hospital hospital) =>
-        hospital.Emergencies.Current is not { IsAccepted: true }
-        && Create(simulation, hospital, null, simulation.Rules.Diseases.AvailableDiseases().ToList());
+    internal static bool CreateRandom(Simulation simulation, Hospital hospital)
+    {
+        var available = simulation.Rules.Diseases.AvailableDiseases().ToList();
+        if (hospital.Emergencies.Current is { IsAccepted: true } || available.Count == 0)
+        {
+            return false;
+        }
+
+        var random = available[simulation.Random.Next(available.Count)];
+        var number = simulation.Random.NextInclusive(2, Math.Max(random.EmergencyNumber, 2));
+        return Offer(simulation, hospital, new Emergency(random.Id, number, RandomBonus, RandomPercentage));
+    }
 
     /// <summary>
     /// <c>UIFax:choice</c>: accepted, the helicopter comes and the watch starts; refused, the next emergency is planned.

@@ -56,8 +56,8 @@ public class EmergencyTests
         Assert.True(emergency.IsAccepted);
         Assert.Equal(HospitalEmergencies.HelicopterStart + 1, hospital.Emergencies.HelicopterPhase);
 
-        // On the way for 120 hours, 60 coming down, then a patient.
-        StepFor(simulation, 120 + 85);
+        // It sets off after 5 days (250 hours), takes 60 coming down, then lets out a patient.
+        StepFor(simulation, (5 * GameDate.HoursPerDay) + 85);
         var first = Assert.Single(simulation.Entities.OfType<Humanoid>(), humanoid => humanoid.Behaviour is PatientBehaviour { EmergencyIndex: 1 });
         Assert.Equal(Heliport with { Y = Heliport.Y - 1 }, first.Tile);
         Assert.True(((PatientBehaviour)first.Behaviour!).IsDiagnosed);
@@ -109,6 +109,41 @@ public class EmergencyTests
         Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
     }
 
+    [Fact]
+    public void APlannedEmergencyWaitsWhileAnotherFaxIsOpenAndARefusalFreesItsPlace()
+    {
+        // Two planned emergencies of broken wind, in the second month and the third.
+        var broken = DiseaseCatalog.Find("broken_wind")!.ExpertiseId;
+        var simulation = NewStaffedHospital(Rules([new PlannedEmergency(0, 2, 2, 2, 3, broken, 75, 400), new PlannedEmergency(1, 3, 3, 2, 3, broken, 75, 400)]));
+        BuildPharmacy(simulation);
+        simulation.Map.SetHeliportTile(0, Heliport);
+        var hospital = simulation.Hospitals[0];
+        var emergencies = hospital.Emergencies;
+        Assert.Equal(0, emergencies.NextIndex);
+
+        // A VIP's fax is waiting from the day before: the emergency waits past its day.
+        Assert.Equal(2, emergencies.NextMonth);
+        var due = new GameDate(1, 2, emergencies.NextDay, 0).ToHours();
+        StepFor(simulation, (int)(due - simulation.Hours) - GameDate.HoursPerDay);
+        Assert.Null(emergencies.Current);
+        Run(simulation, new CheatCommand(CheatKind.Vip));
+        StepFor(simulation, 3 * GameDate.HoursPerDay);
+        Assert.True(Emergencies.IsBusy(hospital));
+        Assert.Null(emergencies.Current);
+        Assert.Equal(0, emergencies.NextIndex);
+
+        // Once the VIP's fax is answered the emergency comes at the end of the day.
+        Run(simulation, new AnswerVipCommand(Accept: false));
+        StepFor(simulation, GameDate.HoursPerDay);
+        Assert.NotNull(emergencies.Current);
+        Assert.InRange(emergencies.Current!.Victims, 2, 3);
+
+        // Refused, the next planned one is lined up: the refusal took no place for good.
+        Run(simulation, new AnswerEmergencyCommand(Accept: false));
+        Assert.Null(emergencies.Current);
+        Assert.Equal(1, emergencies.NextIndex);
+    }
+
     /// <summary>A staffed hospital with a pharmacy and a heliport west of it, where broken wind is the only disease, known.</summary>
     private static Simulation NewEmergencyHospital()
     {
@@ -118,7 +153,7 @@ public class EmergencyTests
         return simulation;
     }
 
-    private static LevelRules Rules()
+    private static LevelRules Rules(IReadOnlyList<PlannedEmergency>? emergencies = null)
     {
         var nonVisuals = new int[DiseaseRules.NonVisualsCount];
         nonVisuals[DiseaseCatalog.Find("broken_wind")!.NonVisualsId!.Value] = 1;
@@ -136,6 +171,7 @@ public class EmergencyTests
             1_000_000,
             [KeyValuePair.Create("gp", 2500), KeyValuePair.Create("pharmacy", 2500)],
             [KeyValuePair.Create(ReceptionDesks.ObjectId, 600)],
-            diseases: diseases);
+            diseases: diseases,
+            emergencies: emergencies ?? []);
     }
 }
