@@ -1,12 +1,28 @@
+using OpenWards.Sim.Definitions;
 using OpenWards.Sim.Economy;
+using OpenWards.Sim.Entities;
+using OpenWards.Sim.Maps;
+using OpenWards.Sim.Objects;
+using OpenWards.Sim.Rooms;
+using static OpenWards.Sim.Definitions.FootprintFlags;
 
 namespace OpenWards.Sim.Tests;
 
 /// <summary>The hospital's value, the year's counts and the trophies and awards of the year end.</summary>
 public class YearEndTests
 {
+    private static readonly ObjectDefinition Desk = new("desk", "Desk", 1, new Dictionary<Direction, ObjectOrientation>
+    {
+        [Direction.North] = new([new(0, 0, CompleteCell)]),
+    });
+
+    private static readonly ObjectDefinition Bench = new("bench", "Bench", 4, new Dictionary<Direction, ObjectOrientation>
+    {
+        [Direction.North] = new([new(0, 0, CompleteCell)]),
+    });
+
     [Fact]
-    public void TheValueIsTheLandAndWhatWasPaidForRoomsAndObjects()
+    public void TheValueIsTheLandTheEquipmentTheRoomsAndTheReputation()
     {
         var map = TestMaps.FromRows("....", "....", "....");
         map.ParcelCount = 2;
@@ -15,18 +31,55 @@ public class YearEndTests
         {
             map[x, 1].Parcel = 1;
             map[x, 2].Parcel = 1;
+            map[x, 1].Set(TileFlags.Buildable | TileFlags.Hospital, true);
+            map[x, 2].Set(TileFlags.Buildable | TileFlags.Hospital, true);
         }
 
-        var simulation = new Simulation(map, seed: 1, rules: new LevelRules(10_000, [], [], landCostPerTile: 30));
+        var content = new GameContent([], [], [Desk, Bench]);
+        var rules = new LevelRules(10_000, [KeyValuePair.Create("gp", 2500)], [KeyValuePair.Create("desk", 300), KeyValuePair.Create("bench", 100)], landCostPerTile: 30);
+        var simulation = new Simulation(map, seed: 1, content, rules);
         var hospital = simulation.Hospitals[0];
+
+        // 8 tiles of land, 10,000 for reputation 500 and 10,000.
         Assert.Equal((8 * 30) + 20_000, hospital.Value);
 
-        hospital.Spend(1, 2500, TransactionKind.BuildRoom, "gp");
-        hospital.Spend(1, 300, TransactionKind.BuyObject, "desk");
+        // Money spent or taken in does not change it by itself.
         hospital.Spend(1, 1000, TransactionKind.Wages, string.Empty);
-        hospital.Receive(1, 300, TransactionKind.SellObject, "desk");
         hospital.Receive(1, 100, TransactionKind.Treatment, "diag_gp");
-        Assert.Equal(20_240 + 2500, hospital.Value);
+        HospitalValue.Refresh(simulation);
+        Assert.Equal(20_240, hospital.Value);
+
+        // A desk counts at what it cost; a bench does not count.
+        var desk = ObjectPlacer.Place(simulation, Desk, new TilePosition(0, 1), Direction.North);
+        ObjectPlacer.Place(simulation, Bench, new TilePosition(2, 1), Direction.North);
+        Assert.Equal(300, desk.PurchasePrice);
+        HospitalValue.Refresh(simulation);
+        Assert.Equal(20_540, hospital.Value);
+
+        // A built room counts at the room's own price, until it is wrecked.
+        var room = simulation.AddEntity(id => new Room(id, "gp", new TileRect(0, 1, 2, 2), [.. Enumerable.Repeat(new OriginalTile(1, TileFlags.Passable), 4)]) { IsPaid = true });
+        HospitalValue.Refresh(simulation);
+        Assert.Equal(23_040, hospital.Value);
+        room.IsCrashed = true;
+        HospitalValue.Refresh(simulation);
+        Assert.Equal(20_540, hospital.Value);
+
+        // An object that goes takes off what it cost.
+        desk.IsDestroyed = true;
+        HospitalValue.Refresh(simulation);
+        Assert.Equal(20_240, hospital.Value);
+
+        // Reputation counts in steps of 50: 1,000 for each.
+        var famous = new Simulation(TestMaps.FromRows("...."), seed: 1, rules: new LevelRules(0, [], [], startReputation: 749));
+        Assert.Equal((749 / 50 * 1000) + 10_000, famous.Hospitals[0].Value);
+
+        // The price paid is saved with the object.
+        using var stream = new MemoryStream();
+        simulation.Save(stream);
+        stream.Position = 0;
+        var restored = Simulation.Load(stream, content);
+        Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
+        Assert.Equal(20_240, restored.Hospitals[0].Value);
     }
 
     [Fact]

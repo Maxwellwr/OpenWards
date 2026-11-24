@@ -99,6 +99,7 @@ public sealed class Litter : Entity
     internal static Litter? Drop(Simulation simulation, int player, LitterType type, TilePosition tile, bool isMirrored)
     {
         // Litter.resolveTileRank: the first litter on the tile decides.
+        var wasClean = true;
         if (At(simulation, tile).FirstOrDefault() is { } existing)
         {
             if (existing.Rank >= RankOf(type))
@@ -106,10 +107,18 @@ public sealed class Litter : Entity
                 return null;
             }
 
+            wasClean = !existing.IsCleanable;
             existing.IsRemoved = true;
         }
 
-        return simulation.AddEntity(id => new Litter(id, player, type, tile, isMirrored));
+        var litter = simulation.AddEntity(id => new Litter(id, player, type, tile, isMirrored));
+        if (litter.IsCleanable)
+        {
+            // On a clean tile it becomes the hospital's last littered one, where rat holes start from.
+            Disasters.Rats.OnLittered(simulation, tile, wasClean);
+        }
+
+        return litter;
     }
 
     /// <summary><c>Litter:remove</c>: swept up by a handyman.</summary>
