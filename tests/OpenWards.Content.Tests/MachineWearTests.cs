@@ -343,24 +343,29 @@ public class MachineWearTests
     }
 
     [Theory]
-    [InlineData(8, 7, 0)]
-    [InlineData(8, 8, 5)]
-    [InlineData(8, 9, 4)]
-    [InlineData(8, 11, 2)]
-    [InlineData(8, 12, 1)]
-    [InlineData(8, 15, 1)]
-    public void FromFullWearAMachineExplodesOneTimeIn(int strength, int wear, int odds)
+    [InlineData(8, 7, 0, 0)]
+    [InlineData(8, 8, 0, 2_000)]
+    [InlineData(8, 9, 0, 2_500)]
+    [InlineData(8, 11, 0, 5_000)]
+    [InlineData(8, 12, 0, 10_000)]
+    [InlineData(8, 15, 0, 10_000)]
+    [InlineData(8, 8, 1, 1_800)]
+    [InlineData(8, 11, 2, 4_000)]
+    [InlineData(8, 11, 4, 3_000)]
+    [InlineData(8, 11, 9, 3_000)]
+    [InlineData(8, 12, 4, 10_000)]
+    public void FromFullWearAMachineExplodesLessOftenWithExtinguishers(int strength, int wear, int extinguishers, int expected)
     {
         var random = new SimRandom(7);
         var machine = new MachineState(strength) { TimesUsed = wear };
-        var explosions = Enumerable.Range(0, 10_000).Count(_ => Machines.MustExplode(random, machine));
-        if (odds == 0)
+        var explosions = Enumerable.Range(0, 10_000).Count(_ => Machines.MustExplode(random, machine, extinguishers));
+        if (expected is 0 or 10_000)
         {
-            Assert.Equal(0, explosions);
+            Assert.Equal(expected, explosions);
         }
         else
         {
-            Assert.InRange(explosions, (10_000 / odds) - 400, (10_000 / odds) + 400);
+            Assert.InRange(explosions, expected - 400, expected + 400);
         }
     }
 

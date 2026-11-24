@@ -166,7 +166,7 @@ internal static class Machines
     /// <summary>Worn out, the machine may explode and crash its room.</summary>
     private static void CheckExplosion(Simulation simulation, Room room, MachineState machine)
     {
-        if (MustExplode(simulation.Random, machine))
+        if (MustExplode(simulation.Random, machine, Extinguishers(simulation, room)))
         {
             Crash(simulation, room);
         }
@@ -175,12 +175,14 @@ internal static class Machines
     /// <summary>
     /// From 100 % wear (w ≥ s) a machine explodes with a chance of 1 / (⌊1.5 × s⌋ − w + 1), surely once w reaches
     /// ⌊1.5 × s⌋: with a strength of 8, one in five on the 8th use, then one in four, three, two, and surely on the 12th.
+    /// Each fire extinguisher in the room, up to four, takes a tenth off that chance, but not off the sure explosion.
     /// </summary>
     /// <remarks>
-    /// CorsixTH lets it explode surely without a fire extinguisher in the room, and otherwise at 2 / s plus a fifth for
-    /// each use past, less a twentieth for each extinguisher. The specification knows no extinguishers.
+    /// The specification knows no extinguishers; the original's manual says nearby ones lower the risk of explosion, and
+    /// the maintainer chose a tenth each. CorsixTH lets it explode surely without one in the room, and otherwise at 2 / s
+    /// plus a fifth for each use past, less a twentieth for each extinguisher.
     /// </remarks>
-    internal static bool MustExplode(SimRandom random, MachineState machine)
+    internal static bool MustExplode(SimRandom random, MachineState machine, int extinguishers)
     {
         if (machine.TimesUsed < machine.Strength)
         {
@@ -188,8 +190,15 @@ internal static class Machines
         }
 
         var odds = (3 * machine.Strength / 2) - machine.TimesUsed + 1;
-        return odds <= 1 || random.Next(odds) == 0;
+        return odds <= 1 || random.Next(odds * 10) < 10 - Math.Clamp(extinguishers, 0, MaxExtinguishers);
     }
+
+    /// <summary>How many fire extinguishers count against an explosion.</summary>
+    internal const int MaxExtinguishers = 4;
+
+    /// <summary>The fire extinguishers standing in the room.</summary>
+    internal static int Extinguishers(Simulation simulation, Room room) =>
+        simulation.Entities.Count(e => e is RoomObject { ObjectType: "extinguisher", IsDestroyed: false } o && o.RoomId == room.Id);
 
     /// <summary>
     /// A handyman's repair: its wear goes back to 0, and with a chance of w / s (taken before) it loses a use of strength
