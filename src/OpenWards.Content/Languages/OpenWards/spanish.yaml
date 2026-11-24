@@ -42,9 +42,10 @@ strings:
     auction:
       caption: 'Subasta de terreno'
       lot: 'Parcela %1%: puja de $%2% de %3%'
-      hammer: 'El martillo cae en %1% horas'
+      no_bids: 'Parcela %1%: aún sin pujas'
       bid: 'Pujar $%1%'
       sold: 'Parcela %1% vendida a %2% por $%3%'
+      unsold: 'Parcela %1% sin vender: nadie pujó'
     chat:
       caption: 'Chat'
       none: 'Nadie ha dicho nada todavía.'

@@ -111,9 +111,10 @@ strings:
     auction:
       caption: '土地拍賣'
       lot: '地塊%1%：%3%出價$%2%'
-      hammer: '%1%小時後落槌'
+      no_bids: '地塊%1%：尚無出價'
       bid: '出價$%1%'
       sold: '地塊%1%以$%3%賣給%2%'
+      unsold: '地塊%1%未售出：無人出價'
     chat:
       caption: '聊天'
       none: '還沒有人說話。'

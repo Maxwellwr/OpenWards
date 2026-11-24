@@ -46,7 +46,16 @@ public sealed class LockstepServer : IDisposable
     private readonly List<Peer> _peers = [];
     private readonly SortedDictionary<long, ulong> _hashes = [];
     private readonly List<DesyncMessage> _desyncs = [];
+    /// <summary>
+    /// Real time between two frames of a land auction's bidding screen. The original exchanges a frame with every machine
+    /// as fast as the connection allows, so its hammer takes as long as the line makes it; ours waits a fixed 0.1 s, ten
+    /// seconds from the last bid to the hammer (<see cref="Sim.Economy.LandAuction.HammerFrames"/>).
+    /// </summary>
+    public static readonly TimeSpan AuctionFrameInterval = TimeSpan.FromMilliseconds(100);
+
     private readonly GameClock _clock = new();
+
+    private TimeSpan _untilAuctionFrame = AuctionFrameInterval;
 
     private readonly IReadOnlyList<LobbyLevel> _levels;
 
@@ -136,16 +145,16 @@ public sealed class LockstepServer : IDisposable
     {
         Simulation.Step();
 
-        if (Simulation.Tick % HashInterval == 0)
+        if (Simulation.Frame % HashInterval == 0)
         {
-            _hashes[Simulation.Tick] = Simulation.ComputeStateHash();
+            _hashes[Simulation.Frame] = Simulation.ComputeStateHash();
             while (_hashes.Count > HashHistory)
             {
                 _hashes.Remove(_hashes.Keys.First());
             }
         }
 
-        Broadcast(new AdvanceMessage(Simulation.Tick));
+        Broadcast(new AdvanceMessage(Simulation.Frame));
     }
 
     /// <summary>
@@ -154,13 +163,48 @@ public sealed class LockstepServer : IDisposable
     /// </summary>
     public int Run(TimeSpan elapsed)
     {
+        if (Simulation.Auction is not null)
+        {
+            return RunAuction(elapsed);
+        }
+
+        _untilAuctionFrame = AuctionFrameInterval;
         var ticks = _clock.Advance(elapsed);
         for (var i = 0; i < ticks; i++)
         {
             AdvanceTick();
+
+            // A land auction stops the game's time: the ticks this batch was still worth are not run.
+            if (Simulation.Auction is not null)
+            {
+                return i + 1;
+            }
         }
 
         return ticks;
+    }
+
+    /// <summary>
+    /// The bidding screen of a land auction: its frames run one every <see cref="AuctionFrameInterval"/>, whatever the
+    /// game's speed and even when it is paused, until the hammer falls.
+    /// </summary>
+    private int RunAuction(TimeSpan elapsed)
+    {
+        var frames = 0;
+        _untilAuctionFrame -= elapsed;
+        while (_untilAuctionFrame <= TimeSpan.Zero && Simulation.Auction is not null && frames < GameClock.MaxTicksPerUpdate)
+        {
+            AdvanceTick();
+            frames++;
+            _untilAuctionFrame += AuctionFrameInterval;
+        }
+
+        if (Simulation.Auction is null || _untilAuctionFrame < TimeSpan.Zero)
+        {
+            _untilAuctionFrame = AuctionFrameInterval;
+        }
+
+        return frames;
     }
 
     /// <summary>
@@ -204,7 +248,7 @@ public sealed class LockstepServer : IDisposable
                 Join(peer, hello);
                 break;
             case CommandRequestMessage request when peer.Player is { } player:
-                var scheduled = Simulation.Schedule(player, request.Command, Simulation.Tick + CommandDelay);
+                var scheduled = Simulation.Schedule(player, request.Command, Simulation.Frame + CommandDelay);
                 Broadcast(new ScheduledCommandMessage(scheduled));
                 break;
             case StateHashMessage hash when peer.Player is not null:
@@ -254,9 +298,9 @@ public sealed class LockstepServer : IDisposable
             peer.Connection.Send(LevelsMessage());
         }
 
-        peer.Connection.Send(new WelcomeMessage(peer.Player.Value, SaveState(), Simulation.Tick));
+        peer.Connection.Send(new WelcomeMessage(peer.Player.Value, SaveState(), Simulation.Frame));
         peer.Connection.Send(new SpeedMessage(_clock.Speed, -1));
-        Log?.Invoke($"{Describe(peer)} joined at tick {Simulation.Tick}.");
+        Log?.Invoke($"{Describe(peer)} joined at tick {Simulation.Frame}.");
         BroadcastPlayers();
     }
 
@@ -313,7 +357,7 @@ public sealed class LockstepServer : IDisposable
         Simulation = simulation;
         Level = chosen.Name;
         _hashes.Clear();
-        _restartTick = Simulation.Tick;
+        _restartTick = Simulation.Frame;
         _hashes[_restartTick] = Simulation.ComputeStateHash();
         Log?.Invoke($"{Describe(peer)} chose {chosen.Name}.");
         SetSpeed(GameSpeed.Pause, player);
@@ -328,7 +372,7 @@ public sealed class LockstepServer : IDisposable
             }
 
             other.Connection.Send(LevelsMessage());
-            other.Connection.Send(new WelcomeMessage(other.Player.Value, state, Simulation.Tick));
+            other.Connection.Send(new WelcomeMessage(other.Player.Value, state, Simulation.Frame));
             other.AwaitingRestart = true;
             other.ResyncedAt = -1;
         }
@@ -361,9 +405,9 @@ public sealed class LockstepServer : IDisposable
         _desyncs.Add(desync);
         Log?.Invoke($"Desync: player {player} at tick {hash.Tick} (expected {expected:X16}, got {hash.Hash:X16}).");
         Broadcast(desync);
-        peer.Connection.Send(new ResyncMessage(SaveState(), Simulation.Tick));
-        peer.ResyncedAt = Simulation.Tick;
-        Log?.Invoke($"Sent player {player} the state at tick {Simulation.Tick}.");
+        peer.Connection.Send(new ResyncMessage(SaveState(), Simulation.Frame));
+        peer.ResyncedAt = Simulation.Frame;
+        Log?.Invoke($"Sent player {player} the state at tick {Simulation.Frame}.");
     }
 
     private byte[] SaveState()

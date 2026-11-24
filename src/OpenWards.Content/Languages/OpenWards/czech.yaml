@@ -39,9 +39,10 @@ strings:
     auction:
       caption: 'Dražba pozemku'
       lot: 'Pozemek %1%: nabídka $%2% od %3%'
-      hammer: 'Kladívko padne za %1% hodin'
+      no_bids: 'Pozemek %1%: zatím bez nabídky'
       bid: 'Přihodit $%1%'
       sold: 'Pozemek %1% prodán: %2% za $%3%'
+      unsold: 'Pozemek %1% se neprodal: nikdo nepřihodil'
     chat:
       caption: 'Chat'
       none: 'Zatím nikdo nic neřekl.'

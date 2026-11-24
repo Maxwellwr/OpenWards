@@ -67,14 +67,14 @@ internal sealed class NetworkSession : IGameSession
 
             var role = _hostedServer is not null ? $"hosting on port {_hostedServer.Port}" : _client.Level is null ? "online" : $"online at {_name}";
             var players = _client.Players.Count == 0 ? string.Empty : "   " + string.Join(", ", _client.Players.Select(p => $"{p.Player + 1} {p.Name}"));
-            var behind = _client.AllowedTick - simulation.Tick;
+            var behind = _client.AllowedTick - simulation.Frame;
             var speed = _client.SpeedSetBy < 0 ? string.Empty : $"   {GameSpeeds.Name(_client.Speed)} (player {_client.SpeedSetBy + 1})";
             var desync = _client.LastDesync is { } d ? $"DESYNC at tick {d.Tick} (player {d.Player + 1})   " : string.Empty;
             var resynced = _client.Resyncs > 0 ? $"   state resent {_client.Resyncs}x" : string.Empty;
             // A desync first: the end of a long status line is under the date.
             return string.Create(
                 CultureInfo.InvariantCulture,
-                $"{desync}tick {simulation.Tick} {role}   player {Player + 1} of {simulation.Map.PlayerCount}{players}{(behind > 1 ? $"   {behind} ticks behind" : string.Empty)}{speed}{resynced}");
+                $"{desync}tick {simulation.Frame} {role}   player {Player + 1} of {simulation.Map.PlayerCount}{players}{(behind > 1 ? $"   {behind} ticks behind" : string.Empty)}{speed}{resynced}");
         }
     }
 

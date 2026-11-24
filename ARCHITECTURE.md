@@ -543,9 +543,17 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
 - **Land** (`Simulation.PurchaseParcel`, from `hospital.lua` and `th_map.cpp`). A parcel nobody owns may be
   bought when it touches the outside or the buyer's land by passable tiles of the map as the level began; it
   costs its tiles at `gbv.LandCostPerTile` and adds that to the hospital's value (`PurchaseParcelCommand`).
-  With several hospitals the plot goes to auction instead (`LandAuction`, after the original's network game): the
-  wish to buy is the first bid at the price, other players who could buy it bid a tenth of the price more (at least
-  500, `BidForParcelCommand`), and two days after the last bid the highest bidder buys it if they still can pay.
+  With several hospitals the plot goes to auction instead (`LandAuction`, after the original's network game and the
+  maintainer's specification): a player who may buy it and has more than its price opens the auction without a bid of
+  their own, and the game's time stands still for everyone (each `Simulation.Step` is then a frame of the bidding
+  screen: no tick runs, only bids do, `Simulation.Frame` counts on and `AuctionFrames` with it). The first bid is the
+  price, each bid adds a step of a tenth of it rounded down, at least 10, fixed at the opening (`BidForParcelCommand`):
+  any player with that much in the bank at the time the bid runs may make it, the leader too, and the opener alone
+  had to be able to buy the parcel. The hammer falls 100 frames after the opening or the last bid (it rests above 70,
+  rises every 10 frames and strikes at 3); with no bid the parcel stays for sale, otherwise the leader pays their bid,
+  the price and a step for each bid after the first, and the others nothing. The lockstep server runs these frames
+  every 0.1 s whatever the game's speed, paused too (`LockstepServer.AuctionFrameInterval`). Commands are scheduled
+  by frame, which is the tick outside auctions.
 - **Poaching** (`StaffEmployment.Poach`, after the original's network game). Another player's `PoachStaffCommand`
   makes an unhappy member of staff (happiness below 0.5) demand double their wage of their employer as a raise request
   (`Humanoid.PoachedBy`); met, they stay; refused or left too long without the grant policy, they join the poacher's

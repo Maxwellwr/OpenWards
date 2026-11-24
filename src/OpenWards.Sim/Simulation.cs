@@ -173,8 +173,18 @@ public sealed class Simulation
     /// </summary>
     public IReadOnlyList<StaffProfile> AvailableStaff(StaffClass staffClass) => _availableStaff[(int)staffClass];
 
-    /// <summary>Number of ticks completed since the game started.</summary>
+    /// <summary>Number of ticks completed since the game started: the hours of the game that have run.</summary>
     public long Tick { get; private set; }
+
+    /// <summary>
+    /// Steps of the simulation so far (<see cref="Step"/>): the ticks plus the frames of land auctions, during which the
+    /// game's time stands still (<see cref="AuctionFrames"/>). Commands are scheduled for a frame, and lockstep counts
+    /// frames.
+    /// </summary>
+    public long Frame => Tick + AuctionFrames;
+
+    /// <summary>Steps spent on the bidding screen of land auctions, when no tick ran (<see cref="LandAuction"/>). Saved.</summary>
+    public long AuctionFrames { get; private set; }
 
     /// <summary>
     /// The hour of the game's calendar: the ticks so far plus the hours the end-of-month and end-of-year cheats skipped
@@ -224,13 +234,13 @@ public sealed class Simulation
 
     private long NextSequence { get; set; }
 
-    /// <summary>Schedules a command with an explicit tick and sequence, as received from a lockstep server.</summary>
-    /// <exception cref="ArgumentException">The tick has already passed.</exception>
+    /// <summary>Schedules a command with an explicit frame and sequence, as received from a lockstep server.</summary>
+    /// <exception cref="ArgumentException">The frame has already passed.</exception>
     public void Schedule(ScheduledCommand command)
     {
-        if (command.Tick < Tick)
+        if (command.Tick < Frame)
         {
-            throw new ArgumentException($"Command for tick {command.Tick} arrived at tick {Tick}.", nameof(command));
+            throw new ArgumentException($"Command for frame {command.Tick} arrived at frame {Frame}.", nameof(command));
         }
 
         var index = _pending.Count;
@@ -243,28 +253,43 @@ public sealed class Simulation
         NextSequence = Math.Max(NextSequence, command.Sequence + 1);
     }
 
-    /// <summary>Schedules a command for the current tick (or a later one) with the next sequence number.</summary>
+    /// <summary>Schedules a command for the current frame (or a later one, <see cref="Frame"/>) with the next sequence number.</summary>
     public ScheduledCommand Schedule(int player, Command command, long? tick = null)
     {
-        var scheduled = new ScheduledCommand(tick ?? Tick, NextSequence, player, command);
+        var scheduled = new ScheduledCommand(tick ?? Frame, NextSequence, player, command);
         Schedule(scheduled);
         return scheduled;
     }
 
-    /// <summary>Advances the simulation by one tick.</summary>
+    /// <summary>
+    /// Advances the simulation by one frame: the commands scheduled for it, then one tick, or while a land auction is under
+    /// way one frame of its bidding screen with the game's time standing still.
+    /// </summary>
     public void Step()
     {
-        while (_pending.Count > 0 && _pending[0].Tick == Tick)
+        while (_pending.Count > 0 && _pending[0].Tick == Frame)
         {
             var scheduled = _pending[0];
             _pending.RemoveAt(0);
+
+            // On the bidding screen the only thing a player can do is bid (the original's auction screen covers the game).
+            if (Auction is not null && scheduled.Command is not BidForParcelCommand)
+            {
+                continue;
+            }
+
             scheduled.Command.Execute(this, scheduled.Player);
 
             // What a command builds, buys or sells shows in the hospitals' value at once.
             HospitalValue.Refresh(this);
         }
 
-        LandAuction.Tick(this);
+        if (Auction is not null)
+        {
+            LandAuction.Frame(this);
+            AuctionFrames++;
+            return;
+        }
 
         // CorsixTH's World:onTick ticks the earthquake, then handles the end of a day before the hour that starts the next one.
         var round = Earthquakes.Tick(Rules.Earthquakes, Random, Date);
@@ -570,8 +595,13 @@ public sealed class Simulation
         simulation.Arrivals = PatientArrivals.Read(reader);
         if (reader.Version is 0 or >= 96)
         {
-            simulation.Auction = reader.ReadBool() ? LandAuction.Read(reader) : null;
+            simulation.Auction = reader.ReadBool() ? LandAuction.Read(reader, map.PlayerCount) : null;
             simulation.LastAuction = reader.ReadBool() ? AuctionResult.Read(reader) : null;
+        }
+
+        if (reader.Version is 0 or >= 115)
+        {
+            simulation.AuctionFrames = reader.ReadInt64();
         }
 
         foreach (var pool in simulation._availableStaff)
@@ -706,6 +736,7 @@ public sealed class Simulation
         Auction?.Write(writer);
         writer.WriteBool(LastAuction is not null);
         LastAuction?.Write(writer);
+        writer.WriteInt64(AuctionFrames);
 
         foreach (var pool in _availableStaff)
         {
