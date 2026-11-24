@@ -165,6 +165,18 @@ public sealed class CompetitorHospital
     /// <summary>Patients cured this month, for its money.</summary>
     public int CuredThisMonth { get; private set; }
 
+    /// <summary>Patients cured this year, for the year's awards.</summary>
+    public int CuredThisYear { get; private set; }
+
+    /// <summary>Patients who died this year, for the year's awards.</summary>
+    public int DeathsThisYear { get; private set; }
+
+    /// <summary>New patients this month, for the shares of the town's patients.</summary>
+    public int VisitorsThisMonth { get; private set; }
+
+    /// <summary>Its share of the town's new patients last month, in percent (<see cref="YearEndAwards.OnEndMonth"/>).</summary>
+    public int PopulationPercent { get; internal set; }
+
     /// <summary>Its owner's salary, the "Salary" of the year's charts.</summary>
     public long PlayerSalary { get; private set; } = StartSalary;
 
@@ -190,6 +202,7 @@ public sealed class CompetitorHospital
         SpawnAttempts++;
         Visitors++;
         VisitorsThisYear++;
+        VisitorsThisMonth++;
         _cureCredit += CurePermille;
         _deathCredit += DeathPermille;
         if (_cureCredit >= 1000)
@@ -197,11 +210,13 @@ public sealed class CompetitorHospital
             _cureCredit -= 1000;
             Cured++;
             CuredThisMonth++;
+            CuredThisYear++;
         }
         else if (_deathCredit >= 1000)
         {
             _deathCredit -= 1000;
             Deaths++;
+            DeathsThisYear++;
         }
     }
 
@@ -237,6 +252,7 @@ public sealed class CompetitorHospital
         Balance += ((long)CuredThisMonth * CureIncome) - MonthlyCosts;
         Value = Value == 0 ? TargetValue : Value + ((TargetValue - Value) / MonthlyValueApproach);
         CuredThisMonth = 0;
+        VisitorsThisMonth = 0;
     }
 
     /// <summary>
@@ -270,6 +286,8 @@ public sealed class CompetitorHospital
     internal void OnEndYear(int score, int scoreMaxIncrease)
     {
         VisitorsThisYear = 0;
+        CuredThisYear = 0;
+        DeathsThisYear = 0;
         PlayerSalary = Hospital.RaisedSalary(PlayerSalary, score, StartSalary, scoreMaxIncrease);
         if (Value > 0)
         {
@@ -311,6 +329,10 @@ public sealed class CompetitorHospital
         writer.WriteInt32(Tiles);
         writer.WriteInt32(_cureCredit);
         writer.WriteInt32(_deathCredit);
+        writer.WriteInt32(CuredThisYear);
+        writer.WriteInt32(DeathsThisYear);
+        writer.WriteInt32(VisitorsThisMonth);
+        writer.WriteInt32(PopulationPercent);
     }
 
     /// <param name="reader">The save.</param>
@@ -350,6 +372,15 @@ public sealed class CompetitorHospital
             competitor.Tiles = Math.Max(0, reader.ReadInt32());
             competitor._cureCredit = Math.Clamp(reader.ReadInt32(), 0, 999);
             competitor._deathCredit = Math.Clamp(reader.ReadInt32(), 0, 999);
+        }
+
+        // Version 113 gives them the year's cures and deaths and the month's patients, for the awards.
+        if (reader.Version is 0 or >= 113)
+        {
+            competitor.CuredThisYear = Math.Max(0, reader.ReadInt32());
+            competitor.DeathsThisYear = Math.Max(0, reader.ReadInt32());
+            competitor.VisitorsThisMonth = Math.Max(0, reader.ReadInt32());
+            competitor.PopulationPercent = Math.Clamp(reader.ReadInt32(), 0, 100);
         }
 
         return competitor;

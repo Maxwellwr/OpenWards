@@ -253,7 +253,7 @@ internal sealed class AnnualReportWindow : UiWindow
                 yield return WindowRow.Of(
                     new WindowCell(Describe(award.Kind), Highlight: !bad, Dim: bad),
                     WindowCell.Number(award.Money == 0 ? string.Empty : MoneyText.Format(award.Money)),
-                    WindowCell.Number(award.Reputation == 0 ? string.Empty : award.Reputation.ToString("+0;-0", CultureInfo.InvariantCulture)));
+                    WindowCell.Number(award.Reputation == 0 ? string.Empty : award.Reputation.ToString("+0'%';-0'%'", CultureInfo.InvariantCulture)));
             }
         }
 

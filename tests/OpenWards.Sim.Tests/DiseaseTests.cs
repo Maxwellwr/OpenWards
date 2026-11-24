@@ -69,7 +69,7 @@ public class DiseaseTests
         Assert.Equal(450, hospital.TreatmentPrice(cold, rules));
 
         // Unlike CorsixTH's, prices do not rise with the years.
-        hospital.OnEndYear(0, new SimRandom(1), AwardRules.Default);
+        hospital.OnEndYear(0);
         Assert.Equal(100, hospital.TreatmentPrice(gp, rules));
     }
 

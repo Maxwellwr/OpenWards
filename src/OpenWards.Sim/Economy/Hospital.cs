@@ -173,13 +173,84 @@ public enum YearEndAwardKind : byte
 
     /// <summary>Trophy: more cans sold from the drinks machines than <c>CansofCoke</c>.</summary>
     DrinksSoldTrophy,
+
+    /// <summary>Trophy (in reputation): the staff's mean happiness stayed at <c>TrophyStaffHappiness</c> % or more each month.</summary>
+    HappyStaffTrophy,
+
+    /// <summary>Trophy (in reputation): more rats shot than <c>RatKillsAbsolute</c>; the detail is how many.</summary>
+    RatsKilledTrophy,
+
+    /// <summary>Trophy: a good aim at rats (<c>RatKillsPercentage</c>); the detail is the hits in percent of the shots.</summary>
+    RatAccuracyTrophy,
+
+    /// <summary>Trophy (in reputation): <c>Plant</c> % or more of the plants were watered each month.</summary>
+    HealthyPlantsTrophy,
+
+    /// <summary>Award (in reputation): more than <c>PopulationPercentageAward</c> % of the town's patients last month.</summary>
+    HighPopulationShare,
+
+    /// <summary>Penalty (in reputation): fewer than <c>PopulationPercentagePoor</c> % of them.</summary>
+    LowPopulationShare,
+
+    /// <summary>Award (in reputation): patients happier than <c>PeepHappinessAward</c> % over the year.</summary>
+    HappyPatients,
+
+    /// <summary>Penalty (in reputation): patients less happy than <c>PeepHappinessPoor</c> %.</summary>
+    UnhappyPatients,
+
+    /// <summary>Award (in reputation): staff happier than <c>StaffHappinessAward</c> % over the year.</summary>
+    HappyStaff,
+
+    /// <summary>Penalty (in reputation): staff less happy than <c>StaffHappinessPoor</c> %.</summary>
+    UnhappyStaff,
+
+    /// <summary>Award (in reputation): less litter and rat holes per tile than <c>CleanlinessAward</c> %.</summary>
+    Clean,
+
+    /// <summary>Penalty (in reputation): more than <c>CleanlinessPoor</c> %.</summary>
+    Dirty,
+
+    /// <summary>Award (in reputation): patients waited less than <c>WaitingTimesAward</c> % of what they put up with.</summary>
+    ShortWaits,
+
+    /// <summary>Penalty (in reputation): more than <c>WaitingTimesPoor</c> %.</summary>
+    LongWaits,
+
+    /// <summary>Award (in reputation): more than <c>EmergencyAward</c> % of the emergencies' patients saved.</summary>
+    EmergenciesSaved,
+
+    /// <summary>Penalty (in reputation): fewer than <c>EmergencyPoor</c> %.</summary>
+    EmergenciesLost,
+
+    /// <summary>Award (in reputation): more research than <c>NewTechAward</c> points.</summary>
+    GoodResearch,
+
+    /// <summary>Penalty (in reputation): less than <c>NewTechPoor</c> points.</summary>
+    PoorResearch,
+
+    /// <summary>Award (in reputation): the machines worn less than <c>WellKeptTechAward</c> % on average.</summary>
+    WellKeptMachines,
+
+    /// <summary>Penalty (in reputation): worn more than <c>WellKeptTechPoor</c> %.</summary>
+    NeglectedMachines,
 }
+
+/// <summary>
+/// What one month showed of a hospital, for the year's trophies and awards; −1 where there was nothing to measure.
+/// </summary>
+/// <param name="Reputation">The reputation at the month's end.</param>
+/// <param name="StaffHappiness">The staff's mean happiness, in percent.</param>
+/// <param name="PatientHappiness">The patients' mean happiness, in percent.</param>
+/// <param name="PlantsWatered">The plants that need no water, in percent of them all.</param>
+/// <param name="Waiting">The patients' mean leave count, in percent of what they put up with (<c>LeaveMax</c>).</param>
+public readonly record struct AwardMonth(int Reputation, int StaffHappiness, int PatientHappiness, int PlantsWatered, int Waiting);
 
 /// <summary>A trophy, award or fine the hospital got at a year end, and what it brought.</summary>
 /// <param name="Kind">Which.</param>
 /// <param name="Money">Money it brought; negative for a fine.</param>
-/// <param name="Reputation">Reputation it brought; negative for a penalty.</param>
-public readonly record struct YearEndAward(YearEndAwardKind Kind, int Money, int Reputation);
+/// <param name="Reputation">Reputation it brought, in percent of the visits it weighs against; negative for a penalty.</param>
+/// <param name="Detail">A number its text shows: the rats shot, or the hits in percent of the shots.</param>
+public readonly record struct YearEndAward(YearEndAwardKind Kind, int Money, int Reputation, int Detail = 0);
 
 /// <summary>
 /// Why a patient went home uncured (CorsixTH's <c>Patient:goHome</c> reasons). Either way the patient's visit counts in
@@ -450,6 +521,9 @@ public sealed class Hospital
 
     private const int MaxYearEndAwards = 64;
 
+    /// <summary>The most months of a year's award records read back from a save.</summary>
+    private const int MaxAwardMonths = 64;
+
     public const int MinReputation = 0;
 
     public const int MaxReputation = 1000;
@@ -470,6 +544,7 @@ public sealed class Hospital
     private readonly long[,] _insuranceOwed = new long[InsuranceCompanies, InsuranceMonths];
 
     private readonly List<YearEndAward> _lastYearAwards = [];
+    private readonly List<AwardMonth> _awardMonths = [];
     private readonly SortedSet<string> _discoveredRooms = new(StringComparer.Ordinal);
     private readonly List<MonthStatistics> _statistics = [];
 
@@ -578,6 +653,24 @@ public sealed class Hospital
 
     /// <summary>The trophies, awards and fines of the last year end, in the order of CorsixTH's annual report.</summary>
     public IReadOnlyList<YearEndAward> LastYearAwards => _lastYearAwards;
+
+    /// <summary>What each month of this year showed, for the trophies and awards (<see cref="YearEndAwards"/>).</summary>
+    public IReadOnlyList<AwardMonth> AwardMonths => _awardMonths;
+
+    /// <summary>The hospital's share of the town's new patients last month, in percent.</summary>
+    public int PopulationPercent { get; internal set; }
+
+    /// <summary>Emergencies that ended this year.</summary>
+    public int EmergenciesThisYear { get; internal set; }
+
+    /// <summary>Patients the emergencies that ended this year brought.</summary>
+    public int EmergencyVictimsThisYear { get; internal set; }
+
+    /// <summary>Of those, the ones cured in time.</summary>
+    public int EmergencySavedThisYear { get; internal set; }
+
+    /// <summary>Points of research this year's researchers' actions brought.</summary>
+    public int ResearchPointsThisYear { get; internal set; }
 
     /// <summary>The player (0-based) the hospital belongs to.</summary>
     public int Player { get; }
@@ -1550,34 +1643,33 @@ public sealed class Hospital
     }
 
     /// <summary>
-    /// The year end: CorsixTH's annual report judges the year (<c>UIAnnualReport:checkTrophiesAndAwards</c>), then
-    /// <c>Hospital:onEndYear</c> starts the year's counts afresh and raises prices by the inflation rate, and then the
-    /// trophy and award money and reputation are given (<c>UIAnnualReport:updateAwards</c>).
+    /// The year end, after <see cref="YearEndAwards.Judge"/>: the trophies and awards are paid, money at once and
+    /// reputation as a percentage of the visits (if the reputation is at its limit and does not move, $5,000 for a
+    /// trophy or ±$2,500 for an award instead), and the year's counts start afresh.
     /// </summary>
-    internal void OnEndYear(long tick, SimRandom random, AwardRules prices)
+    internal void OnEndYear(long tick)
     {
-        JudgeYear(random, prices);
-
-        Explosions = 0;
-        RatShotsThisYear = 0;
-        RatsKilledThisYear = 0;
-        SodasSold = 0;
-        VisitorsThisYear = 0;
-        Vips.ThisYear = 0;
-        Vips.PleasedThisYear = 0;
-        Vips.ScoreSumThisYear = 0;
-        CuredThisYear = 0;
-        NotCuredThisYear = 0;
-        DeathsThisYear = 0;
-        LowestReputationThisYear = Reputation;
-        InflationYears++;
-
         var trophyMoney = 0;
         var awardMoney = 0;
-        var reputation = 0;
-        foreach (var award in _lastYearAwards)
+        for (var i = 0; i < _lastYearAwards.Count; i++)
         {
-            if (award.Kind is <= YearEndAwardKind.ManyCuredTrophy or YearEndAwardKind.DrinksSoldTrophy)
+            var award = _lastYearAwards[i];
+            var trophy = YearEndAwards.IsTrophy(award.Kind);
+            if (award.Reputation != 0 && !FreeBuild)
+            {
+                var atLimit = award.Reputation > 0 ? Reputation >= MaxReputation : Reputation <= MinReputation;
+                if (atLimit)
+                {
+                    award = award with { Money = award.Money + (trophy ? YearEndAwards.TrophyMoneyAtLimit : Math.Sign(award.Reputation) * YearEndAwards.AwardMoneyAtLimit), Reputation = 0 };
+                    _lastYearAwards[i] = award;
+                }
+                else
+                {
+                    ChangeReputationPercent(award.Reputation);
+                }
+            }
+
+            if (trophy)
             {
                 trophyMoney += award.Money;
             }
@@ -1585,8 +1677,6 @@ public sealed class Hospital
             {
                 awardMoney += award.Money;
             }
-
-            reputation += award.Reputation;
         }
 
         if (trophyMoney != 0)
@@ -1599,102 +1689,35 @@ public sealed class Hospital
             Receive(tick, awardMoney, TransactionKind.AwardBonus, string.Empty);
         }
 
-        if (reputation != 0)
-        {
-            // The awards' amounts are CorsixTH's, in reputation; they move it by as much.
-            ShiftReputation(reputation);
-        }
+        Explosions = 0;
+        RatShotsThisYear = 0;
+        RatsKilledThisYear = 0;
+        SodasSold = 0;
+        VisitorsThisYear = 0;
+        Vips.ThisYear = 0;
+        Vips.PleasedThisYear = 0;
+        Vips.ScoreSumThisYear = 0;
+        CuredThisYear = 0;
+        NotCuredThisYear = 0;
+        DeathsThisYear = 0;
+        EmergenciesThisYear = 0;
+        EmergencyVictimsThisYear = 0;
+        EmergencySavedThisYear = 0;
+        ResearchPointsThisYear = 0;
+        _awardMonths.Clear();
+        LowestReputationThisYear = Reputation;
+        InflationYears++;
     }
 
-    /// <summary>
-    /// <c>UIAnnualReport:checkTrophiesAndAwards</c>. Nothing counts unless more than one patient was cured this year,
-    /// except the fines and the trophy for drinks sold.
-    /// </summary>
-    private void JudgeYear(SimRandom random, AwardRules prices)
+    /// <summary>The trophies and awards of the year that ends, before they are paid.</summary>
+    internal void SetYearAwards(IEnumerable<YearEndAward> awards)
     {
         _lastYearAwards.Clear();
-        var anybodyCured = CuredThisYear > 1;
-
-        // Trophies. The one for drinks sold counts even when nobody was cured.
-        if (SodasSold > prices[AwardRules.CansofCoke])
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.DrinksSoldTrophy, prices[AwardRules.CansofCokeBonus], 0));
-        }
-
-        if (anybodyCured && Vips.ThisYear > 0 && Vips.PleasedThisYear == Vips.ThisYear)
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.HappyVips, 0, (prices[AwardRules.TrophyMayorBonus] * Vips.PleasedThisYear) + random.NextInclusive(1, 5)));
-        }
-
-        if (anybodyCured && LowestReputationThisYear > prices[AwardRules.Reputation])
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.ConsistentReputation, prices[AwardRules.TrophyReputationBonus], 0));
-        }
-
-        if (anybodyCured && DeathsThisYear == 0 && NotCuredThisYear == 0)
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.AllCuredTrophy, prices[AwardRules.TrophyAllCuredBonus], 0));
-        }
-        else if (anybodyCured && DeathsThisYear == 0)
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.NoDeathsTrophy, prices[AwardRules.TrophyDeathBonus], 0));
-        }
-        else if (anybodyCured && CuredThisYear > NotCuredThisYear * 0.9m)
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.ManyCuredTrophy, prices[AwardRules.TrophyCuresBonus], 0));
-        }
-
-        // Awards and fines.
-        if (anybodyCured && Reputation > prices[AwardRules.ReputationAward])
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.HighReputation, prices[AwardRules.AwardReputationBonus], 0));
-        }
-        else if (Reputation < prices[AwardRules.ReputationPoor])
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.PoorReputation, prices[AwardRules.AwardReputationPenalty], 0));
-        }
-
-        if (anybodyCured && Value > prices[AwardRules.HospValueAward])
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.HighValue, 0, prices[AwardRules.HospValueBonus] * random.NextInclusive(1, 15)));
-        }
-        else if (Value < prices[AwardRules.HospValuePoor])
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.LowValue, 0, prices[AwardRules.HospValuePenalty] * random.NextInclusive(1, 15)));
-        }
-
-        if (anybodyCured && CuredThisYear > prices[AwardRules.CuresAward])
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.ManyCures, prices[AwardRules.CuresBonus], 0));
-        }
-        else if (CuredThisYear < prices[AwardRules.CuresPoor])
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.FewCures, prices[AwardRules.CuresPenalty], 0));
-        }
-
-        if (anybodyCured && DeathsThisYear == 0 && NotCuredThisYear == 0)
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.AllCures, prices[AwardRules.AllCuresBonus], 0));
-        }
-        else if (anybodyCured && DeathsThisYear < prices[AwardRules.DeathsAward])
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.FewDeaths, prices[AwardRules.DeathsBonus], 0));
-        }
-        else if (DeathsThisYear > prices[AwardRules.DeathsPoor])
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.ManyDeaths, prices[AwardRules.DeathsPenalty], 0));
-        }
-
-        var cureRatio = DeathsThisYear > 0 ? CuredThisYear / (decimal)DeathsThisYear : 100;
-        if (anybodyCured && cureRatio > prices[AwardRules.CuresVDeathsAward])
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.CuresOverDeaths, prices[AwardRules.CuresVDeathsBonus], 0));
-        }
-        else if (cureRatio <= prices[AwardRules.CuresVDeathsPoor])
-        {
-            _lastYearAwards.Add(new(YearEndAwardKind.DeathsOverCures, prices[AwardRules.CuresVDeathsPenalty], 0));
-        }
+        _lastYearAwards.AddRange(awards);
     }
+
+    /// <summary>Notes what the month that ends showed, for the year's trophies and awards.</summary>
+    internal void RecordAwardMonth(AwardMonth month) => _awardMonths.Add(month);
 
     internal void Write(SimWriter writer)
     {
@@ -1728,6 +1751,7 @@ public sealed class Hospital
             writer.WriteByte((byte)award.Kind);
             writer.WriteInt32(award.Money);
             writer.WriteInt32(award.Reputation);
+            writer.WriteInt32(award.Detail);
         }
 
         writer.WriteInt64(Loan);
@@ -1888,6 +1912,20 @@ public sealed class Hospital
 
         writer.WriteInt32(RatShotsThisYear);
         writer.WriteInt32(RatsKilledThisYear);
+        writer.WriteInt32(PopulationPercent);
+        writer.WriteInt32(EmergenciesThisYear);
+        writer.WriteInt32(EmergencyVictimsThisYear);
+        writer.WriteInt32(EmergencySavedThisYear);
+        writer.WriteInt32(ResearchPointsThisYear);
+        writer.WriteInt32(_awardMonths.Count);
+        foreach (var month in _awardMonths)
+        {
+            writer.WriteInt32(month.Reputation);
+            writer.WriteInt32(month.StaffHappiness);
+            writer.WriteInt32(month.PatientHappiness);
+            writer.WriteInt32(month.PlantsWatered);
+            writer.WriteInt32(month.Waiting);
+        }
     }
 
     internal static Hospital Read(SimReader reader, int player)
@@ -1923,12 +1961,13 @@ public sealed class Hospital
         for (var i = 0; i < awards; i++)
         {
             var kind = reader.ReadByte();
-            if (kind > (byte)YearEndAwardKind.DrinksSoldTrophy)
+            if (kind > (byte)YearEndAwardKind.NeglectedMachines)
             {
                 throw new InvalidDataException($"Unknown year end award {kind}.");
             }
 
-            hospital._lastYearAwards.Add(new((YearEndAwardKind)kind, reader.ReadInt32(), reader.ReadInt32()));
+            // Version 113 keeps a detail, and the reputation as a percentage (before, it was in points).
+            hospital._lastYearAwards.Add(new((YearEndAwardKind)kind, reader.ReadInt32(), reader.ReadInt32(), reader.Version is 0 or >= 113 ? reader.ReadInt32() : 0));
         }
 
         hospital.Loan = reader.ReadInt64();
@@ -2163,6 +2202,21 @@ public sealed class Hospital
             hospital.LastLitterTile = reader.ReadBool() ? reader.ReadTile() : null;
             hospital.RatShotsThisYear = Math.Max(0, reader.ReadInt32());
             hospital.RatsKilledThisYear = Math.Max(0, reader.ReadInt32());
+        }
+
+        // Version 113 keeps what the year's trophies and awards look at.
+        if (reader.Version is 0 or >= 113)
+        {
+            hospital.PopulationPercent = reader.ReadInt32();
+            hospital.EmergenciesThisYear = reader.ReadInt32();
+            hospital.EmergencyVictimsThisYear = reader.ReadInt32();
+            hospital.EmergencySavedThisYear = reader.ReadInt32();
+            hospital.ResearchPointsThisYear = reader.ReadInt32();
+            var awardMonths = reader.ReadCount(MaxAwardMonths);
+            for (var i = 0; i < awardMonths; i++)
+            {
+                hospital._awardMonths.Add(new AwardMonth(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32()));
+            }
         }
 
         return hospital;

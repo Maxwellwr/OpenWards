@@ -83,114 +83,148 @@ public class YearEndTests
     }
 
     [Fact]
-    public void AGoodYearWinsTrophiesAndAwards()
+    public void AGoodYearWinsEveryTrophyAndAward()
     {
-        var hospital = new Hospital(0, 0, reputation: 600, value: 200_000);
-        hospital.CuredThisYear = 60;
+        var simulation = NewSimulation(players: 1);
+        var hospital = simulation.Hospitals[0];
+        hospital.SetReputation(600);
+        hospital.Value = 200_000;
         hospital.VisitorsThisYear = 70;
+        hospital.CuredThisYear = 60;
+        hospital.Cured = 60;
+        hospital.NotCuredThisYear = 2;
+        hospital.RatsKilledThisYear = 30;
+        hospital.RatShotsThisYear = 40;
+        hospital.Vips.ThisYear = 2;
+        hospital.Vips.ScoreSumThisYear = 20;
+        hospital.SodasSold = 150;
+        hospital.PopulationPercent = 60;
+        hospital.EmergenciesThisYear = 2;
+        hospital.EmergencyVictimsThisYear = 10;
+        hospital.EmergencySavedThisYear = 10;
+        hospital.ResearchPointsThisYear = 3000;
+        for (var month = 0; month < 12; month++)
+        {
+            hospital.RecordAwardMonth(new AwardMonth(600, 90, 80, 90, 10));
+        }
 
-        hospital.OnEndYear(100, new SimRandom(4), AwardRules.Default);
+        var awards = YearEndAwards.Judge(simulation, hospital);
 
-        var kinds = hospital.LastYearAwards.Select(a => a.Kind).ToList();
         Assert.Equal(
             [
-                YearEndAwardKind.ConsistentReputation, YearEndAwardKind.AllCuredTrophy, YearEndAwardKind.HighReputation,
-                YearEndAwardKind.HighValue, YearEndAwardKind.ManyCures, YearEndAwardKind.AllCures, YearEndAwardKind.CuresOverDeaths,
+                YearEndAwardKind.ManyCuredTrophy, YearEndAwardKind.ConsistentReputation, YearEndAwardKind.HappyStaffTrophy,
+                YearEndAwardKind.HappyVips, YearEndAwardKind.NoDeathsTrophy, YearEndAwardKind.RatsKilledTrophy,
+                YearEndAwardKind.RatAccuracyTrophy, YearEndAwardKind.HealthyPlantsTrophy, YearEndAwardKind.DrinksSoldTrophy,
+                YearEndAwardKind.HighReputation, YearEndAwardKind.ManyCures, YearEndAwardKind.FewDeaths, YearEndAwardKind.HighPopulationShare,
+                YearEndAwardKind.CuresOverDeaths, YearEndAwardKind.HappyPatients, YearEndAwardKind.HighValue, YearEndAwardKind.HappyStaff,
+                YearEndAwardKind.Clean, YearEndAwardKind.ShortWaits, YearEndAwardKind.EmergenciesSaved, YearEndAwardKind.GoodResearch,
             ],
-            kinds);
-        var valueAward = hospital.LastYearAwards.Single(a => a.Kind == YearEndAwardKind.HighValue);
-        Assert.Equal(0, valueAward.Reputation % 3);
-        Assert.InRange(valueAward.Reputation, 3, 45);
+            awards.Select(a => a.Kind));
+        Assert.All(awards.Where(a => YearEndAwards.IsTrophy(a.Kind)), a => Assert.True(a.Money > 0 != a.Reputation > 0));
+        Assert.Equal(30, awards.Single(a => a.Kind == YearEndAwardKind.RatsKilledTrophy).Detail);
+        Assert.Equal(75, awards.Single(a => a.Kind == YearEndAwardKind.RatAccuracyTrophy).Detail);
 
-        // Trophy money and award money are paid separately; the reputation rises by the value award.
-        Assert.Equal(new Transaction(100, TransactionKind.TrophyBonus, string.Empty, 2000 + 20_000, 22_000), hospital.Transactions[1]);
-        Assert.Equal(new Transaction(100, TransactionKind.AwardBonus, string.Empty, 2000 + 2000 + 5000 + 4000, 35_000), hospital.Transactions[0]);
-        Assert.InRange(hospital.Reputation, 600, 645);
+        // Trophy money and award money are paid separately; the reputation rises by the percentages.
+        hospital.SetYearAwards(awards);
+        hospital.OnEndYear(100);
+        Assert.Equal(new Transaction(100, TransactionKind.TrophyBonus, string.Empty, 6000 + 2000 + 10_000 + 5000 + 1000, 34_000), hospital.Transactions[1]);
+        Assert.Equal(new Transaction(100, TransactionKind.AwardBonus, string.Empty, 2000 + 2000 + 3000 + 4000, 45_000), hospital.Transactions[0]);
+        Assert.True(hospital.Reputation > 600);
 
-        // The year's counts start afresh and prices rise.
+        // The year's counts start afresh.
         Assert.Equal((0, 0, 0, 0), (hospital.CuredThisYear, hospital.DeathsThisYear, hospital.NotCuredThisYear, hospital.VisitorsThisYear));
-        Assert.Equal(1, hospital.InflationYears);
+        Assert.Equal((0, 0, 0, 0), (hospital.RatsKilledThisYear, hospital.EmergenciesThisYear, hospital.ResearchPointsThisYear, hospital.SodasSold));
+        Assert.Empty(hospital.AwardMonths);
     }
 
     [Fact]
-    public void ABadYearIsFined()
+    public void TheWorstHospitalPaysTwiceAndOneAheadOfAllTheRestGetsThreeTimes()
     {
-        var hospital = new Hospital(0, 0, reputation: 150, value: 10_000);
-        hospital.CuredThisYear = 1;
-        hospital.DeathsThisYear = 30;
+        var simulation = NewSimulation(players: 2);
+        var bad = simulation.Hospitals[0];
+        bad.SetReputation(150);
+        bad.Value = 10_000;
+        bad.VisitorsThisYear = 10;
+        (bad.CuredThisYear, bad.Cured, bad.DeathsThisYear, bad.Deaths) = (1, 1, 30, 30);
+        bad.PopulationPercent = 5;
 
-        hospital.OnEndYear(100, new SimRandom(4), AwardRules.Default);
+        var good = simulation.Hospitals[1];
+        good.SetReputation(600);
+        good.Value = 200_000;
+        good.VisitorsThisYear = 70;
+        (good.CuredThisYear, good.Cured, good.DeathsThisYear, good.Deaths) = (60, 60, 5, 5);
+        good.PopulationPercent = 95;
 
         Assert.Equal(
             [
-                YearEndAwardKind.PoorReputation, YearEndAwardKind.LowValue, YearEndAwardKind.FewCures,
-                YearEndAwardKind.ManyDeaths, YearEndAwardKind.DeathsOverCures,
+                new YearEndAward(YearEndAwardKind.PoorReputation, -6000, 0),
+                new YearEndAward(YearEndAwardKind.FewCures, -6000, 0),
+                new YearEndAward(YearEndAwardKind.ManyDeaths, -10_000, 0),
+                new YearEndAward(YearEndAwardKind.LowPopulationShare, 0, -10),
+                new YearEndAward(YearEndAwardKind.DeathsOverCures, -4000, 0),
+                new YearEndAward(YearEndAwardKind.LowValue, 0, -12),
+                new YearEndAward(YearEndAwardKind.Clean, 0, 6),
             ],
-            hospital.LastYearAwards.Select(a => a.Kind));
-        Assert.Equal(new Transaction(100, TransactionKind.AwardBonus, string.Empty, -3000 - 3000 - 5000 - 4000, -15_000), Assert.Single(hospital.Transactions));
-        // The value penalty lowers the reputation, though so far below 500 a loss counts only now and then.
-        Assert.InRange(hospital.LastYearAwards.Single(a => a.Kind == YearEndAwardKind.LowValue).Reputation, -90, -6);
-        Assert.InRange(hospital.Reputation, 60, 150);
+            YearEndAwards.Judge(simulation, bad));
+
+        var awards = YearEndAwards.Judge(simulation, good);
+        Assert.Contains(new YearEndAward(YearEndAwardKind.HighReputation, 6000, 0), awards);
+        Assert.Contains(new YearEndAward(YearEndAwardKind.ManyCures, 6000, 0), awards);
+        Assert.Contains(new YearEndAward(YearEndAwardKind.FewDeaths, 6000, 0), awards); // fewest deaths: twice
+        Assert.Contains(new YearEndAward(YearEndAwardKind.HighPopulationShare, 0, 12), awards);
+        Assert.Contains(new YearEndAward(YearEndAwardKind.HighValue, 0, 9), awards);
     }
 
     [Fact]
-    public void SellingMoreCansThanTheLevelAsksWinsATrophyEvenWithoutCures()
+    public void AReputationAtItsLimitTakesMoneyInstead()
     {
-        var hospital = new Hospital(0, 0, reputation: 600, value: 200_000);
-        hospital.SodasSold = AwardRules.Default[AwardRules.CansofCoke] + 1;
+        var simulation = NewSimulation(players: 1);
+        var hospital = simulation.Hospitals[0];
+        hospital.SetReputation(Hospital.MaxReputation);
+        hospital.SetYearAwards([new(YearEndAwardKind.HappyStaffTrophy, 0, 5), new(YearEndAwardKind.HappyStaff, 0, 4)]);
 
-        hospital.OnEndYear(100, new SimRandom(4), AwardRules.Default);
+        hospital.OnEndYear(100);
 
-        var trophy = hospital.LastYearAwards.Single(a => a.Kind == YearEndAwardKind.DrinksSoldTrophy);
-        Assert.Equal(AwardRules.Default[AwardRules.CansofCokeBonus], trophy.Money);
-        Assert.Contains(hospital.Transactions, t => t is { Kind: TransactionKind.TrophyBonus, Amount: 1000 });
-        Assert.Equal(0, hospital.SodasSold);
+        Assert.Equal(new Transaction(100, TransactionKind.TrophyBonus, string.Empty, 5000, 15_000), hospital.Transactions[1]);
+        Assert.Equal(new Transaction(100, TransactionKind.AwardBonus, string.Empty, 2500, 17_500), hospital.Transactions[0]);
+        Assert.Equal([new(YearEndAwardKind.HappyStaffTrophy, 5000, 0), new YearEndAward(YearEndAwardKind.HappyStaff, 2500, 0)], hospital.LastYearAwards);
+
+        hospital.SetReputation(Hospital.MinReputation);
+        hospital.SetYearAwards([new(YearEndAwardKind.UnhappyStaff, 0, -10)]);
+        hospital.OnEndYear(200);
+        Assert.Equal(new Transaction(200, TransactionKind.AwardBonus, string.Empty, -2500, 15_000), hospital.Transactions[0]);
     }
 
     [Fact]
-    public void OneCureIsNotEnoughForATrophy()
+    public void FewPatientsWinNothing()
     {
-        var hospital = new Hospital(0, 0, reputation: 600, value: 200_000);
-        hospital.CuredThisYear = 1;
+        var simulation = NewSimulation(players: 1);
+        var hospital = simulation.Hospitals[0];
+        hospital.VisitorsThisYear = 3;
+        hospital.SodasSold = 500;
+        Assert.Empty(YearEndAwards.Judge(simulation, hospital));
 
-        hospital.OnEndYear(100, new SimRandom(4), AwardRules.Default);
-
-        // CorsixTH needs more than one cure for anything but the fines; with one cure there are fewer than ten.
-        Assert.Equal([YearEndAwardKind.FewCures], hospital.LastYearAwards.Select(a => a.Kind));
+        // Six patients are enough for the trophies, not for the awards of level 2 (more than six).
+        hospital.VisitorsThisYear = 6;
+        Assert.Equal([YearEndAwardKind.NoDeathsTrophy, YearEndAwardKind.DrinksSoldTrophy], YearEndAwards.Judge(simulation, hospital).Select(a => a.Kind));
     }
 
     [Fact]
-    public void ADipInReputationLosesTheConsistentReputationTrophy()
+    public void AMonthMeasuresTheStaffPatientsPlantsAndWaiting()
     {
-        var random = new SimRandom(4);
-        var prices = AwardRules.With([new(AwardRules.Reputation, 500)]);
-        var hospital = new Hospital(0, 0, reputation: 504, value: 100_000);
-        hospital.CountPatient(null, visit: true, points: 0);
-        hospital.ShiftReputation(21);
-        Assert.Equal((501, 480), (hospital.Reputation, hospital.LowestReputationThisYear)); // ⌊10,080 / 21⌋, then +21
-        hospital.CuredThisYear = 20;
-        hospital.NotCuredThisYear = 1;
-
-        hospital.OnEndYear(100, random, prices);
-
-        Assert.Equal(
-            [YearEndAwardKind.NoDeathsTrophy, YearEndAwardKind.HighReputation, YearEndAwardKind.FewDeaths, YearEndAwardKind.CuresOverDeaths],
-            hospital.LastYearAwards.Select(a => a.Kind));
-        Assert.Equal(hospital.Reputation, hospital.LowestReputationThisYear);
+        var simulation = NewSimulation(players: 1);
+        var month = YearEndAwards.MeasureMonth(simulation, simulation.Hospitals[0]);
+        Assert.Equal(new AwardMonth(Hospital.AverageReputation, -1, -1, -1, -1), month);
     }
 
     [Fact]
     public void TheLevelSetsThePrizes()
     {
-        var prices = AwardRules.With([new(AwardRules.CuresPoor, 0), new(AwardRules.HospValuePoor, 0), new("NotASetting", 1)]);
-        var hospital = new Hospital(0, 0, value: 20_000);
-        hospital.DeathsThisYear = 1;
-
-        hospital.OnEndYear(100, new SimRandom(4), prices);
-
-        // Without the fines for few cures and a low value only the one for no cures per death is left.
-        Assert.Equal([YearEndAwardKind.DeathsOverCures], hospital.LastYearAwards.Select(a => a.Kind));
+        var prices = AwardRules.With([new(AwardRules.CuresPoor, 0), new(AwardRules.RatKillsAbsolute, 3), new("NotASetting", 1)]);
+        Assert.Equal(0, prices[AwardRules.CuresPoor]);
+        Assert.Equal(3, prices[AwardRules.RatKillsAbsolute]);
         Assert.Equal(150_000, prices[AwardRules.HospValueAward]);
+        Assert.Equal(25, prices[AwardRules.TrophyMayor]);
     }
 
     [Fact]
@@ -204,10 +238,17 @@ public class YearEndTests
             original.Step();
         }
 
-        // An empty hospital worth 20,000 cures nobody and is worth too little.
-        Assert.Equal([YearEndAwardKind.LowValue, YearEndAwardKind.FewCures], hospital.LastYearAwards.Select(a => a.Kind));
+        // An empty hospital that nobody came to wins and pays nothing; the year's months were noted and are cleared.
+        Assert.Empty(hospital.LastYearAwards);
+        Assert.Empty(hospital.AwardMonths);
         Assert.Equal(1, hospital.InflationYears);
-        Assert.Contains(hospital.Transactions, t => t is { Kind: TransactionKind.AwardBonus, Amount: -3000 });
+        Assert.DoesNotContain(hospital.Transactions, t => t.Kind is TransactionKind.AwardBonus or TransactionKind.TrophyBonus);
+        while (original.Date.Month < 3)
+        {
+            original.Step();
+        }
+
+        Assert.Equal(2, hospital.AwardMonths.Count);
 
         using var stream = new MemoryStream();
         original.Save(stream);
@@ -217,5 +258,26 @@ public class YearEndTests
         Assert.Equal(hospital.LastYearAwards, restored.Hospitals[0].LastYearAwards);
         Assert.Equal(20_000, restored.Hospitals[0].Value);
         Assert.Equal(AwardRules.Default[AwardRules.CuresPenalty], restored.Rules.Awards[AwardRules.CuresPenalty]);
+    }
+
+    /// <summary>A level 2 town of 4 × 2 tiles, the first player's plot the top row (and the second's the bottom one).</summary>
+    private static Simulation NewSimulation(int players)
+    {
+        var map = new LevelMap(4, 2, players);
+        map.ParcelCount = players + 1;
+        for (var player = 1; player <= players; player++)
+        {
+            map.SetParcelOwner(player, player);
+        }
+
+        for (var x = 0; x < map.Width; x++)
+        {
+            map[x, 0].Parcel = 1;
+            map[x, 1].Parcel = (ushort)(players > 1 ? 2 : 1);
+            map[x, 0].Set(TileFlags.Passable | TileFlags.Hospital, true);
+            map[x, 1].Set(TileFlags.Passable | TileFlags.Hospital, true);
+        }
+
+        return new Simulation(map, seed: 1, rules: new LevelRules(10_000, [], [], levelNumber: 2));
     }
 }
