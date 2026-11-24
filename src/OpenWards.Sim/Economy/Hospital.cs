@@ -2039,8 +2039,8 @@ public sealed class Hospital
             entry.Reputation = hasReputation ? diseaseReputation : null;
             entry.TurnedAway = reader.ReadInt32();
 
-            // Version 111 researches drugs; older games keep every drug they had.
-            entry.DrugAvailable = reader.Version is not 0 and < 111 || reader.ReadBool();
+            // Version 112 researches drugs; older games keep every drug they had.
+            entry.DrugAvailable = reader.Version is not 0 and < 112 || reader.ReadBool();
             if (DiseaseCatalog.Find(id) is { } disease && !OpenWards.Sim.Research.ResearchDepartment.IsDrugDisease(disease))
             {
                 // Games imported before the fix took the original's 0 for these, and their patients all died.

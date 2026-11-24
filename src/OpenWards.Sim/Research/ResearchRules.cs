@@ -146,9 +146,9 @@ public sealed class ResearchRules
             expertise[i] = reader.ReadInt32();
         }
 
-        // Version 111 dropped CorsixTH's ResearchPointsDivisor, MinDrugCost and AutopsyRepHitPercent, which research no
+        // Version 112 dropped CorsixTH's ResearchPointsDivisor, MinDrugCost and AutopsyRepHitPercent, which research no
         // longer uses.
-        var old = reader.Version is not 0 and < 111;
+        var old = reader.Version is not 0 and < 112;
         if (old)
         {
             reader.ReadInt32();
