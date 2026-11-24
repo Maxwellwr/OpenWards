@@ -32,15 +32,15 @@ public class OriginalTextsTests
     }
 
     [Fact]
-    public void NamesTheVipsAfterTheHealthMinister()
+    public void NamesTheVipsInTheListsOrderFromTheHealthMinister()
     {
         var texts = new OriginalTexts(Strings());
 
+        Assert.Equal("VIP 1", texts.VipName(0));
         Assert.Equal("VIP 2", texts.VipName(1));
         Assert.Equal("VIP 11", texts.VipName(10));
-        Assert.Null(texts.VipName(0));
-        Assert.Equal("VIP 1", texts.VipName(11));
-        Assert.Null(texts.VipName(12));
+        Assert.Null(texts.VipName(-1));
+        Assert.Null(texts.VipName(11));
     }
 
     [Fact]
@@ -66,7 +66,8 @@ public class OriginalTextsTests
             Assert.False(string.IsNullOrWhiteSpace(texts.Disease(disease.Id)?.Name), disease.Id);
         }
 
-        Assert.False(string.IsNullOrWhiteSpace(texts.VipName(1)));
+        Assert.False(string.IsNullOrWhiteSpace(texts.VipName(0)));
+        Assert.False(string.IsNullOrWhiteSpace(texts.VipName(10)));
         Assert.NotEmpty(texts.RoomDescription("gp")!);
         Assert.NotEmpty(texts.RoomDescription("toilets")!);
     }

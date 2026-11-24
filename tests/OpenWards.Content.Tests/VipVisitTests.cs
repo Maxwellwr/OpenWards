@@ -27,7 +27,7 @@ public class VipVisitTests
         PlaceReceptionDesk(simulation);
         StepFor(simulation, GameDate.HoursPerDay);
         Assert.True(vips.IsInvitationPending);
-        Assert.InRange(vips.InvitedName, 1, VipVisits.NameCount);
+        Assert.InRange(vips.InvitedName, 0, VipVisits.NameCount - 1);
         Assert.InRange(vips.DaysSinceLast, 0, 1);
 
         // Refusing costs nothing, and the next VIP asks ten days after this one did.

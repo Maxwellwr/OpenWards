@@ -13,7 +13,7 @@ public class EpidemicContagionTests
     [Fact]
     public void PatientsAreContagiousOnlyAfterTheLevelsMonthsAndVisitors()
     {
-        var simulation = NewSimulation(contagiousRate: 1);
+        var simulation = NewSimulation(contagiousRate: 1, reduceMonths: 14, reducePeople: 20, reduceRate: 0);
         var hospital = simulation.Hospitals[0];
         var (humanoid, patient) = NewPatient(simulation, "broken_wind");
 
@@ -21,7 +21,11 @@ public class EpidemicContagionTests
         Epidemics.DetermineIfContagious(simulation, hospital, humanoid, patient);
         Assert.Equal(0, hospital.Epidemics.Count);
 
+        // Enough visitors but too early: the period goes on until both thresholds are passed.
         hospital.Visitors = 21;
+        Epidemics.DetermineIfContagious(simulation, hospital, humanoid, patient);
+        Assert.Equal(0, hospital.Epidemics.Count);
+
         while (simulation.Date.MonthOfGame <= 14)
         {
             simulation.Step();
@@ -37,6 +41,19 @@ public class EpidemicContagionTests
         Epidemics.DetermineIfContagious(simulation, hospital, other, otherPatient);
         Assert.Single(hospital.Epidemics.Future);
         Assert.False(otherPatient.IsInfected);
+    }
+
+    [Fact]
+    public void WithBothThresholdsZeroThereIsNoEarlyPeriod()
+    {
+        var simulation = NewSimulation(contagiousRate: 1, reduceMonths: 0, reducePeople: 0, reduceRate: 0);
+        var hospital = simulation.Hospitals[0];
+        var (humanoid, patient) = NewPatient(simulation, "broken_wind");
+
+        Epidemics.DetermineIfContagious(simulation, hospital, humanoid, patient);
+
+        Assert.True(patient.IsInfected);
+        Assert.InRange(patient.ContagiousStrength, 1, EpidemicRules.DefaultHowContagious);
     }
 
     [Fact]
@@ -75,10 +92,11 @@ public class EpidemicContagionTests
         return (humanoid, patient);
     }
 
-    private static Simulation NewSimulation(int contagiousRate)
+    private static Simulation NewSimulation(int contagiousRate, int reduceMonths = 0, int reducePeople = 0, int reduceRate = EpidemicRules.DefaultReduceContagiousDivisorPercent)
     {
         var rates = Enumerable.Repeat(contagiousRate, DiseaseRules.ExpertiseCount + 1).ToArray();
         var map = new LevelMap(10, 10, playerCount: 1);
-        return new Simulation(map, seed: 1, rules: new LevelRules(10_000, [], [], epidemics: new EpidemicRules(rates)));
+        var epidemics = new EpidemicRules(rates, reduceContagiousMonths: reduceMonths, reduceContagiousPeopleCount: reducePeople, reduceContagiousDivisorPercent: reduceRate);
+        return new Simulation(map, seed: 1, rules: new LevelRules(10_000, [], [], epidemics: epidemics));
     }
 }

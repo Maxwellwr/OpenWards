@@ -311,10 +311,44 @@ public class LevelRulesLoaderTests
         Assert.Equal(1000, epidemics.CompensationLow);
         Assert.Equal(9000, epidemics.CompensationHigh);
         Assert.Equal(2, epidemics.ConcurrentLimit);
-        Assert.Equal(14, epidemics.ReduceContagiousMonths);
+        Assert.Equal(0, epidemics.ReduceContagiousMonths);
+        Assert.Equal(0, epidemics.ReduceContagiousPeopleCount);
         Assert.Equal(50, epidemics.VaccinationCost);
         Assert.Equal(7, epidemics.HowContagious);
         Assert.Equal(50, epidemics.ReduceContagiousDivisorPercent);
+    }
+
+    [Fact]
+    public void FallsBackToHowContagious20AndNoEarlyPeriodWhenTheLevelSetsNone()
+    {
+        var config = LevelConfig.Parse(Encoding.ASCII.GetBytes("#gbv.EpidemicFine 3000\n"));
+
+        var epidemics = LevelRulesLoader.FromConfig(config, null, BaseGameContent.Create()).Epidemics;
+
+        Assert.Equal(20, epidemics.HowContagious);
+        Assert.Equal(100, epidemics.ReduceContagiousDivisorPercent);
+        Assert.Equal(0, epidemics.ReduceContagiousMonths);
+        Assert.Equal(0, epidemics.ReduceContagiousPeopleCount);
+        Assert.False(epidemics.IsReducedPeriod(1, 0));
+    }
+
+    [Fact]
+    public void ReadsTheMediumLevelsContagionSettings()
+    {
+        var config = LevelConfig.Parse(Encoding.ASCII.GetBytes("""
+            #gbv.ReduceContMonths 14
+            #gbv.ReduceContPeepCount 20
+            #gbv.HowContagious 25
+            """));
+
+        var epidemics = LevelRulesLoader.FromConfig(config, null, BaseGameContent.Create()).Epidemics;
+
+        Assert.Equal(25, epidemics.HowContagious);
+
+        // The early period ends only once both thresholds are passed.
+        Assert.True(epidemics.IsReducedPeriod(15, 20));
+        Assert.True(epidemics.IsReducedPeriod(14, 21));
+        Assert.False(epidemics.IsReducedPeriod(15, 21));
     }
 
     [Fact]

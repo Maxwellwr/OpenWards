@@ -26,8 +26,14 @@ public sealed class EpidemicRules
 
     /// <param name="contagiousRates">Each <c>expertise</c> entry's <c>ContRate</c>, indexed from 1 (index 0 is unused).</param>
     /// <param name="spreadFactor"><c>gbv.ContagiousSpreadFactor</c>: how often, in percent (scaled down by 200), the disease passes on.</param>
-    /// <param name="reduceContagiousMonths"><c>gbv.ReduceContMonths</c>: no contagious patients until after this month of the game.</param>
-    /// <param name="reduceContagiousPeopleCount"><c>gbv.ReduceContPeepCount</c>: nor until more patients than this came.</param>
+    /// <param name="reduceContagiousMonths">
+    /// <c>gbv.ReduceContMonths</c>: the early period with fewer contagious patients lasts at least until after this month
+    /// of the game; 0 if the level sets none.
+    /// </param>
+    /// <param name="reduceContagiousPeopleCount">
+    /// <c>gbv.ReduceContPeepCount</c>: and until more patients than this came; 0 if the level sets none. With both 0 there
+    /// is no such period.
+    /// </param>
     /// <param name="vaccinationCost"><c>gbv.VacCost</c>: what a vaccination costs.</param>
     /// <param name="fine"><c>gbv.EpidemicFine</c>: the fine for each patient still infected (at least 2,000 in all).</param>
     /// <param name="compensationLow"><c>gbv.EpidemicCompLo</c>: the least compensation for a cover-up that worked.</param>
@@ -38,13 +44,13 @@ public sealed class EpidemicRules
     /// <param name="howContagious"><c>gbv.HowContagious</c>: a contagious patient's strength is drawn from 1 to this.</param>
     /// <param name="reduceContagiousDivisorPercent">
     /// <c>gbv.ReduceContRate</c>: early in the level each disease's <c>ContRate</c> is multiplied by this percentage; at 0
-    /// nobody is contagious then.
+    /// nobody is contagious then. 100 (no change) if the level sets none.
     /// </param>
     public EpidemicRules(
         IReadOnlyList<int> contagiousRates,
         int spreadFactor = 25,
-        int reduceContagiousMonths = 14,
-        int reduceContagiousPeopleCount = 20,
+        int reduceContagiousMonths = 0,
+        int reduceContagiousPeopleCount = 0,
         int vaccinationCost = 50,
         int fine = 2000,
         int compensationLow = 1000,
@@ -53,7 +59,7 @@ public sealed class EpidemicRules
         int evacuationMinimum = 10,
         int concurrentLimit = 1,
         int howContagious = DefaultHowContagious,
-        int reduceContagiousDivisorPercent = 0)
+        int reduceContagiousDivisorPercent = DefaultReduceContagiousDivisorPercent)
     {
         if (contagiousRates.Count != DiseaseRules.ExpertiseCount + 1)
         {
@@ -75,8 +81,23 @@ public sealed class EpidemicRules
         ReduceContagiousDivisorPercent = reduceContagiousDivisorPercent;
     }
 
-    /// <summary><c>gbv.HowContagious</c> when the level files set none.</summary>
-    public const int DefaultHowContagious = 10;
+    /// <summary>
+    /// <c>gbv.HowContagious</c> when the level files set none. The level files themselves set 15 (easy), 25 (medium),
+    /// 30 (hard) and 25 (network).
+    /// </summary>
+    public const int DefaultHowContagious = 20;
+
+    /// <summary><c>gbv.ReduceContRate</c> when the level files set none: the early period changes nothing.</summary>
+    public const int DefaultReduceContagiousDivisorPercent = 100;
+
+    /// <summary>
+    /// Whether the early period of a level is still on: until both <see cref="ReduceContagiousMonths"/> have passed and
+    /// more than <see cref="ReduceContagiousPeopleCount"/> patients came. A threshold of 0 counts as passed, so with both
+    /// 0 there is no period.
+    /// </summary>
+    public bool IsReducedPeriod(int monthOfGame, int visitors) =>
+        (ReduceContagiousMonths > 0 && monthOfGame <= ReduceContagiousMonths)
+        || (ReduceContagiousPeopleCount > 0 && visitors <= ReduceContagiousPeopleCount);
 
     /// <summary>base_config.lua: no disease contagious, and the <c>gbv</c> defaults.</summary>
     public static EpidemicRules Default { get; } = new(new int[DiseaseRules.ExpertiseCount + 1]);
@@ -409,8 +430,8 @@ public static class Epidemics
     /// <summary>
     /// When a patient comes: with a disease whose <c>ContRate</c> is set, they are contagious one time in
     /// <c>ContRate</c>, with a strength from 1 to <c>HowContagious</c>. Until <c>ReduceContMonths</c> months have passed
-    /// and more than <c>ReduceContPeepCount</c> patients came, the divisor is multiplied by <c>ReduceContRate</c> percent
-    /// (at 0 nobody is contagious). Not emergency patients nor special diseases, not during a cover-up, and not while
+    /// and more than <c>ReduceContPeepCount</c> patients came (thresholds of 0 count as passed), the divisor is multiplied by
+    /// <c>ReduceContRate</c> percent (at 0 nobody is contagious). Not emergency patients nor special diseases, not during a cover-up, and not while
     /// epidemics are off.
     /// </summary>
     internal static void DetermineIfContagious(Simulation simulation, Hospital hospital, Humanoid humanoid, PatientBehaviour patient)
@@ -423,7 +444,7 @@ public static class Epidemics
 
         var rules = simulation.Rules.Epidemics;
         var rate = rules.ContagiousRate(disease.ExpertiseId);
-        if (simulation.Date.MonthOfGame <= rules.ReduceContagiousMonths || hospital.Visitors <= rules.ReduceContagiousPeopleCount)
+        if (rules.IsReducedPeriod(simulation.Date.MonthOfGame, hospital.Visitors))
         {
             rate = rate * rules.ReduceContagiousDivisorPercent / 100;
         }

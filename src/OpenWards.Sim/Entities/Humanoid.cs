@@ -634,7 +634,9 @@ public sealed class Humanoid : Entity
     /// Goes through a room door as CorsixTH's <c>navigateDoor</c> (<c>humanoid_actions/walk.lua</c>): the humanoid stands on
     /// the door's tile while its door animation plays, the door itself hidden (<c>Door:setUser</c>), and comes out on
     /// <paramref name="exit"/> when the animation ends. Going north or west uses the leaving animation, east or south the
-    /// entering one, mirrored for west and south.
+    /// entering one, mirrored for west and south. A member of staff goes through at the pace of their frames
+    /// (<see cref="FrameTicks"/>): the logic specification leaves the door's pace open, and this is the assumption until it
+    /// is checked.
     /// </summary>
     private void CrossDoor(Simulation simulation, RoomDoor door, DoorAnimations animations, Direction direction, TilePosition exit)
     {
@@ -647,9 +649,9 @@ public sealed class Humanoid : Entity
             IsStepping = false;
             StepProgress = 0;
             _doorExit = exit;
-            _doorTicks = swing.Length;
+            _doorTicks = AnimationTicks(swing);
             SetActionAnimation(simulation, swing, direction is Direction.West or Direction.South, door.Tile, door.Tile, 0);
-            door.StartSwing(simulation.Tick, inwards, swing.Length);
+            door.StartSwing(simulation.Tick, inwards, _doorTicks);
             return;
         }
 
@@ -658,7 +660,7 @@ public sealed class Humanoid : Entity
         IsStepping = false;
         StepProgress = 0;
         _doorExit = exit;
-        _doorTicks = animation.Length;
+        _doorTicks = AnimationTicks(animation);
         SetActionAnimation(simulation, animation, direction is Direction.West or Direction.South, door.Tile, door.Tile, door.Id);
     }
 
