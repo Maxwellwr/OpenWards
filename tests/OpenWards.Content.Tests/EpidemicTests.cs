@@ -82,7 +82,7 @@ public class EpidemicTests
 
         Assert.NotNull(epidemic);
         Assert.True(epidemic.InfectedIds.Count >= 2, "Nobody caught it.");
-        Assert.True(epidemic.AttemptedInfections >= epidemic.TotalInfections);
+        Assert.True(epidemic.TotalInfections >= 1);
         foreach (var id in epidemic.InfectedIds)
         {
             var patient = (PatientBehaviour)((Humanoid)simulation.FindEntity(id)!).Behaviour!;

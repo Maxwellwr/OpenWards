@@ -687,18 +687,12 @@ internal sealed class FaxWindow : UiWindow
         yield return new Advice(44, 176, "The health inspector has reported your hospital.").Text(host.Texts);
         yield return report.Outcome switch
         {
-            EpidemicOutcome.Fined when ReputationLost(host, report) => new Advice(44, 181, "You have been fined %d and your reputation has suffered.").Text(host.Texts, report.Amount),
+            EpidemicOutcome.FinedWithReputation => new Advice(44, 181, "You have been fined %d and your reputation has suffered.").Text(host.Texts, report.Amount),
             EpidemicOutcome.Evacuated => new Advice(44, 182, "Your hospital is being evacuated.").Text(host.Texts),
             _ => new Advice(44, 180, "You have been fined %d.").Text(host.Texts, report.Amount),
         };
     }
 
-    /// <summary>
-    /// Whether <c>reputation_loss_minimum</c> or more were still infected, as the fine (a fixed sum each,
-    /// <c>calculateInfectedFine</c>) shows.
-    /// </summary>
-    private static bool ReputationLost(IWindowHost host, EpidemicReport report) =>
-        host.Simulation.Rules.Epidemics is { Fine: > 0 } rules && report.Amount / rules.Fine >= rules.ReputationLossMinimum;
     /// <summary><c>fax.vip_visit_result.remarks.free_build</c> (english.lua).</summary>
     private static readonly string[] FreeBuildRemarks =
     [

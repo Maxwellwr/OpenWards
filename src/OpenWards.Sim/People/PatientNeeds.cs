@@ -133,7 +133,8 @@ public static class PatientNeeds
             SeeLitter(simulation, world, humanoid, patient);
         }
 
-        // 4. Passing on an epidemic's disease stays with the epidemics.
+        // 4. A contagious patient may pass the disease on.
+        Disasters.Epidemics.Spread(simulation, humanoid, patient);
 
         var leaveBefore = patient.LeaveCount;
 

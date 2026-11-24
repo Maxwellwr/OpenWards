@@ -603,6 +603,15 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     /// <summary>Whether the player picked the patient to be vaccinated during a cover-up (<c>marked_for_vaccination</c>).</summary>
     public bool IsMarkedForVaccination { get; internal set; }
 
+    /// <summary>
+    /// How contagious an infected patient is, from 1 to <c>gbv.HowContagious</c>; only above 1 do they pass the disease on,
+    /// and their victims get half of it. 0 for a patient never infected.
+    /// </summary>
+    public int ContagiousStrength { get; internal set; }
+
+    /// <summary>Whether the patient was infected and not vaccinated when the epidemic was covered up, so the inspector counts them.</summary>
+    public bool IsCoverUpMarked { get; internal set; }
+
     /// <summary>The nurse coming to vaccinate the patient, or 0 (<c>reserved_for</c>).</summary>
     public int VaccinatingNurseId { get; internal set; }
 
@@ -3535,6 +3544,8 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         writer.WriteBool(HasPassedReception);
         writer.WriteBool(IsMarkedForVaccination);
         writer.WriteInt32(VaccinatingNurseId);
+        writer.WriteInt32(ContagiousStrength);
+        writer.WriteBool(IsCoverUpMarked);
         writer.WriteByte((byte)_question);
         writer.WriteInt32(LitterCount);
         writer.WriteInt32(DrinkStock);
@@ -3648,6 +3659,16 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         patient.HasPassedReception = reader.ReadBool();
         patient.IsMarkedForVaccination = reader.ReadBool();
         patient.VaccinatingNurseId = reader.ReadInt32();
+        if (reader.Version is 0 or >= Disasters.Epidemics.SaveVersion)
+        {
+            patient.ContagiousStrength = Math.Max(0, reader.ReadInt32());
+            patient.IsCoverUpMarked = reader.ReadBool();
+        }
+        else if (patient.IsInfected)
+        {
+            // Before strengths, every infected patient passed the disease on.
+            patient.ContagiousStrength = 2;
+        }
         var question = reader.ReadByte();
         patient._question = question <= (byte)PatientQuestion.NoTreatmentRoom ? (PatientQuestion)question : throw new InvalidDataException($"Unknown patient question {question}.");
         if (needs)

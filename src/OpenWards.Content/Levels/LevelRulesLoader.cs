@@ -329,7 +329,8 @@ public static partial class LevelRulesLoader
     /// <summary>
     /// The epidemic settings: <c>expertise[n].ContRate</c> and <c>gbv.ContagiousSpreadFactor</c>, <c>ReduceContMonths</c>,
     /// <c>ReduceContPeepCount</c>, <c>VacCost</c>, <c>EpidemicFine</c>, <c>EpidemicCompLo</c>, <c>EpidemicCompHi</c>,
-    /// <c>EpidemicRepLossMinimum</c>, <c>EpidemicEvacMinimum</c> and <c>EpidemicConcurrentLimit</c>, on top of
+    /// <c>EpidemicRepLossMinimum</c>, <c>EpidemicEvacMinimum</c>, <c>EpidemicConcurrentLimit</c>, <c>HowContagious</c> and
+    /// <c>ReduceContRate</c>, on top of
     /// CorsixTH's base_config.lua.
     /// </summary>
     public static EpidemicRules EpidemicsFromConfig(LevelConfig config)
@@ -352,7 +353,9 @@ public static partial class LevelRulesLoader
             config.GetInt("gbv.EpidemicCompHi") ?? defaults.CompensationHigh,
             config.GetInt("gbv.EpidemicRepLossMinimum") ?? defaults.ReputationLossMinimum,
             config.GetInt("gbv.EpidemicEvacMinimum") ?? defaults.EvacuationMinimum,
-            config.GetInt("gbv.EpidemicConcurrentLimit") ?? defaults.ConcurrentLimit);
+            config.GetInt("gbv.EpidemicConcurrentLimit") ?? defaults.ConcurrentLimit,
+            config.GetInt("gbv.HowContagious") ?? defaults.HowContagious,
+            config.GetInt("gbv.ReduceContRate") ?? defaults.ReduceContagiousDivisorPercent);
     }
 
     /// <summary>

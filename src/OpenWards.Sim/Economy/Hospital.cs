@@ -1979,7 +1979,7 @@ public sealed class Hospital
                 var ended = reader.ReadByte();
                 hospital.Epidemics.Report = new Disasters.EpidemicReport(
                     diseaseId,
-                    ended <= (byte)Disasters.EpidemicOutcome.Evacuated ? (Disasters.EpidemicOutcome)ended : throw new InvalidDataException($"Unknown epidemic outcome {ended}."),
+                    ended <= (byte)Disasters.EpidemicOutcome.FinedWithReputation ? (Disasters.EpidemicOutcome)ended : throw new InvalidDataException($"Unknown epidemic outcome {ended}."),
                     reader.ReadInt32(),
                     reader.ReadInt64());
             }
