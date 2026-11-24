@@ -150,6 +150,34 @@ internal static class Tiredness
         }
     }
 
+    /// <summary>The frames of the resting animation between two rests standing or on the sofa.</summary>
+    internal const int RestFrames = 8;
+
+    /// <summary>
+    /// The ticks between two rests standing or on the sofa: eight frames of the one-frame resting animation, each lasting
+    /// <see cref="FrameTicks"/>.
+    /// </summary>
+    internal static int RestPeriod(Simulation simulation, Humanoid humanoid) => RestFrames * FrameTicks(simulation, humanoid);
+
+    /// <summary>
+    /// How long a frame of a member of staff's animation lasts (the maintainer's description of the original): two ticks
+    /// up to <see cref="StaffRules.DoctorThreshold"/> skill; one tick below <see cref="StaffRules.ConsultantThreshold"/>
+    /// unless very tired, and from it unless tired enough to crack up; always two in the training room.
+    /// </summary>
+    internal static int FrameTicks(Simulation simulation, Humanoid humanoid)
+    {
+        var staff = simulation.Rules.Staff;
+        var tiredness = simulation.Rules.Tiredness;
+        var skill = humanoid.Profile?.Skill ?? 0;
+        var fatigue = humanoid.Fatigue * 1000;
+        if (skill <= staff.DoctorThreshold || RoomOf(simulation, humanoid) is { RoomType: TrainingRoomType })
+        {
+            return 2;
+        }
+
+        return fatigue > (skill < staff.ConsultantThreshold ? tiredness.VeryTired : tiredness.CrackUpTired) ? 2 : 1;
+    }
+
     /// <summary>
     /// Standing idle, with nowhere to work: a doctor or nurse without a room (and a nurse not off to vaccinate), a handyman
     /// without a job.

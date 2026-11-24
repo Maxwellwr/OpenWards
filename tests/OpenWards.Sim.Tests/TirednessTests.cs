@@ -157,6 +157,29 @@ public class TirednessTests
         Assert.Equal(recovered, RestRules.Default.Recovery(value, fatigue));
 
     [Fact]
+    public void RestStandingOrOnTheSofaComesEveryEightFramesOfOneOrTwoTicksBySkillAndFatigue()
+    {
+        var simulation = NewSimulation(new TirednessRules(600, 700, 800, 300));
+        var doctor = Hire(simulation, StaffClass.Doctor, new TilePosition(6, 6));
+        var staff = simulation.Rules.Staff;
+        int Period(int skill, decimal fatigue)
+        {
+            typeof(StaffProfile).GetProperty(nameof(StaffProfile.Skill))!.SetValue(doctor.Profile, skill);
+            doctor.Fatigue = fatigue;
+            return Tiredness.RestPeriod(simulation, doctor);
+        }
+
+        // Up to DoctorThreshold: always 16.
+        Assert.Equal((16, 16, 16), (Period(staff.DoctorThreshold, 0.5m), Period(staff.DoctorThreshold, 0.75m), Period(staff.DoctorThreshold, 0.9m)));
+
+        // Between the thresholds: 8 until very tired.
+        Assert.Equal((8, 8, 16, 16), (Period(staff.DoctorThreshold + 1, 0.7m), Period(staff.ConsultantThreshold - 1, 0.5m), Period(staff.DoctorThreshold + 1, 0.701m), Period(staff.DoctorThreshold + 1, 0.9m)));
+
+        // Consultants: 8 until tired enough to crack up.
+        Assert.Equal((8, 8, 16), (Period(staff.ConsultantThreshold, 0.75m), Period(staff.ConsultantThreshold, 0.8m), Period(staff.ConsultantThreshold, 0.801m)));
+    }
+
+    [Fact]
     public void TheLevelSetsWhenStaffCountAsTired()
     {
         var simulation = NewSimulation(new TirednessRules(300, 400, 500));

@@ -19,10 +19,10 @@ public enum RestingPhase : byte
     /// <summary>Walking to the sofa, pool table or video game picked.</summary>
     WalkingToObject,
 
-    /// <summary>Using it: less tired after every cycle on the sofa, after every game of pool or the video game.</summary>
+    /// <summary>Using it: less tired every few ticks on the sofa, after every game of pool or the video game.</summary>
     UsingObject,
 
-    /// <summary>No free sofa: standing about, less tired after every cycle, then looking again.</summary>
+    /// <summary>No free sofa: standing about, less tired every few ticks, looking again after each rest.</summary>
     Meandering,
 
     /// <summary>Rested: out of the staff room, back to work.</summary>
@@ -31,8 +31,9 @@ public enum RestingPhase : byte
 
 /// <summary>
 /// A member of staff tired past the hospital's <c>goto_staffroom</c> policy, who has left their work for the nearest staff
-/// room. Every rest there takes fatigue off (<see cref="RestRules.Recovery"/>) and brings a point of mood: a cycle of
-/// standing (<see cref="RestRules.RestStanding"/>) or on the sofa (<see cref="RestRules.RestSofa"/>), a whole game of the
+/// room. Every rest there takes fatigue off (<see cref="RestRules.Recovery"/>) and brings a point of mood: every
+/// <see cref="Tiredness.RestPeriod"/> ticks standing (<see cref="RestRules.RestStanding"/>) or on the sofa
+/// (<see cref="RestRules.RestSofa"/>), a whole game of the
 /// video game (<see cref="RestRules.RestGame"/>, doctors and nurses) or of pool (<see cref="RestRules.RestSnooker"/>,
 /// doctors and handymen). After every rest they choose again: one time in ten pool, one time in ten the video game, if
 /// there is a free one, else a sofa, else standing. Fully rested, their discontent halves and they go back to work (their
@@ -83,6 +84,9 @@ public sealed class RestingBehaviour : HumanoidBehaviour
 
     private int _meanders;
 
+    /// <summary>Ticks since the last rest standing or on the sofa (<see cref="Tiredness.RestPeriod"/>).</summary>
+    private int _restTicks;
+
     internal override void Update(Simulation simulation, Humanoid humanoid)
     {
         if (simulation.FindEntity(RoomId) is not Room { IsActive: true } room || simulation.FindEntity(room.DoorId) is not RoomDoor door)
@@ -129,8 +133,10 @@ public sealed class RestingBehaviour : HumanoidBehaviour
                 UseStep(simulation, humanoid, room, door);
                 break;
             case RestingPhase.Meandering:
-                Meander.Update(simulation, humanoid, loop: () =>
+                Meander.Update(simulation, humanoid, loop: () => false);
+                if (++_restTicks >= Tiredness.RestPeriod(simulation, humanoid))
                 {
+                    _restTicks = 0;
                     if (Rest(simulation, humanoid, simulation.Rules.Tiredness.Rest.RestStanding))
                     {
                         Leave(simulation, humanoid, room, door);
@@ -139,9 +145,8 @@ public sealed class RestingBehaviour : HumanoidBehaviour
                     {
                         PickNext(simulation, humanoid, room);
                     }
+                }
 
-                    return true;
-                });
                 break;
             case RestingPhase.Leaving:
                 if (room.Area.Contains(humanoid.Tile))
@@ -174,32 +179,21 @@ public sealed class RestingBehaviour : HumanoidBehaviour
         var target = simulation.FindEntity(TargetId) as RoomObject;
         switch (Use?.Update(simulation, humanoid) ?? ObjectUseEvent.Done)
         {
-            case ObjectUseEvent.Loop when _nextTargetId == 0 && Phase == RestingPhase.UsingObject:
+            case ObjectUseEvent.Loop when _nextTargetId == 0 && Phase == RestingPhase.UsingObject && target?.ObjectType is PoolTable or VideoGame:
+                if (--_useTime > 0)
+                {
+                    break;
+                }
+
                 var rules = simulation.Rules.Tiredness.Rest;
-                var type = target?.ObjectType ?? Sofa;
-                if (type != Sofa && --_useTime > 0)
+                AfterRest(simulation, humanoid, room, target, target.ObjectType == PoolTable ? rules.RestSnooker : rules.RestGame);
+                break;
+            case ObjectUseEvent.None or ObjectUseEvent.Loop when _nextTargetId == 0 && Phase == RestingPhase.UsingObject && Use is not null:
+                // On the sofa: a rest every eight frames of the sitting animation.
+                if (++_restTicks >= Tiredness.RestPeriod(simulation, humanoid))
                 {
-                    break;
-                }
-
-                if (Rest(simulation, humanoid, type switch { PoolTable => rules.RestSnooker, VideoGame => rules.RestGame, _ => rules.RestSofa }))
-                {
-                    // Rested: get up, then leave.
-                    Phase = RestingPhase.Leaving;
-                    Use!.Interrupt();
-                    break;
-                }
-
-                var next = Decide(simulation, humanoid, room);
-                if (next is not null && next.Id == target?.Id)
-                {
-                    _useTime = UseTime(simulation, type);
-                }
-                else
-                {
-                    // Another object, or standing about when no sofa is free.
-                    _nextTargetId = next?.Id ?? -1;
-                    Use!.Interrupt();
+                    _restTicks = 0;
+                    AfterRest(simulation, humanoid, room, target, simulation.Rules.Tiredness.Rest.RestSofa);
                 }
 
                 break;
@@ -224,6 +218,32 @@ public sealed class RestingBehaviour : HumanoidBehaviour
 
                 _nextTargetId = 0;
                 break;
+        }
+    }
+
+    /// <summary>
+    /// After a rest on <paramref name="target"/>: rested, they get up to leave; otherwise they choose again, and go on if
+    /// it is the same object.
+    /// </summary>
+    private void AfterRest(Simulation simulation, Humanoid humanoid, Room room, RoomObject? target, int value)
+    {
+        if (Rest(simulation, humanoid, value))
+        {
+            Phase = RestingPhase.Leaving;
+            Use!.Interrupt();
+            return;
+        }
+
+        var next = Decide(simulation, humanoid, room);
+        if (next is not null && next.Id == target?.Id)
+        {
+            _useTime = UseTime(simulation, next.ObjectType);
+        }
+        else
+        {
+            // Another object, or standing about when no sofa is free.
+            _nextTargetId = next?.Id ?? -1;
+            Use!.Interrupt();
         }
     }
 
@@ -266,19 +286,21 @@ public sealed class RestingBehaviour : HumanoidBehaviour
         Stand();
     }
 
-    /// <summary>No free sofa: standing about (<c>MeanderAction</c>), a rest after every cycle.</summary>
+    /// <summary>No free sofa: standing about (<c>MeanderAction</c>).</summary>
     private void Stand()
     {
         Use = null;
         TargetId = 0;
         Phase = RestingPhase.Meandering;
         _meanders = 1;
+        _restTicks = 0;
         Meander.Reset();
     }
 
     private void GoTo(Simulation simulation, Humanoid humanoid, RoomObject placed)
     {
         TargetId = placed.Id;
+        _restTicks = 0;
         Phase = RestingPhase.WalkingToObject;
         humanoid.WalkTo(simulation, RoomVisits.UseTile(simulation, placed));
     }
@@ -357,6 +379,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
         writer.WriteInt32(_nextTargetId);
         writer.WriteInt32(_meanders);
         writer.WriteInt32(ReturnRoomId);
+        writer.WriteInt32(_restTicks);
     }
 
     internal static RestingBehaviour ReadState(SimReader reader)
@@ -373,6 +396,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
         resting._nextTargetId = reader.ReadInt32();
         resting._meanders = reader.ReadInt32();
         resting.ReturnRoomId = reader.Version is 0 or >= 74 ? reader.ReadInt32() : 0;
+        resting._restTicks = reader.Version is 0 or >= 113 ? reader.ReadInt32() : 0;
         return resting;
     }
 }
