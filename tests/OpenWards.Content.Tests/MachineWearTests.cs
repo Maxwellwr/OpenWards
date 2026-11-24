@@ -109,7 +109,7 @@ public class MachineWearTests
     }
 
     [Fact]
-    public void AWornOutMachineWithoutAFireExtinguisherExplodesAndWrecksTheRoom()
+    public void AWornOutMachineExplodesAndWrecksTheRoom()
     {
         var simulation = NewStaffedHospital(InflationTests.Rules());
         var room = InflationTests.BuildInflation(simulation);
@@ -130,7 +130,8 @@ public class MachineWearTests
         Assert.True(room.IsCrashed, $"The inflator was used {inflator.Machine!.TotalUsage} times and did not explode.");
         Assert.True(smoked);
         Assert.False(room.IsActive);
-        Assert.Equal(inflator.Machine!.Strength, inflator.Machine.TimesUsed);
+        // From full wear on, surely by one and a half times its strength.
+        Assert.InRange(inflator.Machine!.TimesUsed, inflator.Machine.Strength, 3 * inflator.Machine.Strength / 2);
 
         // Room:crashRoom: the patient and the doctor are dead, soot covers the floor, the hospital loses the room's value.
         simulation.Step();

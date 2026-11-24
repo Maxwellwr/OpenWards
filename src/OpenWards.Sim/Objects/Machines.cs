@@ -329,12 +329,10 @@ internal static class Machines
         {
             var hospital = simulation.Hospitals[owner];
             hospital.Explosions++;
-            if (simulation.Content.FindRoom(room.RoomType) is { } definition)
-            {
-                hospital.ChangeValue(-RoomPurchases.BuildCost(simulation, hospital, definition));
-            }
-
             hospital.ChangeReputationPercent(ExplosionReputationPercent);
         }
+
+        // The wrecked room and what stands in it no longer count in the hospital's value.
+        HospitalValue.Refresh(simulation);
     }
 }

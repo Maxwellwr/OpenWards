@@ -121,7 +121,8 @@ public class BenchTests
                 satAgain = true;
             }
 
-            if (patient.Phase is not (PatientPhase.InReceptionQueue or PatientPhase.InDoorQueue))
+            // Called away from the queue, the patient finishes a can begun first.
+            if (patient.Phase is not (PatientPhase.InReceptionQueue or PatientPhase.InDoorQueue) && patient.DrinksMachineId == 0)
             {
                 break;
             }

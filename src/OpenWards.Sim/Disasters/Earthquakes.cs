@@ -297,8 +297,8 @@ public sealed class Earthquakes
             WarningTimer = reader.ReadInt32(),
         };
 
-        // Version 109 draws the days to the main quake; before, CorsixTH's 600 hours.
-        earthquakes.WarningHours = reader.Version is 0 or >= 109 ? reader.ReadInt32() : 600;
+        // Version 110 draws the days to the main quake; before, CorsixTH's 600 hours.
+        earthquakes.WarningHours = reader.Version is 0 or >= 110 ? reader.ReadInt32() : 600;
         earthquakes.PlannedSoFar = reader.ReadInt32();
         var shake = reader.ReadByte();
         earthquakes.Shake = shake <= (byte)EarthquakeShake.Large ? (EarthquakeShake)shake : throw new InvalidDataException($"Unknown earthquake shake {shake}.");
