@@ -2897,9 +2897,9 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
 
         room.PatientId = 0;
         var hospital = simulation.Hospitals[humanoid.HospitalPlayer];
-        if (Disease is { TreatmentRooms.Count: > 0 } disease)
+        if (Disease is { } disease)
         {
-            hospital.Research.AddPointsForAutopsy(simulation, hospital, disease.TreatmentRooms[^1]);
+            hospital.Research.AddPointsForAutopsy(simulation, hospital, disease);
         }
 
         var happiness = EndConditions.AverageHappiness(simulation, hospital, staff: true, minCount: 0);

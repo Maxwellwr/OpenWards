@@ -409,7 +409,7 @@ public static class PatientCare
         {
             entry.Discovered = true;
             hospital.AdviseDiscoverDisease(simulation, disease.Id);
-            hospital.Research.OnDiseaseDiscovered(simulation, hospital, disease);
+            hospital.Research.OnDiseaseDiscovered(simulation, hospital);
         }
     }
 

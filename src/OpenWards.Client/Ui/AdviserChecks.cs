@@ -1093,7 +1093,7 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
                     .Where(h => h.Behaviour is PatientBehaviour { Phase: PatientPhase.WalkingToReception or PatientPhase.InReceptionQueue } && h.HospitalPlayer == player)
                     .Select(h => h.Id)
                     .ToHashSet(),
-                hospital.Research.Objects.ToDictionary(pair => pair.Key, pair => pair.Value.StrengthImprovements + pair.Value.CostImprovements, StringComparer.Ordinal),
+                hospital.Research.Objects.ToDictionary(pair => pair.Key, pair => pair.Value.Improvements, StringComparer.Ordinal),
                 hospital.Casebook.ToDictionary(pair => pair.Key, pair => (pair.Value.CureEffectiveness, pair.Value.DrugCost), StringComparer.Ordinal),
                 hospital.PriceAdvices,
                 hospital.NotPaying,

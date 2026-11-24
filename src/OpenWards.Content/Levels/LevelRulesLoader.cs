@@ -282,9 +282,10 @@ public static partial class LevelRulesLoader
 
     /// <summary>
     /// The research settings: <c>objects[n]</c> of the objects research knows about (those the level names), each
-    /// <c>expertise[n].RschReqd</c>, and <c>gbv.ResearchPointsDivisor</c>, <c>RschImproveCostPercent</c>,
-    /// <c>RschImproveIncrementPercent</c>, <c>DrugImproveRate</c>, <c>MinDrugCost</c>, <c>MaxObjectStrength</c>,
-    /// <c>ResearchIncrement</c> and <c>AutopsyRschPercent</c>, by default base_config.lua's.
+    /// <c>expertise[n].RschReqd</c>, and <c>gbv.RschImproveCostPercent</c>, <c>RschImproveIncrementPercent</c>,
+    /// <c>DrugImproveRate</c>, <c>MaxObjectStrength</c>, <c>ResearchIncrement</c> and <c>AutopsyRschPercent</c>, by
+    /// default base_config.lua's. Research as the original game has it uses no <c>ResearchPointsDivisor</c>,
+    /// <c>MinDrugCost</c> or <c>AutopsyRepHitPercent</c>.
     /// </summary>
     public static Sim.Research.ResearchRules ResearchFromConfig(LevelConfig config)
     {
@@ -315,15 +316,12 @@ public static partial class LevelRulesLoader
         return new Sim.Research.ResearchRules(
             objects,
             required,
-            config.GetInt("gbv.ResearchPointsDivisor") ?? Sim.Research.ResearchRules.DefaultPointsDivisor,
             config.GetInt("gbv.RschImproveCostPercent") ?? Sim.Research.ResearchRules.DefaultImproveCostPercent,
             config.GetInt("gbv.RschImproveIncrementPercent") ?? Sim.Research.ResearchRules.DefaultImproveIncrementPercent,
             config.GetInt("gbv.DrugImproveRate") ?? Sim.Research.ResearchRules.DefaultDrugImproveRate,
-            config.GetInt("gbv.MinDrugCost") ?? Sim.Research.ResearchRules.DefaultMinDrugCost,
             config.GetInt("gbv.MaxObjectStrength") ?? Sim.Research.ResearchRules.DefaultMaxObjectStrength,
             config.GetInt("gbv.ResearchIncrement") ?? Sim.Research.ResearchRules.DefaultResearchIncrement,
-            config.GetInt("gbv.AutopsyRschPercent") ?? Sim.Research.ResearchRules.DefaultAutopsyPercent,
-            config.GetInt("gbv.AutopsyRepHitPercent") ?? Sim.Research.ResearchRules.DefaultAutopsyReputationHitPercent);
+            config.GetInt("gbv.AutopsyRschPercent") ?? Sim.Research.ResearchRules.DefaultAutopsyPercent);
     }
 
     /// <summary>

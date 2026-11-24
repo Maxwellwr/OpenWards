@@ -123,7 +123,7 @@ internal sealed class ResearchScreen
                 }
             }
 
-            if (Progress(simulation, research, area.Current) is { } progress)
+            if (Progress(simulation, simulation.Hospitals[host.Player], area.Current) is { } progress)
             {
                 // The progress bar: sprite 3 every 10 pixels over 290 for the whole.
                 var length = 290 * progress;
@@ -203,7 +203,7 @@ internal sealed class ResearchScreen
             if (new Rectangle(165, 60 + ((i - 1) * 41), 315, 41).Contains(local))
             {
                 var current = research.Area(categories[i - 1]).Current;
-                return Progress(simulation, research, current) is { } progress
+                return Progress(simulation, simulation.Hospitals[host.Player], current) is { } progress
                     ? UiText.Format("openwards.research.progress", "Progress towards the next discovery: %1% %%", (int)(progress * 100))
                     : UiText.Get("tooltip.research_policy.no_research", "Nothing being researched here");
             }
@@ -248,15 +248,16 @@ internal sealed class ResearchScreen
     }
 
     /// <summary>How far the work towards a target has got, from 0 to 1, or null when there is no real target.</summary>
-    private static float? Progress(Simulation simulation, ResearchDepartment research, ResearchTarget target)
+    private static float? Progress(Simulation simulation, OpenWards.Sim.Economy.Hospital hospital, ResearchTarget target)
     {
+        var research = hospital.Research;
         decimal? points = target.Kind switch
         {
             ResearchTargetKind.Object => research.Objects.TryGetValue(target.Id, out var obj) ? obj.Points : null,
             ResearchTargetKind.Drug => research.Drugs.TryGetValue(target.Id, out var drug) ? drug : null,
             _ => null,
         };
-        return points is { } done && research.Required(simulation, target) is { } required && required > 0
+        return points is { } done && research.Required(simulation, hospital, target) is { } required && required > 0
             ? (float)Math.Min(1m, done / required)
             : null;
     }

@@ -786,18 +786,6 @@ public sealed class Hospital
     /// <summary>The hospital's research (CorsixTH's <c>research</c>).</summary>
     public Research.ResearchDepartment Research { get; internal set; } = new();
 
-    /// <summary>
-    /// <c>Hospital:onEndMonth</c>'s research costs: what the month's research cost is paid, rounded.
-    /// </summary>
-    internal void PayResearch(long tick)
-    {
-        var cost = Research.TakeAccumulatedCost();
-        if (cost > 0)
-        {
-            Spend(tick, cost, TransactionKind.Research, string.Empty);
-        }
-    }
-
     /// <summary>Casebook entries made so far, by disease id.</summary>
     public IReadOnlyDictionary<string, DiseaseCase> Casebook => _casebook;
 

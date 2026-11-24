@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 108;
+    private const int FormatVersion = 109;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -97,7 +97,7 @@ public sealed class Simulation
                 }
             }
 
-            _hospitals[player].Research = Research.ResearchDepartment.Create(Rules, _hospitals[player]);
+            _hospitals[player].Research = Research.ResearchDepartment.Create(this, _hospitals[player]);
         }
 
         // World:World adds the computer opponents after the players' hospitals.
@@ -350,22 +350,6 @@ public sealed class Simulation
         }
 
         Temperatures.Update(Map, TileTemperatures.OutsideTemperature(month), _radiatorTemperatures);
-    }
-
-    /// <summary>The player's staff at work in a research room (<c>researchCost</c>'s <c>staff_member_set</c>).</summary>
-    private int Researchers(int player)
-    {
-        var count = 0;
-        foreach (var entity in _entities)
-        {
-            if (entity is Humanoid { Behaviour: People.IRoomStaff { RoomId: > 0 } staff, Employer: var employer } && employer == player
-                && FindEntity(staff.RoomId) is Room { RoomType: "research" })
-            {
-                count++;
-            }
-        }
-
-        return count;
     }
 
     /// <summary>Creates an entity with the next free id.</summary>
@@ -863,8 +847,8 @@ public sealed class Simulation
         {
             hospital.OnEndDay();
 
-            // Hospital:onEndDay: then the day's research cost, by the researchers at work.
-            hospital.Research.AccumulateCost(Researchers(hospital.Player));
+            // The day's research: the areas take their share of the pool.
+            hospital.Research.OnEndDay(this, hospital);
             hospital.OnEndDayHeating(Random, radiators[hospital.Player], handymen[hospital.Player], date.DaysInMonth, Rules.Difficulty);
 
             // PlayerHospital's end of the day: rat holes, then rats.
@@ -878,14 +862,6 @@ public sealed class Simulation
             {
                 (humanoid.Behaviour as VipBehaviour)?.OnEndDay(this, humanoid);
                 Feelings.OnEndDay(this, humanoid);
-
-                // Doctor:tickDay: a researcher in the research department researches, 1,550 points and 1,000 more for full skill.
-                if (humanoid is { Behaviour: DoctorBehaviour { RoomId: > 0 } doctor, Profile: { IsResearcher: true } profile, Employer: var employer, IsFired: false }
-                    && employer >= 0 && employer < _hospitals.Length
-                    && FindEntity(doctor.RoomId) is Room { RoomType: RoomVisits.ResearchRoom } research && research.Area.Contains(humanoid.Tile))
-                {
-                    _hospitals[employer].Research.AddPoints(this, _hospitals[employer], 1550 + (1000 * profile.Skill / StaffProfile.MaxSkill));
-                }
             }
             else if (entity is RoomObject { Plant: { } plant } placed)
             {
@@ -933,7 +909,6 @@ public sealed class Simulation
             hospital.PayWages(Hours, wages[hospital.Player]);
             hospital.PayHeating(Hours);
             hospital.PayInterest(Hours);
-            hospital.PayResearch(Hours);
             hospital.PayInsurance(Hours);
             hospital.UpdatePriceLevel(Rules.Diseases);
 

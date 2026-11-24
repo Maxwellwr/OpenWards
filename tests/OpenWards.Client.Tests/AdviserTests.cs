@@ -145,7 +145,7 @@ public class AdviserTests
     {
         var host = new WindowTestHost();
         var research = host.Simulation.Hospitals[0].Research;
-        research.Area(ResearchCategory.Drugs).Current = ResearchTarget.Drain;
+        research.Area(ResearchCategory.Drugs).Current = ResearchTarget.Drug("uncommon_cold");
         var checks = new AdviserChecks(host.Adviser, new Random(1));
         checks.Observe(host.Simulation, 0, null, 0);
 
