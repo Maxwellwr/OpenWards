@@ -78,8 +78,7 @@ internal static class Training
         var skillsFactor = 1m / (1 + taught.Count);
         var performance = Performance(simulation, student.AttentionToDetail / (decimal)StaffProfile.MaxSkill, consultant.Skill / (decimal)StaffProfile.MaxSkill, students);
 
-        var wasConsultant = student.IsConsultant;
-        student.TrainSkill(Math.Max(training.Rate * skillsFactor * performance / 10000, MinimumLearning), rules);
+        student.TrainSkill(Math.Max(training.Rate * skillsFactor * performance / 10000, MinimumLearning));
 
         foreach (var specialism in taught)
         {
@@ -93,13 +92,6 @@ internal static class Training
             student.TrainSpecialism(specialism, Math.Max(amount, MinimumLearning));
         }
 
-        if (!wasConsultant && student.IsConsultant)
-        {
-            // updateSkill: a new consultant no longer learns; they leave the training room.
-            StaffEmployment.Detach(simulation, humanoid);
-            humanoid.Behaviour = StaffHiring.NewBehaviour(student.Class);
-            RoomVisits.SettleIdleStaff(simulation, humanoid);
-        }
 
     }
 
@@ -126,5 +118,16 @@ internal static class Training
         var impact = (Clamp(attention) + Clamp(consultantSkill * consultantSkill) + VipVisits.TriangularRandom(simulation.Random, 0.9m, 1m, 1.1m)) / 3;
         var classImpact = students >= 3 ? 2m / (students - 1) : 1;
         return impact * classImpact;
+    }
+
+    /// <summary>A doctor just made a consultant no longer learns: a student leaves the training room (<c>updateSkill</c>).</summary>
+    internal static void OnPromotedToConsultant(Simulation simulation, Humanoid humanoid)
+    {
+        if (humanoid.Behaviour is DoctorBehaviour doctor && simulation.FindEntity(doctor.RoomId) is Room { RoomType: RoomType } room && room.StaffId != humanoid.Id)
+        {
+            StaffEmployment.Detach(simulation, humanoid);
+            humanoid.Behaviour = StaffHiring.NewBehaviour(humanoid.Profile!.Class);
+            RoomVisits.SettleIdleStaff(simulation, humanoid);
+        }
     }
 }

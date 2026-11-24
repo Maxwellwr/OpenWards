@@ -5808,7 +5808,7 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
 
         var player = _session.Player;
         var asking = simulation.Entities.OfType<Humanoid>()
-            .Where(h => h is { Profile: not null, IsFired: false, RaiseRequest: > 0 } && h.Employer == player)
+            .Where(h => h is { Profile: not null, IsFired: false, HasRaiseRequest: true } && h.Employer == player)
             .ToList();
         _raisesAnswered.RemoveWhere(id => !asking.Any(h => h.Id == id));
         return asking

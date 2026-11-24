@@ -15,11 +15,12 @@ public class StaffRiseWindowTests
         var doctor = host.Hire(StaffClass.Doctor);
         var wage = doctor.Profile!.Wage;
         doctor.RaiseRequest = 40;
+        doctor.RaiseReason = RaiseReason.Underpaid;
         doctor.QuittingIn = 700;
         var window = new StaffRiseWindow(doctor.Id, 40, text: 0);
         host.Open(window);
 
-        Assert.Contains(host.Lines(window), line => line.Contains("a rise of 40", StringComparison.Ordinal));
+        Assert.Contains(host.Lines(window), line => line.Contains("and 40 more", StringComparison.Ordinal) && line.Contains("Asks for a rise of", StringComparison.Ordinal));
         Assert.True(window.MustPause);
         Assert.False(window.ClosesWithEsc);
         Assert.False(window.IsDone(host));
@@ -33,17 +34,35 @@ public class StaffRiseWindowTests
     }
 
     [Fact]
-    public void RefusingFiresThem()
+    public void RefusingOftenSeesThemGo()
     {
         var host = new WindowTestHost();
         var nurse = host.Hire(StaffClass.Nurse);
         nurse.RaiseRequest = 30;
+        nurse.RaiseReason = RaiseReason.Payment;
+        nurse.RaiseRequestCount = 1_000_000;
         nurse.QuittingIn = 700;
         var window = new StaffRiseWindow(nurse.Id, 30);
+        host.Open(window);
+        Assert.Contains(host.Lines(window), line => line.Contains("one-off payment", StringComparison.Ordinal));
 
-        host.Click(window, "Refuse (fires)");
+        host.Click(window, "Refuse");
         Assert.True(nurse.IsFired);
         Assert.True(window.IsDone(host));
+    }
+
+    [Fact]
+    public void SomeoneNothingKeepsSaysSo()
+    {
+        var host = new WindowTestHost();
+        var nurse = host.Hire(StaffClass.Nurse);
+        nurse.RaiseReason = RaiseReason.DefiniteQuit;
+        nurse.QuittingIn = 700;
+        var window = new StaffRiseWindow(nurse.Id, 0);
+        host.Open(window);
+
+        Assert.False(window.IsDone(host));
+        Assert.Contains(host.Lines(window), line => line.Contains("Will quit whatever the answer", StringComparison.Ordinal));
     }
 
     [Fact]

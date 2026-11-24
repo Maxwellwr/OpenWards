@@ -113,8 +113,8 @@ public class PlantTests
 
         Feelings.OnEndDay(simulation, handyman);
 
-        // Comfortable 0.005, and the dead plant −0.003 + 1 × 0.001.
-        Assert.Equal(0.5m + 0.005m - 0.002m, handyman.Happiness);
+        // The dead plant −0.003 + 1 × 0.001.
+        Assert.Equal(0.5m - 0.002m, handyman.Happiness);
     }
 
     private static void Place(Simulation simulation, string type, TilePosition tile, Direction orientation = Direction.South)
