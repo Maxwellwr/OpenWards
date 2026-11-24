@@ -877,11 +877,13 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
                 continue;
             }
 
-            if (machine.RemainingUses < 4 && before.RemainingUses >= 6)
+            // Worn 85 % the adviser warns, if it went there straight; worn past a third, or called from the machine window, a
+            // handyman is asked.
+            if (machine.IsNearlyWornOut && !before.NeedsRepair)
             {
                 urgent = true;
             }
-            else if ((machine.RemainingUses < 6 && before.RemainingUses >= 6) || (machine.IsRepairCalled && !before.IsRepairCalled))
+            else if ((machine.NeedsRepair && !before.NeedsRepair) || (machine.IsRepairCalled && !before.IsRepairCalled))
             {
                 damaged = true;
             }
@@ -1041,7 +1043,7 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
         IReadOnlySet<int> ActiveRooms,
         bool Littered,
         bool HasHandyman,
-        IReadOnlyDictionary<int, (int RemainingUses, bool IsRepairCalled)> Machines,
+        IReadOnlyDictionary<int, (bool NeedsRepair, bool IsNearlyWornOut, bool IsRepairCalled)> Machines,
         IReadOnlyList<int> ThirstyPlants,
         bool DidItOnFloor,
         int Faxes,
@@ -1078,7 +1080,7 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
                 staff.Any(s => s.Profile!.Class == StaffClass.Handyman),
                 simulation.Entities.OfType<RoomObject>()
                     .Where(o => o.Machine is not null && !o.IsDestroyed && IsInHospital(simulation.Map, player, o.Tile))
-                    .ToDictionary(o => o.Id, o => (o.Machine!.RemainingUses, o.Machine.IsRepairCalled)),
+                    .ToDictionary(o => o.Id, o => (o.Machine!.NeedsRepair, o.Machine.IsNearlyWornOut, o.Machine.IsRepairCalled)),
                 simulation.Entities.OfType<RoomObject>()
                     .Where(o => o.Plant is { State: > 1 } && IsInHospital(simulation.Map, player, o.Tile))
                     .Select(o => o.Id)

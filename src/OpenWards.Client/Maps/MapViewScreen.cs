@@ -2967,8 +2967,8 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
                 _objects.Draw(batch, placed.ObjectType, placed.Tile, placed.Orientation, simulation.Tick, tint, placed.HangingClothes, placed.Plant?.State, lit ? XRayViewerLit : null, placed.Id);
                 if (machine is not null)
                 {
-                    _objects.DrawSmoke(batch, machine.Smoke.Id, placed.Tile, placed.Orientation, placed.Machine!.RemainingUses, simulation.Tick);
-                    if (placed.Machine.IsRepairCalled)
+                    _objects.DrawSmoke(batch, machine.Smoke.Id, placed.Tile, placed.Orientation, placed.Machine!, simulation.Tick);
+                    if (placed.Machine!.IsRepairCalled)
                     {
                         // Machine:setRepairingStatus: the gear icon (4564) turns above the machine (setMoodInfo, 96 pixels up)
                         // until the repair is done.

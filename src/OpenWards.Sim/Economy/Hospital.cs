@@ -624,7 +624,11 @@ public sealed class Hospital
         }
     }
 
-    /// <summary>Machines that have exploded and wrecked their room (CorsixTH's <c>num_explosions</c>, kept but never read there).</summary>
+    /// <summary>
+    /// Machines that have exploded and wrecked their room this year, for the year's judgement of the hospital's care of its
+    /// machines. The original game never clears its flag, so the reprimand comes every year after one explosion; here it
+    /// is cleared at the end of the year, as intended.
+    /// </summary>
     public int Explosions { get; internal set; }
 
     /// <summary>Whether a patient has dropped litter in the hospital yet (CorsixTH's <c>hospital_littered</c>).</summary>
@@ -1472,6 +1476,7 @@ public sealed class Hospital
     {
         JudgeYear(random, prices);
 
+        Explosions = 0;
         SodasSold = 0;
         VisitorsThisYear = 0;
         Vips.ThisYear = 0;

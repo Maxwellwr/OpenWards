@@ -683,13 +683,13 @@ public sealed class HandymanBehaviour : HumanoidBehaviour
                     yield return new HandymanTask(type, plant, tile, state.State + 1);
                     break;
                 case HandymanTaskType.Repairing when entity is RoomObject { Machine: { } wear, IsDestroyed: false } machine
-                    && (wear.RemainingUses < 6 || wear.IsRepairCalled)
+                    && (wear.NeedsRepair || wear.IsRepairCalled)
                     && Owner(simulation, machine.Tile) == humanoid.Employer
                     && simulation.FindEntity(machine.RoomId) is Room { IsActive: true, IsCrashed: false }
                     && !IsBeingRepaired(simulation, machine.Id) && RepairTile(simulation, machine) is { } repairTile:
-                    // callHandymanForRepairIfNecessary: below 6 uses left a task of priority 1, below 4 of priority 2; the machine
-                    // window's call (UIMachine:callHandyman) is of priority 2.
-                    yield return new HandymanTask(type, machine, repairTile, wear.RemainingUses < 4 || wear.IsRepairCalled ? 2 : 1);
+                    // Worn past a third of its strength, a repair of priority its wear in percent; the machine window's call
+                    // (UIMachine:callHandyman) as urgent as a worn-out machine.
+                    yield return new HandymanTask(type, machine, repairTile, wear.IsRepairCalled ? Math.Max(100, wear.WearPercent) : wear.WearPercent);
                     break;
             }
         }

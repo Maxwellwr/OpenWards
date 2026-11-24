@@ -255,9 +255,14 @@ public sealed class Simulation
         LandAuction.Tick(this);
 
         // CorsixTH's World:onTick ticks the earthquake, then handles the end of a day before the hour that starts the next one.
-        if (Earthquakes.Tick(Rules.Earthquakes, Random))
+        var round = Earthquakes.Tick(Rules.Earthquakes, Random, Date);
+        if (round != EarthquakeRound.None)
         {
-            Objects.Machines.EarthquakeImpact(this);
+            // At the end of the main quake every machine wears once by its size.
+            if (round == EarthquakeRound.Last)
+            {
+                Objects.Machines.EarthquakeImpact(this, Earthquakes.Size);
+            }
 
             // Earthquake:tick: a patient out of a room might fall over, one time in two.
             foreach (var humanoid in Entities.OfType<Humanoid>().ToList())

@@ -266,7 +266,7 @@ public class AdviserTests
     }
 
     [Fact]
-    public void AMachineWornStraightBelowFourUsesIsFallingApart()
+    public void AMachineWornStraightTo85PercentIsFallingApart()
     {
         var host = new WindowTestHost();
         var checks = new AdviserChecks(host.Adviser, new Random(1));
@@ -274,18 +274,18 @@ public class AdviserTests
         var machine = host.Simulation.AddEntity(id => new RoomObject(id, "inflator", new TilePosition(5, 5), Direction.North, 0) { Machine = new MachineState(10) });
         checks.Observe(host.Simulation, 0, null, 0);
 
-        // Below six (a handyman is there), then below four after it: no advice.
-        machine.Machine!.TimesUsed = 5;
+        // Past a third (a handyman is there), then to 85 % after it: no advice.
+        machine.Machine!.TimesUsed = 4;
         checks.Observe(host.Simulation, 0, null, 0);
         Assert.Null(host.Adviser.Current);
 
-        machine.Machine.TimesUsed = 7;
+        machine.Machine.TimesUsed = 9;
         checks.Observe(host.Simulation, 0, null, 0);
         Assert.Null(host.Adviser.Current);
 
         var second = host.Simulation.AddEntity(id => new RoomObject(id, "inflator", new TilePosition(6, 6), Direction.North, 0) { Machine = new MachineState(10) });
         checks.Observe(host.Simulation, 0, null, 0);
-        second.Machine!.TimesUsed = 8;
+        second.Machine!.TimesUsed = 9;
         checks.Observe(host.Simulation, 0, null, 0);
         Assert.Equal(AdviserChecks.MachinesFallingApart.Fallback, host.Adviser.Current);
     }
