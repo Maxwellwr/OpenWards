@@ -1,7 +1,7 @@
-// Rat holes and rats, ported from CorsixTH CorsixTH/Lua/hospital.lua (dailyUpdateRatholes, dailyUpdateRats,
-// Hospital:spawnRat, getWallsAround, addRathole, removeRatholeXY, getOwnedTileCount, makeDebugRat, findRatholeTiles,
-// isRatholeInView), CorsixTH/Src/th_lua_map.cpp
-// (l_map_get_litter_fraction) and CorsixTH/Lua/entities/rat.lua (Rat:onClick).
+// Rat holes and rats. The daily holes and rats follow the logic specification (the original game); the debug rat, the
+// walls of a tile and closing holes when building are ported from CorsixTH CorsixTH/Lua/hospital.lua
+// (getWallsAround, addRathole, removeRatholeXY, removeRatholesAroundRoom, makeDebugRat, findRatholeTiles,
+// isRatholeInView).
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using OpenWards.Sim.Economy;
@@ -11,84 +11,184 @@ using OpenWards.Sim.Maps;
 namespace OpenWards.Sim.Disasters;
 
 /// <summary>
-/// Rats, which come with litter. Each day a hospital wants a rat hole for every half percent of its corridor tiles
-/// that have litter, and tries a few random corridor walls for one more. Then, unless it has a rat for every 200 of its
-/// tiles already, a rat comes with a chance of 5 % plus half the littered fraction, running from one hole to another;
-/// a clean hospital gets just the two holes that takes. Building over a hole closes it, and the player can shoot a rat,
-/// which leaves a dead rat on the floor.
+/// Rats and rat holes, as the logic specification describes the original game. Holes come from litter: each day, with
+/// a chance of one percent for each littered tile of the hospital, a hole opens in the first wall met going in a random
+/// direction from the tile littered last. One time in 400 a random hole closes by itself, and one day in ten, with two
+/// holes or more, a rat runs from one to another. Rats affect nobody; the player can shoot them, and the year's shots
+/// and kills are counted for the trophies. Building over a hole closes it; handymen do not.
 /// </summary>
+/// <remarks>
+/// Departs from CorsixTH, whose holes follow the littered fraction of the corridors and whose rats come by the
+/// hospital's area with a chance of 5 % plus half that fraction.
+/// </remarks>
 public static class Rats
 {
-    /// <summary>Rat holes wanted per littered fraction of the corridors (<c>getLitterFraction * 200</c>).</summary>
-    private const int HolesPerLitterFraction = 200;
+    /// <summary>The most rat holes a hospital has at a time.</summary>
+    public const int MaxRatholes = 40;
 
-    /// <summary>A hospital's tiles per rat at a time (<c>tiles_per_rat</c>).</summary>
-    private const int TilesPerRat = 200;
+    /// <summary>A hole closes by itself one day in <see cref="RatholeCloseOdds"/> / <see cref="RatholeCloseChance"/>.</summary>
+    private const int RatholeCloseChance = 10;
 
-    /// <summary>The daily chance of a rat in a clean hospital (<c>base_rat_spawn_chance</c>).</summary>
-    private const decimal BaseSpawnChance = 0.05m;
+    private const int RatholeCloseOdds = 4000;
 
-    /// <summary>The extra chance at full litter (<c>litter_rat_spawn_chance</c>).</summary>
-    private const decimal LitterSpawnChance = 0.5m;
+    /// <summary>The daily chance, in percent, of a rat when there are two holes or more.</summary>
+    private const int RatChancePercent = 10;
 
-    /// <summary>Steps of CorsixTH's <c>math.random()</c> here.</summary>
-    private const int RandomSteps = 1_000_000;
-
-    /// <summary>The end of a hospital's day, after the heating (<c>Hospital:onEndDay</c>).</summary>
+    /// <summary>The end of a hospital's day, after the heating: holes open, close, and a rat may run.</summary>
     internal static void OnEndDay(Simulation simulation, Hospital hospital)
     {
-        UpdateRatholes(simulation, hospital, 0);
-        UpdateRats(simulation, hospital);
+        var random = simulation.Random;
+
+        // 1. A new hole, with a chance of one percent per littered tile.
+        var littered = LitteredTiles(simulation, hospital.Player);
+        if (littered > 0 && hospital.LastLitterTile is { } start && hospital.Ratholes.Count < MaxRatholes
+            && random.Next(100) < littered)
+        {
+            var direction = (Direction)random.Next(4);
+            if (FindRatholeWall(simulation, hospital.Player, start, direction) is { } hole)
+            {
+                hospital.AddRathole(hole);
+            }
+        }
+
+        // 2. A random hole may close by itself.
+        if (hospital.Ratholes.Count > 0 && random.Next(RatholeCloseOdds) < RatholeCloseChance)
+        {
+            var hole = hospital.Ratholes[random.Next(hospital.Ratholes.Count)];
+            hospital.RemoveRatholes(other => other == hole);
+        }
+
+        // 3. With two holes or more, a rat may run out of one to another.
+        if (hospital.Ratholes.Count >= 2 && random.Next(100) < RatChancePercent)
+        {
+            var origin = hospital.Ratholes[random.Next(hospital.Ratholes.Count)];
+            Rat.Spawn(simulation, hospital.Player, origin, hospital.Ratholes);
+        }
     }
 
     /// <summary>
-    /// <c>getLitterFraction</c>: of the corridor tiles (outside rooms) on the hospital's parcels, the fraction with litter.
+    /// The tiles of the hospital's land (its parcels, yard included) with litter on them that a handyman sweeps up:
+    /// rubbish, puke, pee and dead rats.
     /// </summary>
-    public static decimal LitterFraction(Simulation simulation, int player)
+    public static int LitteredTiles(Simulation simulation, int player)
     {
         var map = simulation.Map;
-        var littered = new bool[map.Width * map.Height];
+        var tiles = new HashSet<TilePosition>();
         foreach (var entity in simulation.Entities)
         {
-            if (entity is Litter { IsRemoved: false } litter && map.Contains(litter.Tile.X, litter.Tile.Y))
+            if (entity is Litter { IsRemoved: false, IsCleanable: true } litter && IsOwnLand(map, player, litter.Tile))
             {
-                littered[(litter.Tile.Y * map.Width) + litter.Tile.X] = true;
+                tiles.Add(litter.Tile);
             }
         }
 
-        var tiles = 0;
-        var withLitter = 0;
-        for (var y = 0; y < map.Height; y++)
-        {
-            for (var x = 0; x < map.Width; x++)
-            {
-                var cell = map[x, y];
-                if (cell.Parcel == 0 || cell.Parcel >= map.ParcelCount || map.GetParcelOwner(cell.Parcel) != player + 1 || cell.RoomId != 0)
-                {
-                    continue;
-                }
-
-                tiles++;
-                if (littered[(y * map.Width) + x])
-                {
-                    withLitter++;
-                }
-            }
-        }
-
-        return tiles == 0 ? 0m : withLitter / (decimal)tiles;
+        return tiles.Count;
     }
 
-    /// <summary>The player shoots a rat (<c>Rat:onClick</c>): it is gone, and in their hospital a dead rat lies where it was.</summary>
-    internal static void Shoot(Simulation simulation, int player, Rat rat)
+    /// <summary>
+    /// Litter was dropped on a tile: if the tile had no litter yet, the hospital whose land it is remembers it as the tile
+    /// littered last, where new rat holes start from.
+    /// </summary>
+    internal static void OnLittered(Simulation simulation, TilePosition tile, bool wasClean)
     {
+        var map = simulation.Map;
+        if (!wasClean || !map.Contains(tile.X, tile.Y))
+        {
+            return;
+        }
+
+        var parcel = map[tile.X, tile.Y].Parcel;
+        var owner = parcel > 0 && parcel < map.ParcelCount ? map.GetParcelOwner(parcel) - 1 : -1;
+        if (owner >= 0 && owner < simulation.Hospitals.Count)
+        {
+            simulation.Hospitals[owner].LastLitterTile = tile;
+        }
+    }
+
+    /// <summary>
+    /// The player shoots at a rat: the year's shots go up by one, and if the rat is still there it is hit, the year's
+    /// kills go up and a dead rat lies where it was (on the hospital's land).
+    /// </summary>
+    internal static void Shoot(Simulation simulation, int player, Rat? rat)
+    {
+        if (player < 0 || player >= simulation.Hospitals.Count)
+        {
+            return;
+        }
+
+        var hospital = simulation.Hospitals[player];
+        hospital.RatShotsThisYear++;
+        if (rat is not { IsGone: false } || rat.Player != player)
+        {
+            return;
+        }
+
+        hospital.RatsKilledThisYear++;
         rat.Shoot();
         var tile = rat.Phase == RatPhase.Running && rat.Timer * 2 <= Rat.TicksPerTile ? rat.To : rat.From;
-        if (Epidemics.IsInHospital(simulation, player, tile))
+        if (IsOwnLand(simulation.Map, player, tile))
         {
-            // CorsixTH makes the dead rat without Litter.resolveTileRank, so it may lie on other litter.
+            // A dead rat may lie on other litter; it then adds no littered tile.
+            var wasClean = !Litter.At(simulation, tile).Any(litter => litter.IsCleanable);
             simulation.AddEntity(id => new Litter(id, player, LitterType.DeadRat, tile, isMirrored: false));
+            OnLittered(simulation, tile, wasClean);
         }
+    }
+
+    /// <summary>
+    /// Going from <paramref name="start"/> towards <paramref name="direction"/> over the hospital's land, the first wall
+    /// met: a hole in it if that wall is no door or window and the tile before it is a corridor tile inside the building.
+    /// Leaving the hospital's land, or the map, first gives none.
+    /// </summary>
+    internal static Rathole? FindRatholeWall(Simulation simulation, int player, TilePosition start, Direction direction)
+    {
+        var map = simulation.Map;
+        var tile = start;
+        while (map.Contains(tile.X, tile.Y) && IsOwnLand(map, player, tile))
+        {
+            var cell = map[tile.X, tile.Y];
+            var next = direction switch
+            {
+                Direction.North => new TilePosition(tile.X, tile.Y - 1),
+                Direction.East => new TilePosition(tile.X + 1, tile.Y),
+                Direction.South => new TilePosition(tile.X, tile.Y + 1),
+                _ => new TilePosition(tile.X - 1, tile.Y),
+            };
+            var hasNeighbour = map.Contains(next.X, next.Y);
+            var (wall, door) = direction switch
+            {
+                Direction.North => (cell.NorthWall, cell.Has(TileFlags.TallNorth)),
+                Direction.West => (cell.WestWall, cell.Has(TileFlags.TallWest)),
+                Direction.East when hasNeighbour => (map[next.X, next.Y].WestWall, map[next.X, next.Y].Has(TileFlags.TallWest)),
+                Direction.South when hasNeighbour => (map[next.X, next.Y].NorthWall, map[next.X, next.Y].Has(TileFlags.TallNorth)),
+                _ => ((ushort)0, false),
+            };
+            if (wall != 0)
+            {
+                if (door || simulation.Content.IsWindowWall(wall) || cell.RoomId != 0 || !cell.Has(TileFlags.Hospital))
+                {
+                    return null;
+                }
+
+                return new Rathole(tile, direction, cell.Parcel);
+            }
+
+            tile = next;
+        }
+
+        return null;
+    }
+
+    /// <summary>Whether the tile is on a parcel the hospital owns.</summary>
+    private static bool IsOwnLand(LevelMap map, int player, TilePosition tile)
+    {
+        if (!map.Contains(tile.X, tile.Y))
+        {
+            return false;
+        }
+
+        var parcel = map[tile.X, tile.Y].Parcel;
+        return parcel > 0 && parcel < map.ParcelCount && map.GetParcelOwner(parcel) == player + 1;
     }
 
     /// <summary>
@@ -244,88 +344,4 @@ public static class Rats
 
         return walls;
     }
-
-    /// <summary>
-    /// <c>dailyUpdateRatholes</c>: with fewer holes than wanted, up to 6 + 2 × the shortfall (at most 12) random tiles are
-    /// tried; the first corridor floor tile of the hospital with a wall gets a hole in a random one of its walls, if that
-    /// one has none yet.
-    /// </summary>
-    private static void UpdateRatholes(Simulation simulation, Hospital hospital, int minimumHoles)
-    {
-        var map = simulation.Map;
-        var fraction = LitterFraction(simulation, hospital.Player);
-        var wanted = Math.Max(minimumHoles, (int)Math.Floor((fraction * HolesPerLitterFraction) + 0.5m));
-        if (hospital.Ratholes.Count >= wanted)
-        {
-            return;
-        }
-
-        var tries = Math.Min(12, 6 + (2 * (wanted - hospital.Ratholes.Count)));
-        for (var i = 0; i < tries; i++)
-        {
-            var tile = new TilePosition(simulation.Random.NextInclusive(1, map.Width) - 1, simulation.Random.NextInclusive(1, map.Height) - 1);
-            var cell = map[tile.X, tile.Y];
-            if (!Epidemics.IsInHospital(simulation, hospital.Player, tile) || cell.RoomId != 0 || !cell.Has(TileFlags.Buildable))
-            {
-                continue;
-            }
-
-            var walls = WallsAround(map, tile);
-            if (walls.Count == 0)
-            {
-                continue;
-            }
-
-            var wall = walls[simulation.Random.NextInclusive(1, walls.Count) - 1];
-            if (!hospital.Ratholes.Any(hole => hole.Tile == wall.Tile && hole.Wall == wall.Wall))
-            {
-                hospital.AddRathole(wall);
-                return;
-            }
-        }
-    }
-
-    /// <summary><c>dailyUpdateRats</c>.</summary>
-    private static void UpdateRats(Simulation simulation, Hospital hospital)
-    {
-        var map = simulation.Map;
-        var ownedTiles = 0;
-        for (var parcel = 1; parcel < map.ParcelCount; parcel++)
-        {
-            if (map.GetParcelOwner(parcel) == hospital.Player + 1)
-            {
-                ownedTiles += map.ParcelTileCount(parcel);
-            }
-        }
-
-        // CorsixTH counts every rat in the world; here those of the hospital.
-        var maxRats = Math.Max(1, ownedTiles / TilesPerRat);
-        if (simulation.Entities.Count(entity => entity is Rat { IsGone: false } rat && rat.Player == hospital.Player) >= maxRats)
-        {
-            return;
-        }
-
-        var chance = BaseSpawnChance + (LitterFraction(simulation, hospital.Player) * LitterSpawnChance);
-        if (simulation.Random.Next(RandomSteps) >= chance * RandomSteps)
-        {
-            return;
-        }
-
-        // Clean hospitals normally have no rat holes: only enough are added for a rat to run between two.
-        for (var i = 0; i < 2 && !HasRatholeRoute(hospital); i++)
-        {
-            UpdateRatholes(simulation, hospital, hospital.Ratholes.Count + 1);
-        }
-
-        if (HasRatholeRoute(hospital))
-        {
-            // Hospital:spawnRat: out of a random hole.
-            var origin = hospital.Ratholes[simulation.Random.NextInclusive(1, hospital.Ratholes.Count) - 1];
-            Rat.Spawn(simulation, hospital.Player, origin, hospital.Ratholes);
-        }
-    }
-
-    /// <summary><c>hasRatholeRoute</c>: two holes on different tiles.</summary>
-    private static bool HasRatholeRoute(Hospital hospital) =>
-        hospital.Ratholes.Count > 1 && hospital.Ratholes.Skip(1).Any(hole => hole.Tile != hospital.Ratholes[0].Tile);
 }

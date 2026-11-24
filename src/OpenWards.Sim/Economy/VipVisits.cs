@@ -365,7 +365,7 @@ public sealed class VipVisits
     }
 
     /// <summary>The save version that brought the VIP timer and scores.</summary>
-    internal const int SaveVersion = 109;
+    internal const int SaveVersion = 110;
 
     private static VipVisits ReadCurrent(SimReader reader)
     {

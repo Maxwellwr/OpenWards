@@ -65,6 +65,10 @@ public class FreeBuildTests
         Run(simulation, new PurchaseParcelCommand(2));
         Assert.Equal(1, simulation.Map.GetParcelOwner(2));
 
+        // The room and its objects cost nothing, so only the land adds to the value.
+        Assert.Equal(value + (simulation.Map.ParcelTileCount(2) * simulation.Rules.LandCostPerTile), hospital.Value);
+        value = hospital.Value;
+
         // Hospital:spendMoney and receiveMoney do nothing at all, not even log or change the value.
         hospital.Spend(1, 500, TransactionKind.Wages, string.Empty);
         hospital.Receive(1, 500, TransactionKind.Cheat, string.Empty);
