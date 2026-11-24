@@ -75,9 +75,7 @@ public sealed class Simulation
     {
         for (var player = 0; player < _hospitals.Length; player++)
         {
-            // CorsixTH's Hospital:Hospital prices the parcel numbered as the player: hospital tiles and 20,000.
-            var land = (long)map.ParcelTileCount(player + 1) * Rules.LandCostPerTile;
-            _hospitals[player] = new Hospital(player, Rules.StartCash, Rules.StartReputation, land + Hospital.StartValueBesidesLand, Rules.InterestRate, Rules.OverdraftDifferential);
+            _hospitals[player] = new Hospital(player, Rules.StartCash, Rules.StartReputation, interestRate: Rules.InterestRate);
             _hospitals[player].Policies = new HospitalPolicies(Rules.Tiredness.Tired);
             _hospitals[player].FreeBuild = Rules.FreeBuild;
 
@@ -117,6 +115,8 @@ public sealed class Simulation
         // CorsixTH's World:World plans the first earthquake after the candidates for hire and before the arrivals.
         Earthquakes = Earthquakes.Start(Rules.Earthquakes, Random);
         Arrivals = PatientArrivals.Start(this);
+
+        HospitalValue.Refresh(this);
     }
 
     private Simulation(LevelMap map, SimRandom random, GameContent content, LevelRules rules)
@@ -249,6 +249,9 @@ public sealed class Simulation
             var scheduled = _pending[0];
             _pending.RemoveAt(0);
             scheduled.Command.Execute(this, scheduled.Player);
+
+            // What a command builds, buys or sells shows in the hospitals' value at once.
+            HospitalValue.Refresh(this);
         }
 
         LandAuction.Tick(this);
@@ -404,6 +407,7 @@ public sealed class Simulation
 
         LinkEntranceDoors();
         Map.UpdateShadows();
+        HospitalValue.Refresh(this);
     }
 
     /// <summary>Gives a parcel to a player (1-based; 0 for nobody) and places objects that were waiting for it.</summary>
@@ -433,6 +437,7 @@ public sealed class Simulation
 
         LinkEntranceDoors();
         Map.UpdateShadows();
+        HospitalValue.Refresh(this);
     }
 
     /// <summary>
@@ -858,11 +863,11 @@ public sealed class Simulation
         // Doctor:tickDay: students learn.
         Training.OnEndDay(this);
 
+        // The hospitals' value is worked out again each day, as their reputation changes.
+        HospitalValue.Refresh(this);
         foreach (var hospital in _hospitals)
         {
-            hospital.OnEndDay();
-
-            // Hospital:onEndDay: then the day's research cost, by the researchers at work.
+            // Hospital:onEndDay: the day's research cost, by the researchers at work.
             hospital.Research.AccumulateCost(Researchers(hospital.Player));
             hospital.OnEndDayHeating(Random, radiators[hospital.Player], handymen[hospital.Player], date.DaysInMonth, Rules.Difficulty);
 
@@ -929,11 +934,13 @@ public sealed class Simulation
                 CheckEndConditions(hospital, mayLose: false);
             }
 
+            // The logic specification's order: wages, the insurers' payments, heating, then interest on the loan and the
+            // overdraft (so that the overdraft is what is left after the rest).
             hospital.PayWages(Hours, wages[hospital.Player]);
+            hospital.PayInsurance(Hours);
             hospital.PayHeating(Hours);
             hospital.PayInterest(Hours);
             hospital.PayResearch(Hours);
-            hospital.PayInsurance(Hours);
             hospital.UpdatePriceLevel(Rules.Diseases);
 
             // Hospital:onEndMonth: equipment the level brings this month.
