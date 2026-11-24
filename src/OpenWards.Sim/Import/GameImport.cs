@@ -326,7 +326,8 @@ public static class GameImport
             game.LowestReputationThisYear ?? hospital.Reputation);
         if (game.PlayerSalary is > 0 and var salary)
         {
-            hospital.PlayerSalary = salary;
+            // The level's starting salary is not in the save: the year's raise measures its ceiling from today's.
+            hospital.BringSalary(salary);
         }
 
         if (game.Year > 1 || game.Month > 1 || game.Day > 1)
