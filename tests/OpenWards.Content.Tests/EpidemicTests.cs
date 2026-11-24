@@ -228,9 +228,11 @@ public class EpidemicTests
         Assert.False(patient.IsMarkedForVaccination);
         Assert.Contains(hospital.Transactions, t => t.Kind == TransactionKind.Vaccination && t.Amount == -50);
 
-        // Vaccinated patients still count until they are cured.
+        // Vaccinated patients still count until they are cured. (The epidemic may have spread to others meanwhile.)
         Assert.True(patient.IsInfected);
-        Assert.Equal(1, Epidemics.CountInfectedPatients(simulation, epidemic));
+        var others = epidemic.InfectedIds.Count(id => id != infected.Id
+            && simulation.FindEntity(id) is Humanoid { Behaviour: PatientBehaviour { IsInfected: true, IsCured: false } });
+        Assert.Equal(others + 1, Epidemics.CountInfectedPatients(simulation, epidemic));
         var nurse = simulation.Entities.OfType<Humanoid>().Single(humanoid => humanoid.Behaviour is NurseBehaviour);
         Assert.Equal(NursePhase.Idle, ((NurseBehaviour)nurse.Behaviour!).Phase);
     }
