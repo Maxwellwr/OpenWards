@@ -50,6 +50,13 @@ public sealed class MultiObjectUse
     /// <summary>How many more times the in-use phase plays (a prolonged use's loops), 0 to play it once.</summary>
     public int InUseRounds { get; private set; }
 
+    /// <summary>
+    /// Whether the in-use phase is to play once more whatever <see cref="InUseRounds"/> says: someone else's separate
+    /// animation is still going (the second surgeon's), and the one to finish later leads on. Set before each
+    /// <see cref="Update"/>, so it is not saved.
+    /// </summary>
+    internal bool HoldInUse { get; set; }
+
     /// <summary>Which of the object's animation variants the use plays (CorsixTH's <c>random_anim</c>).</summary>
     public int Variant { get; private set; }
 
@@ -140,10 +147,10 @@ public sealed class MultiObjectUse
             return End(simulation, humanoid);
         }
 
-        if (Phase == animations.Begin.Count && InUseRounds > 0)
+        if (Phase == animations.Begin.Count && (InUseRounds > 0 || HoldInUse))
         {
             // A prolonged use: the in-use animation again.
-            InUseRounds--;
+            InUseRounds = Math.Max(InUseRounds - 1, 0);
             EnterPhase(simulation, humanoid, Phase);
             return ObjectUseEvent.Loop;
         }

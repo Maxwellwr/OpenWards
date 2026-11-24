@@ -1023,8 +1023,7 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
     /// <c>_buildTableAction2</c>: the second surgeon's part from the far side of the table (operating_table_b.lua): two
     /// begin animations, 2 to 5 rounds of cutting or sewing, two finish animations.
     /// </summary>
-    /// <returns>How many ticks it takes, which the first surgeon's use of the table lasts too.</returns>
-    internal int StartOperating(Simulation simulation, Humanoid humanoid, RoomObject table)
+    internal void StartOperating(Simulation simulation, Humanoid humanoid, RoomObject table)
     {
         _sequence.Clear();
         _sequence.Add(new AnimationRef(2306, 25));
@@ -1041,7 +1040,6 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
         _sequenceObject = table.Id;
         Phase = DoctorPhase.OtOperating;
         PlayNext(simulation, humanoid);
-        return _sequence.Sum(humanoid.AnimationTicks);
     }
 
     /// <summary>The operation is over (<c>operatring_theatre_table_after_use</c>): the surgeon meanders, ready again.</summary>

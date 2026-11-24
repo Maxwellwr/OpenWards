@@ -2606,8 +2606,13 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
                 else if (TrolleyUse is not null)
                 {
                     // The operating table's use is the first surgeon's, driven from here.
-                    var user = string.Equals(room.RoomType, RoomVisits.OperatingTheatreRoom, StringComparison.Ordinal)
-                        && simulation.FindEntity(room.StaffId) is Humanoid surgeon ? surgeon : humanoid;
+                    var theatre = string.Equals(room.RoomType, RoomVisits.OperatingTheatreRoom, StringComparison.Ordinal);
+                    var user = theatre && simulation.FindEntity(room.StaffId) is Humanoid surgeon ? surgeon : humanoid;
+
+                    // The second surgeon's part is a separate animation at their own pace: the first surgeon's in-use
+                    // animation loops until it is over, so whoever finishes later leads on.
+                    TrolleyUse.HoldInUse = theatre && RoomVisits.Surgeons(simulation, room)
+                        .Any(s => s.Id != user.Id && s.Behaviour is DoctorBehaviour { Phase: DoctorPhase.OtOperating });
                     if (TrolleyUse.Update(simulation, user) != ObjectUseEvent.Done)
                     {
                         return;
@@ -2933,7 +2938,8 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     /// <summary>
     /// <c>operation_standby</c>: once both surgeons stand at the table, the second operates from its far side and the
     /// first uses the table with the patient (operating_table.lua's multi-use), its one-frame in-use animation looping
-    /// until the second surgeon has finished (<c>operatring_theatre_after_use</c>).
+    /// until the second surgeon has finished (<c>operatring_theatre_after_use</c>). Each plays at their own pace
+    /// (<see cref="Humanoid.FrameTicks"/>); whoever finishes later leads on.
     /// </summary>
     private void StartOperation(Simulation simulation, Humanoid humanoid, Room room, RoomObject table)
     {
@@ -2945,9 +2951,8 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         }
 
         var second = surgeons.First(s => s.Id != first.Id);
-        var length = ((DoctorBehaviour)second.Behaviour!).StartOperating(simulation, second, table);
-        var begin = humanoid.Type == HumanoidType.GownedFemalePatient ? 9 + 20 : 9 + 21;
-        TrolleyUse = MultiObjectUse.Start(simulation, first, table, humanoid, inUseRounds: Math.Max(0, length - begin - 1));
+        ((DoctorBehaviour)second.Behaviour!).StartOperating(simulation, second, table);
+        TrolleyUse = MultiObjectUse.Start(simulation, first, table, humanoid);
         Phase = PatientPhase.OnTrolley;
         IsExamined = TrolleyUse is null;
     }

@@ -83,6 +83,40 @@ public class OperatingTheatreTests
     }
 
     [Fact]
+    public void TheOperationEndsOnlyOnceTheSecondSurgeonHasFinishedTheirPart()
+    {
+        var simulation = NewStaffedHospital(Rules());
+        BuildWard(simulation);
+        var theatre = BuildTheatre(simulation);
+        var operating = new Dictionary<int, PatientBehaviour>();
+        var ended = 0;
+        for (var tick = 0; tick < 5 * 31 * GameDate.HoursPerDay && ended == 0; tick++)
+        {
+            simulation.Step();
+            foreach (var (id, behaviour) in operating.ToList())
+            {
+                if (behaviour.TrolleyUse is null)
+                {
+                    // Each surgeon at their own pace: the one to finish later leads on, so nobody is still operating.
+                    Assert.DoesNotContain(RoomVisits.Surgeons(simulation, theatre), s => s.Behaviour is DoctorBehaviour { Phase: DoctorPhase.OtOperating });
+                    operating.Remove(id);
+                    ended++;
+                }
+            }
+
+            foreach (var humanoid in simulation.Entities.OfType<Humanoid>())
+            {
+                if (humanoid.Behaviour is PatientBehaviour { Phase: PatientPhase.OnTrolley, TrolleyUse: not null } patient && patient.TargetId == theatre.Id)
+                {
+                    operating[humanoid.Id] = patient;
+                }
+            }
+        }
+
+        Assert.True(ended >= 1, "Nobody was operated on.");
+    }
+
+    [Fact]
     public void ASurgeonPickedUpDuringAnOperationFinishesItAndThenGoes()
     {
         var simulation = NewStaffedHospital(Rules());

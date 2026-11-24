@@ -2,6 +2,7 @@ using OpenWards.Sim.Economy;
 using OpenWards.Sim.Entities;
 using OpenWards.Sim.Maps;
 using OpenWards.Sim.People;
+using OpenWards.Sim.Serialization;
 
 namespace OpenWards.Sim.Tests;
 
@@ -48,6 +49,35 @@ public class VipTests
         Litter.Drop(simulation, 0, LitterType.Paper, new TilePosition(0, 1), isMirrored: false);
         Assert.Equal(11, VipBehaviour.LitterTiles(simulation, 0));
         Assert.Equal(13, VipBehaviour.ScoreHospital(simulation, 0));
+    }
+
+    [Theory]
+    [InlineData(11, 0)]
+    [InlineData(1, 1)]
+    [InlineData(10, 10)]
+    public void OlderSavesNamesMoveToTheListsOrderWithTheMinisterFirst(int saved, int now)
+    {
+        var visits = new VipVisits { State = VipState.Visiting, InvitedName = saved, Report = new VipReport(saved, 1, 200, 2, 99) };
+        using var stream = new MemoryStream();
+        visits.Write(new SimWriter(stream));
+        stream.Position = 0;
+
+        var read = VipVisits.Read(new SimReader(stream) { Version = VipVisits.NamesFromZeroVersion - 1 });
+
+        Assert.Equal(now, read.InvitedName);
+        Assert.Equal(now, read.Report!.Value.Name);
+    }
+
+    [Fact]
+    public void AnOlderSavesNoVipBecomesNoName()
+    {
+        var visits = new VipVisits { InvitedName = 0 };
+        using var stream = new MemoryStream();
+        visits.Write(new SimWriter(stream));
+        stream.Position = 0;
+
+        Assert.Equal(VipVisits.NoName, VipVisits.Read(new SimReader(stream) { Version = VipVisits.NamesFromZeroVersion - 1 }).InvitedName);
+        Assert.Equal(VipVisits.NoName, new VipVisits().InvitedName);
     }
 
     [Fact]
