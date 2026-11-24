@@ -15,66 +15,79 @@ public class TirednessTests
     private static readonly RoomDefinition StaffRoom = new("staff_room", "Staff Room", 3, 18, new WallSet(82, 83, 90, 91));
 
     [Fact]
-    public void OnlyAHandymanTiresInTheCorridor()
-    {
-        var simulation = NewSimulation();
-        var doctor = Hire(simulation, StaffClass.Doctor, new TilePosition(6, 6));
-        var handyman = Hire(simulation, StaffClass.Handyman, new TilePosition(6, 5));
-        handyman.Happiness = 0.5m;
-
-        StaffEmployment.Tick(simulation, doctor);
-        StaffEmployment.Tick(simulation, handyman);
-
-        Assert.Equal(0m, doctor.Fatigue);
-        Assert.Equal(1m, doctor.Happiness);
-        Assert.Equal(0.00009m, handyman.Fatigue);
-        Assert.Equal(0.49998m, handyman.Happiness);
-    }
-
-    [Fact]
-    public void StaffTireInARoomButNotInTheStaffRoom()
+    public void WorkTiresByWorkLightEveryUpdateButNotIdleOrInTheStaffRoomAndReceptionistsNever()
     {
         var simulation = NewSimulation();
         AddRoom(simulation, "office", new TileRect(1, 1, 3, 3), active: false);
         AddRoom(simulation, "staff_room", new TileRect(4, 1, 3, 3), active: false);
-        var working = Hire(simulation, StaffClass.Doctor, new TilePosition(2, 2));
+        var idle = Hire(simulation, StaffClass.Doctor, new TilePosition(6, 6));
+        var handyman = Hire(simulation, StaffClass.Handyman, new TilePosition(6, 5));
         var resting = Hire(simulation, StaffClass.Nurse, new TilePosition(5, 2));
-        working.Fatigue = 0m; // The doctor worked through the nurse's hiring.
-
-        for (var i = 0; i < 100; i++)
+        var working = Hire(simulation, StaffClass.Doctor, new TilePosition(2, 2));
+        var receptionist = Hire(simulation, StaffClass.Receptionist, new TilePosition(7, 6));
+        SetBehaviour(working, new People.DoctorBehaviour(), "Phase", People.DoctorPhase.WalkingToRoom);
+        handyman.Behaviour = new People.HandymanBehaviour();
+        SetBehaviour(handyman, handyman.Behaviour, "Phase", People.HandymanPhase.WalkingToLitter);
+        foreach (var humanoid in new[] { idle, handyman, resting, working, receptionist })
         {
-            StaffEmployment.Tick(simulation, working);
-            StaffEmployment.Tick(simulation, resting);
+            humanoid.Fatigue = 0m;
         }
 
-        Assert.Equal(0.009m, working.Fatigue);
+        // Ten updates of WorkLight 1: 10 thousandths, whatever the work.
+        for (var update = 0; update < 10; update++)
+        {
+            People.PatientNeeds.Modify(simulation);
+        }
+
+        Assert.Equal(0.01m, working.Fatigue);
+        Assert.Equal(0.01m, handyman.Fatigue);
+        Assert.Equal(0m, idle.Fatigue);
         Assert.Equal(0m, resting.Fatigue);
+        Assert.Equal(0m, receptionist.Fatigue);
     }
 
     [Fact]
-    public void AnOverworkedDoctorGoesCrazyAndComesRoundRestingInTheStaffRoom()
+    public void MoodMovesOnlyPastTheThresholds()
     {
-        var simulation = NewSimulation();
+        var simulation = NewSimulation(new TirednessRules(600, 700, 800, 300));
+        var nurse = Hire(simulation, StaffClass.Nurse, new TilePosition(6, 6));
+
+        foreach (var (fatigue, happiness) in new[] { (0.2m, 0.51m), (0.3m, 0.5m), (0.6m, 0.5m), (0.8m, 0.5m), (0.801m, 0.49m) })
+        {
+            nurse.Fatigue = fatigue;
+            nurse.Happiness = 0.5m;
+            Tiredness.Modify(simulation, nurse);
+            Assert.Equal(happiness, nurse.Happiness);
+        }
+    }
+
+    [Fact]
+    public void AnOverworkedDoctorCracksUpAndComesRoundRestingInTheStaffRoom()
+    {
+        var simulation = NewSimulation(new TirednessRules(600, 700, 800, 300));
         AddRoom(simulation, "staff_room", new TileRect(4, 1, 3, 3), active: false);
         var doctor = Hire(simulation, StaffClass.Doctor, new TilePosition(6, 6));
         var layer = doctor.Layers[Humanoid.StaffLayer];
-        doctor.Fatigue = 1m;
 
-        // Doctor:tickDay: one day in 300 a very tired doctor goes crazy.
-        for (var day = 0; day < 3000 && !doctor.IsCrazy; day++)
+        // One update in 1,000 past CrackUpTired.
+        var updates = 0;
+        while (!doctor.IsCrazy && updates < 20_000)
         {
-            Tiredness.CheckCrazy(simulation, doctor);
+            doctor.Fatigue = 0.9m;
+            Tiredness.Modify(simulation, doctor);
+            updates++;
         }
 
         Assert.True(doctor.IsCrazy);
         Assert.Equal(doctor.Profile!.Layer5 + 4, doctor.Layers[Humanoid.StaffLayer]);
 
-        // Still very tired, they stay crazy; rested in the staff room, they are themselves again.
+        // Still very tired in the staff room, they stay crazy; rested, they are themselves again.
         doctor.PlaceAt(new TilePosition(5, 2));
-        Tiredness.CheckCrazy(simulation, doctor);
+        doctor.Fatigue = 0.75m;
+        Tiredness.Modify(simulation, doctor);
         Assert.True(doctor.IsCrazy);
-        doctor.Fatigue = 0m;
-        Tiredness.CheckCrazy(simulation, doctor);
+        doctor.Fatigue = 0.5m;
+        Tiredness.Modify(simulation, doctor);
         Assert.False(doctor.IsCrazy);
         Assert.Equal(layer, doctor.Layers[Humanoid.StaffLayer]);
     }
@@ -84,32 +97,37 @@ public class TirednessTests
     {
         var simulation = NewSimulation();
         var handyman = Hire(simulation, StaffClass.Handyman, new TilePosition(6, 6));
-        handyman.Fatigue = 0.99995m;
+        SetBehaviour(handyman, handyman.Behaviour!, "Phase", People.HandymanPhase.WalkingToLitter);
+        handyman.Fatigue = 0.9995m;
 
-        StaffEmployment.Tick(simulation, handyman);
+        Tiredness.Modify(simulation, handyman);
 
         Assert.Equal(1m, handyman.Fatigue);
     }
 
     [Fact]
-    public void TiredStaffWithoutAStaffRoomGrowUnhappyEveryHour()
+    public void StaffMoreTiredThanThePolicyWaitForAStaffRoomWithoutLosingMood()
     {
         var simulation = NewSimulation();
         var doctor = Hire(simulation, StaffClass.Doctor, new TilePosition(6, 6));
-        doctor.Fatigue = 0.6m;
         doctor.Happiness = 0.5m;
 
+        // Exactly at the policy (Tired 600) is not past it.
+        doctor.Fatigue = 0.6m;
+        StaffEmployment.Tick(simulation, doctor);
+        Assert.False(doctor.WaitingForStaffRoom);
+
+        doctor.Fatigue = 0.601m;
         StaffEmployment.Tick(simulation, doctor);
         Assert.True(doctor.WaitingForStaffRoom);
+        StaffEmployment.Tick(simulation, doctor);
         Assert.Equal(0.5m, doctor.Happiness);
 
-        StaffEmployment.Tick(simulation, doctor);
-        Assert.Equal(0.499m, doctor.Happiness);
-
-        // Very tired costs a little more.
+        // Very tired, they look it.
         doctor.Fatigue = 0.7m;
         StaffEmployment.Tick(simulation, doctor);
-        Assert.Equal(0.4978m, doctor.Happiness);
+        Assert.True(doctor.IsTiredMoodShown);
+        Assert.Equal(0.5m, doctor.Happiness);
     }
 
     [Fact]
@@ -117,7 +135,7 @@ public class TirednessTests
     {
         var simulation = NewSimulation();
         var doctor = Hire(simulation, StaffClass.Doctor, new TilePosition(6, 6));
-        doctor.Fatigue = 0.6m;
+        doctor.Fatigue = 0.65m;
         doctor.WaitingForStaffRoom = true;
 
         var staffRoom = AddRoom(simulation, "staff_room", new TileRect(1, 1, 3, 3), active: true);
@@ -126,40 +144,71 @@ public class TirednessTests
 
         StaffEmployment.Tick(simulation, doctor);
         Assert.False(doctor.WaitingForStaffRoom);
-        Assert.Equal(1m, doctor.Happiness);
     }
 
     [Theory]
-    [InlineData(0.4, false, 0.5)] // Not tired yet.
-    [InlineData(0.5, false, 0.49)] // Getting tired.
-    [InlineData(0.6, false, 0.47)] // Should be taking a break.
-    [InlineData(0.6, true, 0.506)] // Resting.
-    [InlineData(0.7, true, 0.47)] // Resting, but still very tired.
-    public void TheDayWeighsWorkingTiredAgainstResting(double fatigue, bool inStaffRoom, double happiness)
+    [InlineData(8, 200, 8)] // Not more tired than half the RecoveryFactor of 450: all of it.
+    [InlineData(8, 225, 8)]
+    [InlineData(8, 226, 15)] // 8 × 450 / 226.
+    [InlineData(8, 900, 4)]
+    [InlineData(3, 1000, 3)] // At least RecoveryMinimum.
+    [InlineData(60, 900, 30)]
+    public void RestRecoversLessTheMoreTired(int value, int fatigue, int recovered) =>
+        Assert.Equal(recovered, RestRules.Default.Recovery(value, fatigue));
+
+    [Fact]
+    public void ThePaceFollowsSkillAndFatigueAndTheRestComesEveryEightFrames()
+    {
+        var simulation = NewSimulation(new TirednessRules(600, 700, 800, 300));
+        var doctor = Hire(simulation, StaffClass.Doctor, new TilePosition(6, 6));
+        var staff = simulation.Rules.Staff;
+        (int Frame, int Tile, int RestTicks) Pace(int skill, decimal fatigue)
+        {
+            typeof(StaffProfile).GetProperty(nameof(StaffProfile.Skill))!.SetValue(doctor.Profile, skill);
+            doctor.Fatigue = fatigue;
+            Tiredness.UpdateSpeed(simulation, doctor);
+            var tile = doctor.IsFast ? 4 : doctor.IsSlow ? 16 : 8;
+            return (doctor.FrameTicks, tile, Tiredness.RestPeriod(doctor));
+        }
+
+        // Up to DoctorThreshold: frame 2, tile 16, whatever the fatigue.
+        Assert.Equal((2, 16, 16), Pace(staff.DoctorThreshold, 0.5m));
+        Assert.Equal((2, 16, 16), Pace(staff.DoctorThreshold, 0.9m));
+
+        // Between the thresholds: frame 1, tile 8 until very tired.
+        Assert.Equal((1, 8, 8), Pace(staff.DoctorThreshold + 1, 0.7m));
+        Assert.Equal((1, 8, 8), Pace(staff.ConsultantThreshold - 1, 0.5m));
+        Assert.Equal((2, 16, 16), Pace(staff.DoctorThreshold + 1, 0.701m));
+        Assert.Equal((2, 16, 16), Pace(staff.DoctorThreshold + 1, 0.9m));
+
+        // From ConsultantThreshold: tile 4; very tired tile 8; past CrackUpTired frame 2, tile 16.
+        Assert.Equal((1, 4, 8), Pace(staff.ConsultantThreshold, 0.7m));
+        Assert.Equal((1, 8, 8), Pace(staff.ConsultantThreshold, 0.8m));
+        Assert.Equal((2, 16, 16), Pace(staff.ConsultantThreshold, 0.801m));
+    }
+
+    [Fact]
+    public void ASlowMemberOfStaffsAnimationsLastTwiceAsLong()
     {
         var simulation = NewSimulation();
-        AddRoom(simulation, "staff_room", new TileRect(1, 1, 3, 3), active: true);
-        var nurse = Hire(simulation, StaffClass.Nurse, inStaffRoom ? new TilePosition(2, 2) : new TilePosition(6, 6));
-        nurse.Fatigue = (decimal)fatigue;
-        nurse.Happiness = 0.5m;
-
-        Tiredness.OnEndDay(simulation, nurse);
-
-        Assert.Equal((decimal)happiness, nurse.Happiness);
+        var doctor = Hire(simulation, StaffClass.Doctor, new TilePosition(6, 6));
+        var animation = new Definitions.AnimationRef(1, 12);
+        doctor.FrameTicks = 1;
+        Assert.Equal(12, doctor.AnimationTicks(animation));
+        doctor.FrameTicks = 2;
+        Assert.Equal(24, doctor.AnimationTicks(animation));
+        doctor.SetActionAnimation(simulation, animation, false, doctor.Tile, doctor.Tile, 0);
+        Assert.Equal(2, doctor.ActionAnimationFrameTicks);
     }
 
     [Fact]
     public void TheLevelSetsWhenStaffCountAsTired()
     {
         var simulation = NewSimulation(new TirednessRules(300, 400, 500));
-        var doctor = Hire(simulation, StaffClass.Doctor, new TilePosition(6, 6));
-        doctor.Fatigue = 0.45m;
-        doctor.Happiness = 0.5m;
-
-        Assert.True(Tiredness.IsVeryTired(simulation, doctor.Fatigue));
-        Assert.False(Tiredness.IsCrackUpTired(simulation, doctor.Fatigue));
-        Tiredness.OnEndDay(simulation, doctor);
-        Assert.Equal(0.48m, doctor.Happiness);
+        Assert.True(Tiredness.IsVeryTired(simulation, 0.45m));
+        Assert.False(Tiredness.IsCrackUpTired(simulation, 0.45m));
+        Assert.Equal(2, TirednessRules.Unset.Rest.WorkLight);
+        Assert.Equal(1, TirednessRules.Default.Rest.WorkLight);
     }
 
     [Fact]
@@ -183,6 +232,12 @@ public class TirednessTests
         Assert.Equal(handyman.Fatigue, copy.Fatigue);
         Assert.True(copy.WaitingForStaffRoom);
         Assert.Equal(400, restored.Rules.Tiredness.VeryTired);
+    }
+
+    private static void SetBehaviour(Humanoid humanoid, People.HumanoidBehaviour behaviour, string property, object value)
+    {
+        humanoid.Behaviour = behaviour;
+        behaviour.GetType().GetProperty(property)!.SetValue(behaviour, value);
     }
 
     private static Room AddRoom(Simulation simulation, string roomType, TileRect area, bool active)

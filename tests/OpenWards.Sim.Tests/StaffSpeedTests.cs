@@ -29,6 +29,8 @@ public class StaffSpeedTests
         // The no-rest cheat makes everyone fast.
         simulation.Schedule(0, new CheatCommand(CheatKind.ToggleNoRest));
         simulation.Step();
+        Tiredness.UpdateSpeed(simulation, doctor);
+        Tiredness.UpdateSpeed(simulation, receptionist);
         Assert.True(doctor.IsFast);
         Assert.False(doctor.IsSlow);
         Assert.True(receptionist.IsFast);

@@ -60,14 +60,14 @@ public class PolicyTests
         simulation.Step();
         var doctor = simulation.Entities.OfType<Entities.Humanoid>().Single();
         doctor.Fatigue = 0.3m;
-        doctor.Happiness = 0.5m;
 
-        Tiredness.OnEndDay(simulation, doctor);
-        Assert.Equal(0.5m, doctor.Happiness);
+        // No staff room: wanting one, they wait for it.
+        StaffEmployment.Tick(simulation, doctor);
+        Assert.False(doctor.WaitingForStaffRoom);
 
         Run(simulation, new SetPolicyCommand(PolicyKind.GoToStaffRoom, 250));
-        Tiredness.OnEndDay(simulation, doctor);
-        Assert.Equal(0.48m, doctor.Happiness);
+        StaffEmployment.Tick(simulation, doctor);
+        Assert.True(doctor.WaitingForStaffRoom);
     }
 
     [Fact]

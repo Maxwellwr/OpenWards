@@ -5,6 +5,7 @@
 using OpenWards.Sim.Entities;
 using OpenWards.Sim.Maps;
 using OpenWards.Sim.Pathfinding;
+using OpenWards.Sim.Staff;
 
 namespace OpenWards.Sim.People;
 
@@ -95,9 +96,11 @@ public static class PatientNeeds
             {
                 Modify(simulation, world, humanoid, patient);
             }
-            else if (humanoid is { Profile: not null, IsFired: false, IsDespawning: false, IsLeavingForPoacher: false }
+            else if (humanoid is { Profile.Class: not StaffClass.Receptionist, IsFired: false, IsDespawning: false, IsLeavingForPoacher: false }
                 && humanoid.Employer >= 0 && humanoid.Employer < simulation.Hospitals.Count)
             {
+                // Receptionists are left out: they never tire, warmth does not touch them, nor does their discontent change.
+                Staff.Tiredness.Modify(simulation, humanoid);
                 ModifyStaff(simulation, world, humanoid);
                 Staff.StaffEmployment.Modify(simulation, humanoid);
             }

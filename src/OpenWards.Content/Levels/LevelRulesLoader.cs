@@ -215,7 +215,10 @@ public static partial class LevelRulesLoader
                 config.GetInt("gbv.Tired") ?? TirednessRules.Unset.Tired,
                 config.GetInt("gbv.VeryTired") ?? TirednessRules.Unset.VeryTired,
                 config.GetInt("gbv.CrackUpTired") ?? TirednessRules.Unset.CrackUpTired,
-                config.GetInt("gbv.NotTired") ?? TirednessRules.Unset.NotTired),
+                config.GetInt("gbv.NotTired") ?? TirednessRules.Unset.NotTired)
+            {
+                Rest = RestFromConfig(config),
+            },
             config.GetInt("gbv.MayorLaunch") ?? LevelRules.DefaultMayorLaunch,
             EmergenciesFromConfig(config),
             EpidemicsFromConfig(config),
@@ -485,6 +488,20 @@ public static partial class LevelRulesLoader
     /// (the employment settings: <see cref="EmploymentRules.Default"/>),
     /// on which CorsixTH reads the level files.
     /// </summary>
+    /// <summary>How fast staff tire and rest: <c>gbv.WorkLight</c>, the <c>gbv.Rest…</c> values and the recovery.</summary>
+    internal static RestRules RestFromConfig(LevelConfig config)
+    {
+        var unset = RestRules.Unset;
+        return new RestRules(
+            config.GetInt("gbv.WorkLight") ?? unset.WorkLight,
+            config.GetInt("gbv.RestStanding") ?? unset.RestStanding,
+            config.GetInt("gbv.RestSofa") ?? unset.RestSofa,
+            config.GetInt("gbv.RestGame") ?? unset.RestGame,
+            config.GetInt("gbv.RestSnooker") ?? unset.RestSnooker,
+            Math.Max(1, config.GetInt("gbv.RecoveryFactor") ?? unset.RecoveryFactor),
+            config.GetInt("gbv.RecoveryMinimum") ?? unset.RecoveryMinimum);
+    }
+
     public static StaffRules StaffFromConfig(LevelConfig config)
     {
         var defaults = StaffRules.Default;

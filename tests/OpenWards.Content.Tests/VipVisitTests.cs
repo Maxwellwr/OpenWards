@@ -112,8 +112,9 @@ public class VipVisitTests
         Assert.Contains(VipPhase.GoingHome, phases);
         Assert.Equal(1, behaviour.VisitedRooms);
 
-        // Two staff (+4), clean (−1), a consultant for the only doctor (−2), one room (+1), and −3 to +2.
-        Assert.InRange(behaviour.Score, -1, 4);
+        // Two staff (+4), clean (−1), one room (+1), and −3 to +2. The only doctor is skilled enough for a consultant but
+        // not yet promoted (that takes gbv.PromoCon months), so the doctors count for nothing.
+        Assert.InRange(behaviour.Score, 1, 6);
         Assert.Equal(VipState.Over, hospital.Vips.State);
         Assert.Equal(1, hospital.Vips.ThisYear);
         Assert.Equal(behaviour.Score, hospital.Vips.ScoreSumThisYear);

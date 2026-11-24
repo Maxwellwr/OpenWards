@@ -322,7 +322,8 @@ public sealed class MultiObjectUse
             useWith.IsHidden = true;
         }
 
-        Timer = current.Length;
+        // Each at their own pace: the slower one sets how long the phase lasts.
+        Timer = Math.Max(humanoid.AnimationTicks(current.Primary), current.Length * useWith.FrameTicks);
     }
 
     /// <summary>CorsixTH's number of a phase: −5 for <c>begin_use</c> up to 5 for <c>finish_use_5</c>.</summary>

@@ -67,6 +67,44 @@ public class StaffRoomTests
         Assert.Equal(simulation.ComputeStateHash(), loaded.ComputeStateHash());
     }
 
+    [Fact]
+    public void RestGoesOnUntilFullyRestedAndHalvesTheDiscontent()
+    {
+        var simulation = NewStaffedHospital();
+        BuildStaffRoom(simulation);
+        Run(simulation, new SetPolicyCommand(PolicyKind.GoToStaffRoom, 400));
+        var doctor = simulation.Entities.OfType<Humanoid>().First(h => h.Profile?.Class == OpenWards.Sim.Staff.StaffClass.Doctor);
+        doctor.Fatigue = 0.5m;
+        doctor.Discontent = 40;
+
+        var wasResting = false;
+        var discontent = 0;
+        for (var tick = 0; tick < 90 * GameDate.HoursPerDay; tick++)
+        {
+            discontent = doctor.Discontent;
+            simulation.Step();
+            if (doctor.Behaviour is RestingBehaviour resting)
+            {
+                wasResting = true;
+                if (resting.Phase == RestingPhase.Leaving)
+                {
+                    // Fully rested: the discontent halves as they get up.
+                    Assert.Equal(0m, doctor.Fatigue);
+                    Assert.Equal(discontent / 2, doctor.Discontent);
+                    return;
+                }
+
+                Assert.True(doctor.Fatigue > 0, "Rested, yet still resting.");
+            }
+            else
+            {
+                Assert.False(wasResting, "Back to work before fully rested.");
+            }
+        }
+
+        Assert.Fail($"The doctor did not finish resting (resting: {wasResting}, fatigue {doctor.Fatigue}).");
+    }
+
     internal static Room BuildStaffRoom(Simulation simulation) => BuildStaffRoom(simulation, Area);
 
     internal static Room BuildStaffRoom(Simulation simulation, TileRect area)

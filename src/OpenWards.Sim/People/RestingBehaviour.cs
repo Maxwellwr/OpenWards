@@ -1,5 +1,6 @@
 // Ported from CorsixTH CorsixTH/Lua/humanoid_actions/seek_staffroom.lua, use_staffroom.lua and
-// CorsixTH/Lua/rooms/staff_room.lua (StaffRoom:onHumanoidEnter).
+// CorsixTH/Lua/rooms/staff_room.lua (StaffRoom:onHumanoidEnter); what resting takes off and what is used next after the
+// community's logic specification.
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using OpenWards.Sim.Entities;
@@ -18,10 +19,10 @@ public enum RestingPhase : byte
     /// <summary>Walking to the sofa, pool table or video game picked.</summary>
     WalkingToObject,
 
-    /// <summary>Using it, getting less tired every round.</summary>
+    /// <summary>Using it: less tired every few ticks on the sofa, after every game of pool or the video game.</summary>
     UsingObject,
 
-    /// <summary>Nothing free to use: meandering two rounds before looking again.</summary>
+    /// <summary>No free sofa: standing about, less tired every few ticks, looking again after each rest.</summary>
     Meandering,
 
     /// <summary>Rested: out of the staff room, back to work.</summary>
@@ -30,8 +31,12 @@ public enum RestingPhase : byte
 
 /// <summary>
 /// A member of staff tired past the hospital's <c>goto_staffroom</c> policy, who has left their work for the nearest staff
-/// room: there they sit on a sofa, play pool (doctors and handymen) or a video game (doctors and nurses), each round of
-/// it taking some fatigue off, and switch now and then, until they are fully rested; then they go back to work (their
+/// room. Every rest there takes fatigue off (<see cref="RestRules.Recovery"/>) and brings a point of mood: every
+/// <see cref="Tiredness.RestPeriod"/> ticks standing (<see cref="RestRules.RestStanding"/>) or on the sofa
+/// (<see cref="RestRules.RestSofa"/>), a whole game of the
+/// video game (<see cref="RestRules.RestGame"/>, doctors and nurses) or of pool (<see cref="RestRules.RestSnooker"/>,
+/// doctors and handymen). After every rest they choose again: one time in ten pool, one time in ten the video game, if
+/// there is a free one, else a sofa, else standing. Fully rested, their discontent halves and they go back to work (their
 /// usual behaviour again, free for any room).
 /// </summary>
 public sealed class RestingBehaviour : HumanoidBehaviour
@@ -71,7 +76,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
 
     private Meandering Meander { get; init; } = new();
 
-    /// <summary>Rounds of the object left before thinking of another (<c>obj_use_time</c>).</summary>
+    /// <summary>Rounds of pool or the video game left in the game (<c>obj_use_time</c>).</summary>
     private int _useTime;
 
     /// <summary>The object picked to go to next once the current use ends, or 0 (<c>next_target_obj</c>).</summary>
@@ -79,11 +84,14 @@ public sealed class RestingBehaviour : HumanoidBehaviour
 
     private int _meanders;
 
+    /// <summary>Ticks since the last rest standing or on the sofa (<see cref="Tiredness.RestPeriod"/>).</summary>
+    private int _restTicks;
+
     internal override void Update(Simulation simulation, Humanoid humanoid)
     {
         if (simulation.FindEntity(RoomId) is not Room { IsActive: true } room || simulation.FindEntity(room.DoorId) is not RoomDoor door)
         {
-            BackToWork(humanoid);
+            BackToWork(simulation, humanoid);
             return;
         }
 
@@ -94,7 +102,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
                 {
                     if (!humanoid.WalkTo(simulation, door.InsideTile(room.Area)))
                     {
-                        BackToWork(humanoid);
+                        BackToWork(simulation, humanoid);
                     }
 
                     return;
@@ -106,7 +114,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
                     queue.VisitorCount++;
                 }
 
-                PickNext(simulation, humanoid, room, previousType: null);
+                PickNext(simulation, humanoid, room);
                 break;
             case RestingPhase.WalkingToObject:
                 if (simulation.FindEntity(TargetId) is RoomObject target && humanoid.Tile == RoomVisits.UseTile(simulation, target))
@@ -117,7 +125,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
                 }
                 else
                 {
-                    PickNext(simulation, humanoid, room, previousType: null);
+                    PickNext(simulation, humanoid, room);
                 }
 
                 break;
@@ -125,29 +133,33 @@ public sealed class RestingBehaviour : HumanoidBehaviour
                 UseStep(simulation, humanoid, room, door);
                 break;
             case RestingPhase.Meandering:
-                Meander.Update(simulation, humanoid, loop: () =>
+                Meander.Update(simulation, humanoid, loop: () => false);
+                if (++_restTicks >= Tiredness.RestPeriod(humanoid))
                 {
-                    if (--_meanders > 0)
+                    _restTicks = 0;
+                    if (Rest(simulation, humanoid, simulation.Rules.Tiredness.Rest.RestStanding))
                     {
-                        return false;
+                        Leave(simulation, humanoid, room, door);
                     }
+                    else
+                    {
+                        PickNext(simulation, humanoid, room);
+                    }
+                }
 
-                    PickNext(simulation, humanoid, room, previousType: null);
-                    return true;
-                });
                 break;
             case RestingPhase.Leaving:
                 if (room.Area.Contains(humanoid.Tile))
                 {
                     if (!humanoid.WalkTo(simulation, RoomVisits.OutsideTile(room, door)))
                     {
-                        BackToWork(humanoid);
+                        BackToWork(simulation, humanoid);
                     }
 
                     return;
                 }
 
-                BackToWork(humanoid);
+                BackToWork(simulation, humanoid);
                 if (ReturnRoomId != 0)
                 {
                     // Back to the research department or training room if it still has room for them.
@@ -159,37 +171,29 @@ public sealed class RestingBehaviour : HumanoidBehaviour
     }
 
     /// <summary>
-    /// <c>use_staffroom</c>'s loop callback: a round takes the object's relaxation off the fatigue; rested, they leave;
-    /// otherwise, once the use time is up, they think of another object, and go to it if it is a different kind.
+    /// <c>use_staffroom</c>'s loop callback: a cycle on the sofa is a rest, pool and the video game rest at the end of a
+    /// game; rested, they leave; otherwise they choose again, and go on if it is the same object.
     /// </summary>
     private void UseStep(Simulation simulation, Humanoid humanoid, Room room, RoomDoor door)
     {
         var target = simulation.FindEntity(TargetId) as RoomObject;
         switch (Use?.Update(simulation, humanoid) ?? ObjectUseEvent.Done)
         {
-            case ObjectUseEvent.Loop:
-                humanoid.Fatigue = Math.Max(0, humanoid.Fatigue - Relaxation(target?.ObjectType));
-                if (humanoid.Fatigue == 0)
+            case ObjectUseEvent.Loop when _nextTargetId == 0 && Phase == RestingPhase.UsingObject && target?.ObjectType is PoolTable or VideoGame:
+                if (--_useTime > 0)
                 {
-                    // Rested: get up, then leave. A full rest halves the discontent (the specification's resign count).
-                    humanoid.Discontent /= 2;
-                    Use!.Interrupt();
-                    _nextTargetId = 0;
-                    return;
+                    break;
                 }
 
-                if (--_useTime == 0)
+                var rules = simulation.Rules.Tiredness.Rest;
+                AfterRest(simulation, humanoid, room, target, target.ObjectType == PoolTable ? rules.RestSnooker : rules.RestGame);
+                break;
+            case ObjectUseEvent.None or ObjectUseEvent.Loop when _nextTargetId == 0 && Phase == RestingPhase.UsingObject && Use is not null:
+                // On the sofa: a rest every eight frames of the sitting animation.
+                if (++_restTicks >= Tiredness.RestPeriod(humanoid))
                 {
-                    var next = Decide(simulation, humanoid, room, target?.ObjectType);
-                    if (next is null || next.ObjectType == target?.ObjectType)
-                    {
-                        _useTime = UseTime(simulation, target?.ObjectType ?? Sofa);
-                    }
-                    else
-                    {
-                        _nextTargetId = next.Id;
-                        Use!.Interrupt();
-                    }
+                    _restTicks = 0;
+                    AfterRest(simulation, humanoid, room, target, simulation.Rules.Tiredness.Rest.RestSofa);
                 }
 
                 break;
@@ -197,17 +201,19 @@ public sealed class RestingBehaviour : HumanoidBehaviour
                 Use = null;
                 if (Phase == RestingPhase.Leaving || humanoid.Fatigue == 0)
                 {
-                    TargetId = 0;
-                    Phase = RestingPhase.Leaving;
-                    humanoid.WalkTo(simulation, RoomVisits.OutsideTile(room, door));
+                    Leave(simulation, humanoid, room, door);
                 }
                 else if (simulation.FindEntity(_nextTargetId) is RoomObject following)
                 {
                     GoTo(simulation, humanoid, following);
                 }
+                else if (_nextTargetId < 0)
+                {
+                    Stand();
+                }
                 else
                 {
-                    PickNext(simulation, humanoid, room, target?.ObjectType);
+                    PickNext(simulation, humanoid, room);
                 }
 
                 _nextTargetId = 0;
@@ -215,44 +221,104 @@ public sealed class RestingBehaviour : HumanoidBehaviour
         }
     }
 
-    private void PickNext(Simulation simulation, Humanoid humanoid, Room room, string? previousType)
+    /// <summary>
+    /// After a rest on <paramref name="target"/>: rested, they get up to leave; otherwise they choose again, and go on if
+    /// it is the same object.
+    /// </summary>
+    private void AfterRest(Simulation simulation, Humanoid humanoid, Room room, RoomObject? target, int value)
+    {
+        if (Rest(simulation, humanoid, value))
+        {
+            Phase = RestingPhase.Leaving;
+            Use!.Interrupt();
+            return;
+        }
+
+        var next = Decide(simulation, humanoid, room);
+        if (next is not null && next.Id == target?.Id)
+        {
+            _useTime = UseTime(simulation, next.ObjectType);
+        }
+        else
+        {
+            // Another object, or standing about when no sofa is free.
+            _nextTargetId = next?.Id ?? -1;
+            Use!.Interrupt();
+        }
+    }
+
+    /// <summary>
+    /// A rest worth <paramref name="value"/>: fatigue down by <see cref="RestRules.Recovery"/>, mood up a point. Fully
+    /// rested, the discontent halves (the specification's resign count).
+    /// </summary>
+    /// <returns>Whether they are now fully rested.</returns>
+    private static bool Rest(Simulation simulation, Humanoid humanoid, int value)
+    {
+        var fatigue = (int)decimal.Floor(humanoid.Fatigue * 1000);
+        humanoid.Fatigue = Math.Max(0, humanoid.Fatigue - (simulation.Rules.Tiredness.Rest.Recovery(value, fatigue) / 1000m));
+        Feelings.ChangeHappiness(simulation, humanoid, 1m / PatientNeeds.MaxPoints);
+        if (humanoid.Fatigue > 0)
+        {
+            return false;
+        }
+
+        humanoid.Discontent /= 2;
+        return true;
+    }
+
+    private void Leave(Simulation simulation, Humanoid humanoid, Room room, RoomDoor door)
     {
         Use = null;
-        if (Decide(simulation, humanoid, room, previousType) is { } placed)
+        TargetId = 0;
+        Phase = RestingPhase.Leaving;
+        humanoid.WalkTo(simulation, RoomVisits.OutsideTile(room, door));
+    }
+
+    private void PickNext(Simulation simulation, Humanoid humanoid, Room room)
+    {
+        Use = null;
+        if (Decide(simulation, humanoid, room) is { } placed)
         {
             GoTo(simulation, humanoid, placed);
             return;
         }
 
-        // Nothing free: MeanderAction():setCount(2), then look again.
+        Stand();
+    }
+
+    /// <summary>No free sofa: standing about (<c>MeanderAction</c>).</summary>
+    private void Stand()
+    {
+        Use = null;
         TargetId = 0;
         Phase = RestingPhase.Meandering;
-        _meanders = 2;
+        _meanders = 1;
+        _restTicks = 0;
         Meander.Reset();
     }
 
     private void GoTo(Simulation simulation, Humanoid humanoid, RoomObject placed)
     {
         TargetId = placed.Id;
+        _restTicks = 0;
         Phase = RestingPhase.WalkingToObject;
         humanoid.WalkTo(simulation, RoomVisits.UseTile(simulation, placed));
     }
 
     /// <summary>
-    /// <c>decide_next_target</c>: usually the sofa; two times in ten a doctor or handyman picks the pool table, and two in
-    /// ten a doctor or nurse the video game, unless that was the last thing used; the nearest free one of the kind.
+    /// What to rest on next: one time in ten pool (doctors and handymen), one time in ten the video game (doctors and
+    /// nurses), if a free one is in the room, else the nearest free sofa, else nothing (standing about).
     /// </summary>
-    private RoomObject? Decide(Simulation simulation, Humanoid humanoid, Room room, string? current)
+    private RoomObject? Decide(Simulation simulation, Humanoid humanoid, Room room)
     {
-        var chance = simulation.Random.NextInclusive(1, 10);
+        var chance = simulation.Random.Next(10);
         var staffClass = humanoid.Profile?.Class;
         var type = Sofa;
-        if (staffClass is StaffClass.Doctor or StaffClass.Handyman && current != PoolTable && chance <= 2)
+        if (chance == 0 && staffClass is StaffClass.Doctor or StaffClass.Handyman)
         {
             type = PoolTable;
         }
-
-        if (staffClass is StaffClass.Doctor or StaffClass.Nurse && current != VideoGame && chance is > 2 and <= 4)
+        else if (chance == 1 && staffClass is StaffClass.Doctor or StaffClass.Nurse)
         {
             type = VideoGame;
         }
@@ -267,27 +333,35 @@ public sealed class RestingBehaviour : HumanoidBehaviour
             }
         }
 
-        return simulation.Entities.OfType<RoomObject>()
-            .Where(o => o.RoomId == room.Id && o.ObjectType == type && !taken.Contains(o.Id))
+        taken.Remove(0);
+        return Nearest(type) ?? (type != Sofa ? Nearest(Sofa) : null);
+
+        // The object in use counts first, so that a rest on the sofa goes on there.
+        RoomObject? Nearest(string wanted) => simulation.FindEntity(TargetId) is RoomObject { IsDestroyed: false } current && current.ObjectType == wanted
+            ? current
+            : simulation.Entities.OfType<RoomObject>()
+            .Where(o => o.RoomId == room.Id && o.ObjectType == wanted && !o.IsDestroyed && !taken.Contains(o.Id))
             .OrderBy(o => Math.Abs(o.Tile.X - humanoid.Tile.X) + Math.Abs(o.Tile.Y - humanoid.Tile.Y))
             .ThenBy(o => o.Id)
             .FirstOrDefault();
     }
 
-    /// <summary><c>generate_use_time</c>: rounds on the sofa 50 to 80, at the pool table 2 to 5, at the video game 2 to 15.</summary>
+    /// <summary>
+    /// <c>generate_use_time</c>: the rounds of a game, at the pool table 2 to 5, at the video game 2 to 15; on the sofa
+    /// every cycle is a rest.
+    /// </summary>
     private static int UseTime(Simulation simulation, string type) => type switch
     {
         PoolTable => simulation.Random.NextInclusive(2, 5),
         VideoGame => simulation.Random.NextInclusive(2, 15),
-        _ => simulation.Random.NextInclusive(50, 80),
+        _ => 1,
     };
 
-    /// <summary>The fatigue a round of the object takes off (<c>relaxation</c>).</summary>
-    private static decimal Relaxation(string? type) => type is PoolTable or VideoGame ? 0.05m : 0.001m;
-
     /// <summary>Rested (or the staff room gone): back to their usual work, free for any room.</summary>
-    private void BackToWork(Humanoid humanoid)
+    private void BackToWork(Simulation simulation, Humanoid humanoid)
     {
+        // The pace is worked out again after a rest.
+        Tiredness.UpdateSpeed(simulation, humanoid);
         humanoid.Behaviour = StaffHiring.NewBehaviour(humanoid.Profile!.Class);
         if (humanoid.Behaviour is HandymanBehaviour handyman)
         {
@@ -307,6 +381,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
         writer.WriteInt32(_nextTargetId);
         writer.WriteInt32(_meanders);
         writer.WriteInt32(ReturnRoomId);
+        writer.WriteInt32(_restTicks);
     }
 
     internal static RestingBehaviour ReadState(SimReader reader)
@@ -323,6 +398,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
         resting._nextTargetId = reader.ReadInt32();
         resting._meanders = reader.ReadInt32();
         resting.ReturnRoomId = reader.Version is 0 or >= 74 ? reader.ReadInt32() : 0;
+        resting._restTicks = reader.Version is 0 or >= 114 ? reader.ReadInt32() : 0;
         return resting;
     }
 }

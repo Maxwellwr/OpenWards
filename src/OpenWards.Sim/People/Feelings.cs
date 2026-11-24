@@ -92,10 +92,6 @@ internal static class Feelings
             if (humanoid.Profile!.Class != StaffClass.Receptionist)
             {
                 OnEndDayStaff(simulation, humanoid, humanoid.Profile);
-                if (humanoid.Profile.Class == StaffClass.Doctor)
-                {
-                    Tiredness.CheckCrazy(simulation, humanoid);
-                }
             }
 
             return;
@@ -157,9 +153,8 @@ internal static class Feelings
     /// <summary>The staff's part of <c>Staff:tickDay</c>.</summary>
     private static void OnEndDayStaff(Simulation simulation, Humanoid humanoid, StaffProfile profile)
     {
-        // Pay against the expected wage counts once a month (StaffEmployment.OnEndMonth), warmth every ModifyFreq ticks.
-        // Working while tired makes unhappy, resting happier.
-        Tiredness.OnEndDay(simulation, humanoid);
+        // Pay against the expected wage counts once a month (StaffEmployment.OnEndMonth), warmth and fatigue every
+        // ModifyFreq ticks (PatientNeeds, Tiredness.Modify).
 
         // It is nice to see plants, but dead plants make unhappy; a random one of those nearby counts.
         var plants = ObjectsInSight(simulation, humanoid, "plant");

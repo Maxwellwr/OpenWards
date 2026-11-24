@@ -263,7 +263,7 @@ public class LevelRulesLoaderTests
         var rules = LevelRulesLoader.FromConfig(config, null, BaseGameContent.Create());
 
         // A threshold the files leave out takes the original game's value for an unset one (VeryTired 1200).
-        Assert.Equal(new TirednessRules(500, 1200, 900, 200), rules.Tiredness);
+        Assert.Equal(new TirednessRules(500, 1200, 900, 200) { Rest = RestRules.Unset }, rules.Tiredness);
         Assert.Equal(TirednessRules.Unset, LevelRulesLoader.FromConfig(LevelConfig.Parse([]), null, BaseGameContent.Create()).Tiredness);
     }
 
@@ -274,9 +274,10 @@ public class LevelRulesLoaderTests
         var content = BaseGameContent.Create();
 
         // The difficulty files set all four thresholds: NotTired 400 / 300 / 200 for easy, medium and hard.
-        Assert.Equal(new TirednessRules(700, 800, 900, 400), LevelRulesLoader.LoadOriginal(install, "LEVEL.L1", content, Sim.Economy.Difficulty.Easy).Tiredness);
+        // And how fast staff tire and rest.
+        Assert.Equal(new TirednessRules(700, 800, 900, 400) { Rest = new RestRules(1, 4, 10, 80, 60, 500, 4) }, LevelRulesLoader.LoadOriginal(install, "LEVEL.L1", content, Sim.Economy.Difficulty.Easy).Tiredness);
         Assert.Equal(new TirednessRules(600, 700, 800, 300), LevelRulesLoader.LoadOriginal(install, "LEVEL.L1", content, Sim.Economy.Difficulty.Medium).Tiredness);
-        Assert.Equal(new TirednessRules(600, 700, 800, 200), LevelRulesLoader.LoadOriginal(install, "LEVEL.L1", content, Sim.Economy.Difficulty.Hard).Tiredness);
+        Assert.Equal(new TirednessRules(600, 700, 800, 200) { Rest = new RestRules(1, 3, 8, 60, 40, 400, 3) }, LevelRulesLoader.LoadOriginal(install, "LEVEL.L1", content, Sim.Economy.Difficulty.Hard).Tiredness);
     }
 
     [Fact]

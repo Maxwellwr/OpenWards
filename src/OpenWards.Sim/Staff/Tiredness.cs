@@ -1,5 +1,6 @@
-// How staff tire, ported from CorsixTH CorsixTH/Lua/entities/humanoids/staff.lua (Staff:tick, tickDay, isTiring,
-// tire, checkIfNeedRest, isVeryTired, isCrackUpTired, updateSpeed). The thresholds' defaults are the original game's.
+// How staff tire, after the community's logic specification; going to the staff room and walking speed ported from
+// CorsixTH CorsixTH/Lua/entities/humanoids/staff.lua (checkIfNeedRest, isVeryTired, isCrackUpTired, updateSpeed).
+// The thresholds' defaults are the original game's.
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using OpenWards.Sim.Economy;
@@ -22,6 +23,9 @@ namespace OpenWards.Sim.Staff;
 /// </remarks>
 public sealed record TirednessRules(int Tired, int VeryTired, int CrackUpTired, int NotTired = TirednessRules.UnsetNotTired)
 {
+    /// <summary>How fast staff tire at work and rest in the staff room; by default the medium difficulty's.</summary>
+    public RestRules Rest { get; init; } = RestRules.Default;
+
     /// <summary>The original game's <c>gbv.NotTired</c> when the level files set none.</summary>
     public const int UnsetNotTired = 400;
 
@@ -29,7 +33,7 @@ public sealed record TirednessRules(int Tired, int VeryTired, int CrackUpTired, 
     public static readonly TirednessRules Default = new(600, 700, 800, 300);
 
     /// <summary>The original game's thresholds when the level files set none: Tired 800, VeryTired 1200, CrackUpTired 3000, NotTired 400.</summary>
-    public static readonly TirednessRules Unset = new(800, 1200, 3000, UnsetNotTired);
+    public static readonly TirednessRules Unset = new(800, 1200, 3000, UnsetNotTired) { Rest = RestRules.Unset };
 
     internal void Write(SimWriter writer)
     {
@@ -37,126 +41,204 @@ public sealed record TirednessRules(int Tired, int VeryTired, int CrackUpTired, 
         writer.WriteInt32(VeryTired);
         writer.WriteInt32(CrackUpTired);
         writer.WriteInt32(NotTired);
+        Rest.Write(writer);
     }
 
     internal static TirednessRules Read(SimReader reader) =>
-        new(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.Version is 0 or >= 107 ? reader.ReadInt32() : Default.NotTired);
+        new(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.Version is 0 or >= 107 ? reader.ReadInt32() : Default.NotTired)
+        {
+            Rest = reader.Version is 0 or >= 114 ? RestRules.Read(reader) : RestRules.Default,
+        };
 }
 
 /// <summary>
-/// Staff tire while they work: every hour in a room (other than resting in a staff room), or anywhere for a handyman,
-/// adds <see cref="TirePerHour"/> to their fatigue and costs a little happiness. Tired staff work worse and grow
-/// unhappy, all the more without a staff room to rest in.
+/// How fast staff tire and rest, in thousandths of fatigue: work adds <paramref name="WorkLight"/> every
+/// <see cref="People.PatientNeeds.ModifyFreq"/> ticks (<c>gbv.WorkLight</c>); in the staff room a cycle of standing takes
+/// <paramref name="RestStanding"/> off (<c>gbv.RestStanding</c>), one on the sofa <paramref name="RestSofa"/>
+/// (<c>gbv.RestSofa</c>), a game of the video game <paramref name="RestGame"/> (<c>gbv.RestGame</c>) and one of pool
+/// <paramref name="RestSnooker"/> (<c>gbv.RestSnooker</c>), less while more tired than half of
+/// <paramref name="RecoveryFactor"/> (<c>gbv.RecoveryFactor</c>), though never less than
+/// <paramref name="RecoveryMinimum"/> (<c>gbv.RecoveryMinimum</c>).
 /// </summary>
 /// <remarks>
-/// A member of staff on call (CorsixTH's <c>on_call</c>: answering one of the dispatcher's calls, such as a handyman sent
-/// to sweep or water in the staff room) neither rests nor stops tiring there. Here a handyman is on call while he has a
-/// job (anything but meandering or leaving a room once done), a nurse while she goes to vaccinate, and a doctor or nurse
-/// while walking to the room that sent for them.
+/// The difficulty files set them (easy, medium, hard): WorkLight 1, RestStanding 4 / 3 / 3, RestSofa 10 / 8 / 8, RestGame
+/// 80 / 60 / 60, RestSnooker 60 / 40 / 40, RecoveryFactor 500 / 450 / 400, RecoveryMinimum 4 / 3 / 3.
 /// </remarks>
+public sealed record RestRules(int WorkLight, int RestStanding, int RestSofa, int RestGame, int RestSnooker, int RecoveryFactor, int RecoveryMinimum)
+{
+    /// <summary>The medium difficulty's (<c>FULL00.SAM</c>).</summary>
+    public static readonly RestRules Default = new(1, 3, 8, 60, 40, 450, 3);
+
+    /// <summary>When the level files set none: the original game's built-in WorkLight of 2, otherwise the medium ones.</summary>
+    public static readonly RestRules Unset = Default with { WorkLight = 2 };
+
+    /// <summary>
+    /// What a rest worth <paramref name="value"/> takes off <paramref name="fatigue"/> (both in thousandths): all of it,
+    /// or, while more tired than half of <see cref="RecoveryFactor"/>, value × RecoveryFactor / fatigue, at least
+    /// <see cref="RecoveryMinimum"/>.
+    /// </summary>
+    public int Recovery(int value, int fatigue) =>
+        fatigue * 2 > RecoveryFactor ? Math.Max(RecoveryMinimum, value * RecoveryFactor / fatigue) : value;
+
+    internal void Write(SimWriter writer)
+    {
+        writer.WriteInt32(WorkLight);
+        writer.WriteInt32(RestStanding);
+        writer.WriteInt32(RestSofa);
+        writer.WriteInt32(RestGame);
+        writer.WriteInt32(RestSnooker);
+        writer.WriteInt32(RecoveryFactor);
+        writer.WriteInt32(RecoveryMinimum);
+    }
+
+    internal static RestRules Read(SimReader reader) =>
+        new(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32());
+}
+
+/// <summary>
+/// Staff tire while they work, after the community's logic specification: every <see cref="PatientNeeds.ModifyFreq"/>
+/// ticks a nurse, doctor or handyman who is neither in a staff room nor standing idle (with nowhere to work) gains
+/// <see cref="RestRules.WorkLight"/> thousandths of fatigue, whatever they are doing. In the same update fatigue above
+/// <see cref="TirednessRules.CrackUpTired"/> costs a point of mood (and may make a doctor crack up), fatigue below
+/// <see cref="TirednessRules.NotTired"/> brings one; in between it does not matter. Receptionists never tire. Staff more
+/// tired than their hospital's staff room policy go and rest (<see cref="RestingBehaviour"/>) until fully rested.
+/// </summary>
 internal static class Tiredness
 {
-    /// <summary>What an hour of work adds to fatigue (<c>self:tire(0.000090)</c>).</summary>
-    internal const decimal TirePerHour = 0.000090m;
-
     /// <summary>The staff room's room type.</summary>
     internal const string StaffRoomType = "staff_room";
 
+    /// <summary>One time in this many, a doctor tired past <see cref="TirednessRules.CrackUpTired"/> cracks up.</summary>
+    internal const int CrackUpChance = 1000;
+
     private const string TrainingRoomType = "training";
 
-    /// <summary>One hour of tiring (<c>Staff:tick</c>'s <c>isTiring</c> and <c>tire</c>).</summary>
-    internal static void TireIfWorking(Simulation simulation, Humanoid humanoid)
+    /// <summary>
+    /// A nurse's, doctor's or handyman's fatigue in the update every <see cref="PatientNeeds.ModifyFreq"/> ticks: working
+    /// tires; past the thresholds it moves the mood; resting and no longer very tired, the tired look goes and a doctor
+    /// who cracked up comes round.
+    /// </summary>
+    internal static void Modify(Simulation simulation, Humanoid humanoid)
     {
-        if (IsTiring(simulation, humanoid))
-        {
-            // Staff:tire: the no rest cheat keeps the hospital's staff fresh, but not happy.
-            if (!HasNoRestCheat(simulation, humanoid))
-            {
-                humanoid.Fatigue = Math.Min(humanoid.Fatigue + TirePerHour, 1m);
-            }
+        var rules = simulation.Rules.Tiredness;
+        var inStaffRoom = RoomOf(simulation, humanoid) is { RoomType: StaffRoomType };
 
-            Feelings.ChangeHappiness(simulation, humanoid, -0.00002m);
+        // The no rest cheat keeps the hospital's staff fresh.
+        if (!inStaffRoom && !IsIdle(humanoid) && !HasNoRestCheat(simulation, humanoid))
+        {
+            humanoid.Fatigue = Math.Min(humanoid.Fatigue + (rules.Rest.WorkLight / 1000m), 1m);
         }
-    }
 
-    /// <summary>The fatigue part of <c>Staff:tickDay</c>, for staff other than receptionists.</summary>
-    internal static void OnEndDay(Simulation simulation, Humanoid humanoid)
-    {
-        var fatigue = humanoid.Fatigue;
-        if (IsVeryTired(simulation, fatigue) || !IsResting(simulation, humanoid))
+        var fatigue = humanoid.Fatigue * 1000;
+        if (fatigue > rules.CrackUpTired)
         {
-            // Working when you should be taking a break makes you unhappy.
-            if (fatigue >= GoToStaffRoom(simulation, humanoid))
+            Feelings.ChangeHappiness(simulation, humanoid, -1m / PatientNeeds.MaxPoints);
+            if (simulation.Random.Next(CrackUpChance) == 0)
             {
-                Feelings.ChangeHappiness(simulation, humanoid, -0.02m);
-            }
-
-            // So does getting tired.
-            if (fatigue >= 0.5m)
-            {
-                Feelings.ChangeHappiness(simulation, humanoid, -0.01m);
+                CrackUp(humanoid);
             }
         }
-        else
+        else if (fatigue < rules.NotTired)
         {
-            // Resting and no longer very tired: things can only get better.
+            Feelings.ChangeHappiness(simulation, humanoid, 1m / PatientNeeds.MaxPoints);
+        }
+
+        if (inStaffRoom && !IsVeryTired(simulation, humanoid.Fatigue))
+        {
             humanoid.IsTiredMoodShown = false;
-            Feelings.ChangeHappiness(simulation, humanoid, 0.006m);
+            ComeRound(humanoid);
+        }
+
+        // The pace changes only at the middle of a tile.
+        if (!humanoid.IsStepping)
+        {
+            UpdateSpeed(simulation, humanoid);
         }
     }
+
+    /// <summary>The frames of the resting animation between two rests standing or on the sofa.</summary>
+    internal const int RestFrames = 8;
 
     /// <summary>
-    /// <c>Doctor:tickDay</c>'s overwork: a very tired doctor may go crazy (one day in 300); one who is no longer very
-    /// tired comes to their senses while resting (<c>Doctor:setCrazy</c>).
+    /// The ticks between two rests standing or on the sofa: eight frames of the one-frame resting animation, each lasting
+    /// <see cref="Humanoid.FrameTicks"/>.
     /// </summary>
-    internal static void CheckCrazy(Simulation simulation, Humanoid humanoid)
+    internal static int RestPeriod(Humanoid humanoid) => RestFrames * humanoid.FrameTicks;
+
+    /// <summary>
+    /// Standing idle, with nowhere to work: a doctor or nurse without a room (and a nurse not off to vaccinate), a handyman
+    /// without a job.
+    /// </summary>
+    internal static bool IsIdle(Humanoid humanoid) => humanoid.Behaviour switch
     {
-        if (!IsVeryTired(simulation, humanoid.Fatigue))
-        {
-            if (humanoid.IsCrazy && IsResting(simulation, humanoid) && humanoid.Layers[Humanoid.StaffLayer] >= 5)
-            {
-                humanoid.SetLayer(Humanoid.StaffLayer, (byte)(humanoid.Layers[Humanoid.StaffLayer] - 4));
-                humanoid.IsCrazy = false;
-            }
-        }
-        else if (simulation.Random.NextInclusive(1, 300) == 1 && !humanoid.IsCrazy && humanoid.Profile is { } profile)
+        DoctorBehaviour { Phase: DoctorPhase.Idle } => true,
+        NurseBehaviour { Phase: NursePhase.Idle, VaccinatePatientId: 0 } => true,
+        HandymanBehaviour { Phase: HandymanPhase.Meandering } => true,
+        _ => false,
+    };
+
+    /// <summary>A doctor cracks up: they look crazy (<c>Doctor:setCrazy</c>). Only doctors have the look.</summary>
+    private static void CrackUp(Humanoid humanoid)
+    {
+        if (!humanoid.IsCrazy && humanoid.Profile is { Class: StaffClass.Doctor } profile)
         {
             humanoid.SetLayer(Humanoid.StaffLayer, (byte)(profile.Layer5 + 4));
             humanoid.IsCrazy = true;
         }
     }
 
+    /// <summary>A doctor who cracked up is themselves again.</summary>
+    private static void ComeRound(Humanoid humanoid)
+    {
+        if (humanoid.IsCrazy && humanoid.Layers[Humanoid.StaffLayer] >= 5)
+        {
+            humanoid.SetLayer(Humanoid.StaffLayer, (byte)(humanoid.Layers[Humanoid.StaffLayer] - 4));
+            humanoid.IsCrazy = false;
+        }
+    }
+
     /// <summary>
-    /// <c>Staff:updateSpeed</c>, at the end of every tick: juniors walk slowly and consultants fast; very tired staff
-    /// one step slower and those tired enough to crack up two (receptionists never); a doctor in the training room
-    /// slowly; with the no-rest cheat everyone fast.
+    /// A member of staff's pace (the maintainer's description of the original): how long a frame of their animations lasts
+    /// (<see cref="Humanoid.FrameTicks"/>) and how many ticks a tile of walking takes (16 slow, 8, 4 fast), by skill and
+    /// fatigue. Up to <see cref="StaffRules.DoctorThreshold"/> skill: frame 2, tile 16. Below
+    /// <see cref="StaffRules.ConsultantThreshold"/>: frame 1, tile 8, but 2 and 16 once very tired. From it: frame 1, tile
+    /// 4; very tired tile 8; past <see cref="TirednessRules.CrackUpTired"/> frame 2, tile 16. In the training room a doctor
+    /// is always at frame 2, tile 16; receptionists keep a patient's pace (frame 1, tile 8); with the no-rest cheat
+    /// everyone is fast. Worked out again in the update every <see cref="PatientNeeds.ModifyFreq"/> ticks while at the
+    /// middle of a tile (<see cref="Modify"/>), after a rest, and when placed.
     /// </summary>
     internal static void UpdateSpeed(Simulation simulation, Humanoid humanoid)
     {
         var profile = humanoid.Profile!;
-        var level = profile.IsJunior ? 1 : profile.IsConsultant ? 3 : 2;
-        if (RoomOf(simulation, humanoid) is { RoomType: TrainingRoomType } && profile.Class == StaffClass.Doctor)
+        var staff = simulation.Rules.Staff;
+        var tiredness = simulation.Rules.Tiredness;
+        var fatigue = humanoid.Fatigue * 1000;
+        int frame, tile;
+        if (HasNoRestCheat(simulation, humanoid))
         {
-            level = 1;
+            (frame, tile) = (1, 4);
         }
-        else if (HasNoRestCheat(simulation, humanoid))
+        else if (profile.Class == StaffClass.Receptionist)
         {
-            level = 3;
+            (frame, tile) = (1, 8);
         }
-        else if (profile.Class != StaffClass.Receptionist)
+        else if (profile.Skill <= staff.DoctorThreshold
+            || (profile.Class == StaffClass.Doctor && RoomOf(simulation, humanoid) is { RoomType: TrainingRoomType }))
         {
-            if (IsCrackUpTired(simulation, humanoid.Fatigue))
-            {
-                level -= 2;
-            }
-            else if (IsVeryTired(simulation, humanoid.Fatigue))
-            {
-                level--;
-            }
+            (frame, tile) = (2, 16);
+        }
+        else if (profile.Skill < staff.ConsultantThreshold)
+        {
+            (frame, tile) = fatigue > tiredness.VeryTired ? (2, 16) : (1, 8);
+        }
+        else
+        {
+            (frame, tile) = fatigue > tiredness.CrackUpTired ? (2, 16) : fatigue > tiredness.VeryTired ? (1, 8) : (1, 4);
         }
 
-        humanoid.IsFast = level >= 3;
-        humanoid.IsSlow = level <= 1;
+        humanoid.FrameTicks = frame;
+        humanoid.IsFast = tile == 4;
+        humanoid.IsSlow = tile == 16;
     }
 
     private static bool HasNoRestCheat(Simulation simulation, Humanoid humanoid) =>
@@ -194,8 +276,8 @@ internal static class Tiredness
             : simulation.Rules.Tiredness.Tired / 1000m;
 
     /// <summary>
-    /// <c>Staff:checkIfNeedRest</c>: very tired staff lose happiness; tired staff outside a staff room want one, and
-    /// lose happiness every hour while their hospital has none.
+    /// <c>Staff:checkIfNeedRest</c>, every tick: very tired staff look it; staff more tired than the staff room policy
+    /// go and rest once they have finished what they are doing.
     /// </summary>
     internal static void CheckIfNeedRest(Simulation simulation, Humanoid humanoid)
     {
@@ -203,23 +285,20 @@ internal static class Tiredness
         if (IsVeryTired(simulation, humanoid.Fatigue))
         {
             humanoid.IsTiredMoodShown = true;
-            Feelings.ChangeHappiness(simulation, humanoid, -0.0002m);
         }
 
         WantStaffRoom(simulation, humanoid);
     }
 
-    /// <summary>The rest of <c>checkIfNeedRest</c>: a tired member of staff outside a staff room goes to one if they may.</summary>
+    /// <summary>
+    /// The rest of <c>checkIfNeedRest</c>: a member of staff more tired than the policy and outside a staff room goes to
+    /// one if they may, or waits for one to be built.
+    /// </summary>
     internal static void WantStaffRoom(Simulation simulation, Humanoid humanoid)
     {
-        if (humanoid.Fatigue < GoToStaffRoom(simulation, humanoid) || RoomOf(simulation, humanoid) is { RoomType: StaffRoomType })
+        if (humanoid.Fatigue <= GoToStaffRoom(simulation, humanoid) || RoomOf(simulation, humanoid) is { RoomType: StaffRoomType }
+            || humanoid.WaitingForStaffRoom)
         {
-            return;
-        }
-
-        if (humanoid.WaitingForStaffRoom)
-        {
-            Feelings.ChangeHappiness(simulation, humanoid, -0.001m);
             return;
         }
 
@@ -299,37 +378,6 @@ internal static class Tiredness
 
         return best;
     }
-
-    /// <summary>
-    /// <c>Staff:isTiring</c>: in a room, unless resting in a staff room; outside rooms only a handyman tires.
-    /// </summary>
-    private static bool IsTiring(Simulation simulation, Humanoid humanoid)
-    {
-        if (RoomOf(simulation, humanoid) is { } room)
-        {
-            // Being in a staff room is quite refreshing, unless there on call.
-            return room.RoomType != StaffRoomType || IsOnCall(simulation, humanoid);
-        }
-
-        return humanoid.Profile!.Class == StaffClass.Handyman;
-    }
-
-    /// <summary><c>Staff:isResting</c>: in a staff room and not on call.</summary>
-    private static bool IsResting(Simulation simulation, Humanoid humanoid) =>
-        RoomOf(simulation, humanoid) is { RoomType: StaffRoomType } && !IsOnCall(simulation, humanoid);
-
-    /// <summary>
-    /// Whether the member of staff answers a call (<c>on_call</c>): a handyman with a job, a nurse going to vaccinate,
-    /// a doctor or nurse on the way to the room that sent for them.
-    /// </summary>
-    internal static bool IsOnCall(Simulation simulation, Humanoid humanoid) => humanoid.Behaviour switch
-    {
-        HandymanBehaviour handyman => handyman.Phase is not (HandymanPhase.Meandering or HandymanPhase.LeavingRoom),
-        NurseBehaviour { VaccinatePatientId: not 0 } => true,
-        NurseBehaviour { Phase: NursePhase.WalkingToRoom } => true,
-        DoctorBehaviour { Phase: DoctorPhase.WalkingToRoom } => true,
-        _ => false,
-    };
 
     /// <summary><c>Humanoid:getRoom</c>: the room, built or not, whose floor the person stands on.</summary>
     private static Room? RoomOf(Simulation simulation, Humanoid humanoid)

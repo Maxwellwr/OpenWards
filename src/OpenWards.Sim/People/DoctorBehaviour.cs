@@ -1041,7 +1041,7 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
         _sequenceObject = table.Id;
         Phase = DoctorPhase.OtOperating;
         PlayNext(simulation, humanoid);
-        return _sequence.Sum(animation => animation.Length);
+        return _sequence.Sum(humanoid.AnimationTicks);
     }
 
     /// <summary>The operation is over (<c>operatring_theatre_table_after_use</c>): the surgeon meanders, ready again.</summary>
@@ -1192,7 +1192,7 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
             var animation = greens > 0 ? (whites > 1 ? new AnimationRef(2796, 22) : new AnimationRef(2790, 40)) : new AnimationRef(2792, 47);
             humanoid.Type = HumanoidType.Doctor;
             humanoid.SetActionAnimation(simulation, animation, false, screen.Tile, RoomVisits.RenderTile(simulation, screen), screen.Id);
-            _changeTimer = animation.Length;
+            _changeTimer = humanoid.AnimationTicks(animation);
             _changeBack = ChangeBack.Changing;
             return;
         }
@@ -1259,7 +1259,7 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
         var animation = _sequence[0];
         _sequence.RemoveAt(0);
         humanoid.SetActionAnimation(simulation, animation, false, _sequenceTile, _sequenceDrawTile, _sequenceObject);
-        _sequenceTimer = animation.Length;
+        _sequenceTimer = humanoid.AnimationTicks(animation);
     }
 
     /// <summary>GPRoom:doStaffUseCycle: to the cabinet, then the desk.</summary>

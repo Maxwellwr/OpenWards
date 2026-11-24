@@ -67,13 +67,7 @@ internal static class StaffEmployment
         }
 
         Tiredness.CheckIfNeedRest(simulation, humanoid);
-        if (CheckIfWaitedTooLongForRaise(simulation, humanoid))
-        {
-            return;
-        }
-
-        Tiredness.TireIfWorking(simulation, humanoid);
-        Tiredness.UpdateSpeed(simulation, humanoid);
+        CheckIfWaitedTooLongForRaise(simulation, humanoid);
     }
 
     /// <summary>
