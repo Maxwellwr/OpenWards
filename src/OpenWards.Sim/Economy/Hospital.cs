@@ -229,6 +229,12 @@ public sealed class DiseaseCase
     /// <summary>How likely a cure works, in percent (CorsixTH's <c>cure_effectiveness</c>): the drug's rating, otherwise 100.</summary>
     public int CureEffectiveness { get; internal set; } = FullEffectiveness;
 
+    /// <summary>
+    /// Whether the pharmacy has a drug for it: from the start for a disease the level marks <c>Known</c>, otherwise once
+    /// research has found it. Always true for a disease not cured with a drug.
+    /// </summary>
+    public bool DrugAvailable { get; internal set; } = true;
+
     /// <summary>What the drug of each cure costs, or 0 for a disease not cured with a drug (CorsixTH's <c>drug_cost</c>).</summary>
     public int DrugCost { get; internal set; }
 
@@ -834,6 +840,7 @@ public sealed class Hospital
         {
             entry.CureEffectiveness = rules.DrugStartRating;
             entry.DrugCost = rules.DrugStartCost;
+            entry.DrugAvailable = rules.IsKnown(disease.ExpertiseId);
         }
 
         return entry;
@@ -1181,7 +1188,7 @@ public sealed class Hospital
                 && IsRoomDiscovered(disease.Id[DiseaseCatalog.DiagnosisPrefix.Length..]);
         }
 
-        return rules.Frequency(disease) != 0 && PeekCase(disease, rules).Discovered && disease.TreatmentRooms.All(IsRoomDiscovered);
+        return rules.Frequency(disease) != 0 && PeekCase(disease, rules) is { Discovered: true, DrugAvailable: true } && disease.TreatmentRooms.All(IsRoomDiscovered);
     }
 
     internal void AdvisePrice(PriceJudgment judgment, DiseaseCase entry)
@@ -1728,6 +1735,7 @@ public sealed class Hospital
             writer.WriteBool(entry.Reputation is not null);
             writer.WriteInt32(entry.Reputation ?? 0);
             writer.WriteInt32(entry.TurnedAway);
+            writer.WriteBool(entry.DrugAvailable);
         }
 
         Research.Write(writer);
@@ -1927,6 +1935,9 @@ public sealed class Hospital
             var diseaseReputation = reader.ReadInt32();
             entry.Reputation = hasReputation ? diseaseReputation : null;
             entry.TurnedAway = reader.ReadInt32();
+
+            // Version 109 researches drugs; older games keep every drug they had.
+            entry.DrugAvailable = reader.Version is not 0 and < 109 || reader.ReadBool();
             if (DiseaseCatalog.Find(id) is { } disease && !OpenWards.Sim.Research.ResearchDepartment.IsDrugDisease(disease))
             {
                 // Games imported before the fix took the original's 0 for these, and their patients all died.

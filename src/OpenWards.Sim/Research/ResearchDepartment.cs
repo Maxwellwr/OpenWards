@@ -281,7 +281,13 @@ public sealed class ResearchDepartment
 
                 return obj.IsMachine && research.Improvements < MaxImprovements ? ImprovementCost(rules, points, research.Improvements) : null;
             case ResearchTargetKind.Drug when DiseaseCatalog.Find(target.Id) is { } disease && _drugs.ContainsKey(disease.Id):
-                var effectiveness = hospital.PeekCase(disease, rules.Diseases).CureEffectiveness;
+                var entry = hospital.PeekCase(disease, rules.Diseases);
+                if (!entry.DrugAvailable)
+                {
+                    return rules.Research.ExpertiseRequired(disease.ExpertiseId);
+                }
+
+                var effectiveness = entry.CureEffectiveness;
                 return effectiveness < DiseaseCase.FullEffectiveness
                     ? ImprovementCost(rules, rules.Research.ExpertiseRequired(disease.ExpertiseId), effectiveness / 25)
                     : null;
@@ -350,10 +356,37 @@ public sealed class ResearchDepartment
                 if (_drugs[target.Id] >= required)
                 {
                     _drugs[target.Id] = 0;
-                    ImproveDrug(simulation, hospital, target.Id);
+                    if (hospital.CaseOf(DiseaseCatalog.Find(target.Id)!, simulation.Rules.Diseases).DrugAvailable)
+                    {
+                        ImproveDrug(simulation, hospital, target.Id);
+                    }
+                    else
+                    {
+                        DiscoverDrug(simulation, hospital, target.Id);
+                    }
                 }
 
                 break;
+        }
+    }
+
+    /// <summary>
+    /// A new drug: the pharmacy can cure the disease now, with the level's <c>StartRating</c> and <c>StartCost</c>;
+    /// patients waiting for it go to the pharmacy.
+    /// </summary>
+    private static void DiscoverDrug(Simulation simulation, Hospital hospital, string diseaseId)
+    {
+        var entry = hospital.CaseOf(DiseaseCatalog.Find(diseaseId)!, simulation.Rules.Diseases);
+        entry.DrugAvailable = true;
+        entry.CureEffectiveness = simulation.Rules.Diseases.DrugStartRating;
+        entry.DrugCost = simulation.Rules.Diseases.DrugStartCost;
+        foreach (var entity in simulation.Entities)
+        {
+            if (entity is Entities.Humanoid { Behaviour: People.PatientBehaviour { DiseaseId: var disease } patient } humanoid
+                && humanoid.HospitalPlayer == hospital.Player && string.Equals(disease, diseaseId, StringComparison.Ordinal))
+            {
+                patient.OnRoomBuilt("pharmacy");
+            }
         }
     }
 
@@ -448,7 +481,8 @@ public sealed class ResearchDepartment
     }
 
     /// <summary>
-    /// The area's item with the lowest cost above 0: an object of its kind to discover, a known drug not fully effective,
+    /// The area's item with the lowest cost above 0: an object of its kind to discover, a new drug for a known disease or
+    /// else a drug not fully effective,
     /// a discovered machine with improvements left, or the item of the disease the player concentrates on.
     /// </summary>
     private ResearchTarget FindTarget(Simulation simulation, Hospital hospital, ResearchCategory category)
@@ -478,11 +512,20 @@ public sealed class ResearchDepartment
 
                 break;
             case ResearchCategory.Drugs:
-                foreach (var disease in rules.Diseases.AvailableDiseases())
+                // New drugs for known diseases first; improvements once there is none to find.
+                foreach (var findNew in new[] { true, false })
                 {
-                    if (_drugs.ContainsKey(disease.Id) && hospital.PeekCase(disease, rules.Diseases).Discovered)
+                    foreach (var disease in rules.Diseases.AvailableDiseases())
                     {
-                        Consider(ResearchTarget.Drug(disease.Id));
+                        if (_drugs.ContainsKey(disease.Id) && hospital.PeekCase(disease, rules.Diseases) is { Discovered: true } entry && entry.DrugAvailable != findNew)
+                        {
+                            Consider(ResearchTarget.Drug(disease.Id));
+                        }
+                    }
+
+                    if (!best.IsNone)
+                    {
+                        break;
                     }
                 }
 

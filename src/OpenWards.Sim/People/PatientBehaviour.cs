@@ -2184,8 +2184,7 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         {
             GoHome(simulation, humanoid, ReputationChange.Kicked);
         }
-        else if (percent * 10 >= policies.GuessCure && percent > 0
-            && disease.TreatmentRooms.All(roomType => FindRoom(simulation, humanoid, roomType) is not null))
+        else if (percent * 10 >= policies.GuessCure && percent > 0 && IsCureAvailable(simulation, humanoid, disease))
         {
             PatientCare.GuessDiagnosis(simulation, humanoid, this, disease);
             if (PatientCare.AgreesToPay(simulation, humanoid, this, disease))
@@ -2215,13 +2214,18 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     private void SeekTreatmentRoom(Simulation simulation, Humanoid humanoid)
     {
         if (Disease is not { } disease || CureRoomsVisited >= disease.TreatmentRooms.Count
-            || (CureRoomsVisited == 0 && disease.TreatmentRooms.Any(roomType => FindRoom(simulation, humanoid, roomType) is null))
+            || (CureRoomsVisited == 0 && !IsCureAvailable(simulation, humanoid, disease))
             || !GoToBestRoom(simulation, humanoid, disease.TreatmentRooms[CureRoomsVisited]))
         {
             // Emergency patients do not ask; they wait for the room to be built.
             StartWaiting(simulation, humanoid, EmergencyIndex > 0 ? PatientQuestion.None : PatientQuestion.NoTreatmentRoom);
         }
     }
+
+    /// <summary>Every room of the treatment is there and, for a drug, research has found it.</summary>
+    private static bool IsCureAvailable(Simulation simulation, Humanoid humanoid, DiseaseDefinition disease) =>
+        disease.TreatmentRooms.All(roomType => FindRoom(simulation, humanoid, roomType) is not null)
+        && simulation.Hospitals[humanoid.HospitalPlayer].CaseOf(disease, simulation.Rules.Diseases).DrugAvailable;
 
     /// <summary>The best room of a type that patients can be seen in so far, or null.</summary>
     private static Room? FindRoom(Simulation simulation, Humanoid humanoid, string roomType)

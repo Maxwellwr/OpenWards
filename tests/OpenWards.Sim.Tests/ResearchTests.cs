@@ -221,6 +221,7 @@ public class ResearchTests
         var entry = hospital.CaseOf(disease, simulation.Rules.Diseases);
         entry.CureEffectiveness = 80;
         entry.DrugCost = 40;
+        entry.DrugAvailable = true;
         entry.Discovered = true;
         research.OnDiseaseDiscovered(simulation, hospital);
         var target = ResearchTarget.Drug(disease.Id);
@@ -251,6 +252,35 @@ public class ResearchTests
         Assert.Equal(100, entry.CureEffectiveness);
         Assert.True(entry.DrugCost >= ResearchDepartment.MinDrugCost);
         Assert.True(research.Area(ResearchCategory.Drugs).Current.IsNone);
+    }
+
+    [Fact]
+    public void ADrugForADiseaseNotKnownAtTheStartIsFoundFirst()
+    {
+        var simulation = NewSimulation(drugDisease: true);
+        var hospital = simulation.Hospitals[0];
+        var research = hospital.Research;
+        var disease = DrugDisease(simulation);
+        var entry = hospital.CaseOf(disease, simulation.Rules.Diseases);
+        Assert.False(simulation.Rules.Diseases.IsKnown(disease.ExpertiseId));
+        Assert.False(entry.DrugAvailable);
+
+        // A new drug takes the disease's RschReqd and comes before any improvement.
+        var target = ResearchTarget.Drug(disease.Id);
+        Assert.Equal(target, research.Area(ResearchCategory.Drugs).Current);
+        Assert.Equal(1_000, research.Required(simulation, hospital, target));
+        foreach (var category in Enum.GetValues<ResearchCategory>())
+        {
+            research.AdjustShare(category, -100);
+        }
+
+        research.AdjustShare(ResearchCategory.Drugs, 100);
+        research.AddPoints(1_000);
+        research.OnEndDay(simulation, hospital);
+
+        Assert.True(entry.DrugAvailable);
+        Assert.Equal(simulation.Rules.Diseases.DrugStartRating, entry.CureEffectiveness);
+        Assert.Equal(simulation.Rules.Diseases.DrugStartCost, entry.DrugCost);
     }
 
     [Fact]
