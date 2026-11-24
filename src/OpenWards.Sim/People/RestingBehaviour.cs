@@ -396,7 +396,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
         resting._nextTargetId = reader.ReadInt32();
         resting._meanders = reader.ReadInt32();
         resting.ReturnRoomId = reader.Version is 0 or >= 74 ? reader.ReadInt32() : 0;
-        resting._restTicks = reader.Version is 0 or >= 113 ? reader.ReadInt32() : 0;
+        resting._restTicks = reader.Version is 0 or >= 114 ? reader.ReadInt32() : 0;
         return resting;
     }
 }

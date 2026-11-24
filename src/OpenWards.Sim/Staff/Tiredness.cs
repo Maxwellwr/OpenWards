@@ -47,7 +47,7 @@ public sealed record TirednessRules(int Tired, int VeryTired, int CrackUpTired, 
     internal static TirednessRules Read(SimReader reader) =>
         new(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.Version is 0 or >= 107 ? reader.ReadInt32() : Default.NotTired)
         {
-            Rest = reader.Version is 0 or >= 113 ? RestRules.Read(reader) : RestRules.Default,
+            Rest = reader.Version is 0 or >= 114 ? RestRules.Read(reader) : RestRules.Default,
         };
 }
 
