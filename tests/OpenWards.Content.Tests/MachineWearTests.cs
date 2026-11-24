@@ -3,6 +3,7 @@ using OpenWards.Sim.Calendar;
 using OpenWards.Sim.Commands;
 using OpenWards.Sim.Economy;
 using OpenWards.Sim.Entities;
+using OpenWards.Sim.Objects;
 using OpenWards.Sim.People;
 using OpenWards.Sim.Rooms;
 using OpenWards.Sim.Staff;
@@ -108,7 +109,7 @@ public class MachineWearTests
     }
 
     [Fact]
-    public void AWornOutMachineWithoutAFireExtinguisherExplodesAndWrecksTheRoom()
+    public void AWornOutMachineExplodesAndWrecksTheRoom()
     {
         var simulation = NewStaffedHospital(InflationTests.Rules());
         var room = InflationTests.BuildInflation(simulation);
@@ -129,7 +130,8 @@ public class MachineWearTests
         Assert.True(room.IsCrashed, $"The inflator was used {inflator.Machine!.TotalUsage} times and did not explode.");
         Assert.True(smoked);
         Assert.False(room.IsActive);
-        Assert.Equal(inflator.Machine!.Strength, inflator.Machine.TimesUsed);
+        // From full wear on, surely by one and a half times its strength.
+        Assert.InRange(inflator.Machine!.TimesUsed, inflator.Machine.Strength, 3 * inflator.Machine.Strength / 2);
 
         // Room:crashRoom: the patient and the doctor are dead, soot covers the floor, the hospital loses the room's value.
         simulation.Step();
@@ -295,7 +297,7 @@ public class MachineWearTests
     }
 
     [Fact]
-    public void EachRoundOfAnEarthquakeWearsTheMachinesWithoutCountingAsAUse()
+    public void AnEarthquakeWearsTheMachinesOnceByItsSizeAtTheEndWithoutCountingAsAUse()
     {
         var simulation = NewStaffedHospital(InflationTests.Rules());
         var room = InflationTests.BuildInflation(simulation);
@@ -304,6 +306,7 @@ public class MachineWearTests
         var size = simulation.Earthquakes.Size;
         var rounds = 0;
         var started = false;
+        var worn = false;
 
         for (var tick = 0; tick < 2 * 31 * GameDate.HoursPerDay && !room.IsCrashed; tick++)
         {
@@ -314,9 +317,19 @@ public class MachineWearTests
             started |= simulation.Earthquakes.IsActive;
             if (simulation.Earthquakes.RemainingDamage < remaining)
             {
-                Assert.Equal(totalUsage, inflator.Machine.TotalUsage);
-                Assert.True(inflator.Machine.TimesUsed == timesUsed + 1 || room.IsCrashed);
                 rounds++;
+                if (simulation.Earthquakes.RemainingDamage == 0)
+                {
+                    // The last round: the size at once, past twice the strength if need be, not in the total usage.
+                    Assert.True(inflator.Machine.TimesUsed == timesUsed + size || room.IsCrashed);
+                    worn = true;
+                }
+                else
+                {
+                    Assert.Equal(timesUsed, inflator.Machine.TimesUsed);
+                }
+
+                Assert.Equal(totalUsage, inflator.Machine.TotalUsage);
             }
 
             if (started && !simulation.Earthquakes.IsActive)
@@ -326,7 +339,66 @@ public class MachineWearTests
         }
 
         Assert.True(rounds == size || room.IsCrashed, $"{rounds} rounds of {size}.");
-        Assert.True(rounds > 0);
+        Assert.True(worn || room.IsCrashed);
+    }
+
+    [Theory]
+    [InlineData(8, 7, 0)]
+    [InlineData(8, 8, 5)]
+    [InlineData(8, 9, 4)]
+    [InlineData(8, 11, 2)]
+    [InlineData(8, 12, 1)]
+    [InlineData(8, 15, 1)]
+    public void FromFullWearAMachineExplodesOneTimeIn(int strength, int wear, int odds)
+    {
+        var random = new SimRandom(7);
+        var machine = new MachineState(strength) { TimesUsed = wear };
+        var explosions = Enumerable.Range(0, 10_000).Count(_ => Machines.MustExplode(random, machine));
+        if (odds == 0)
+        {
+            Assert.Equal(0, explosions);
+        }
+        else
+        {
+            Assert.InRange(explosions, (10_000 / odds) - 400, (10_000 / odds) + 400);
+        }
+    }
+
+    [Fact]
+    public void SmokeFrom75AndAWarningFrom85PercentAndAHandymanPastAThird()
+    {
+        var machine = new MachineState(8);
+        Assert.False(machine.NeedsRepair);
+        machine.TimesUsed = 3;
+        Assert.True(machine.NeedsRepair);
+        Assert.False(machine.IsBreaking);
+        machine.TimesUsed = 6;
+        Assert.True(machine.IsBreaking);
+        Assert.False(machine.IsNearlyWornOut);
+        machine.TimesUsed = 7;
+        Assert.True(machine.IsNearlyWornOut);
+        Assert.Equal(87, machine.WearPercent);
+    }
+
+    [Fact]
+    public void ARepairAtFullWearAlwaysCostsAUseOfStrengthButNotBelowTwo()
+    {
+        var simulation = NewStaffedHospital(InflationTests.Rules());
+        InflationTests.BuildInflation(simulation);
+        var inflator = Inflator(simulation);
+        inflator.Machine!.TimesUsed = inflator.Machine.Strength;
+        Machines.Repaired(simulation, inflator);
+        Assert.Equal(9, inflator.Machine.Strength);
+        Assert.Equal(0, inflator.Machine.TimesUsed);
+
+        // As good as new: nothing lost.
+        Machines.Repaired(simulation, inflator);
+        Assert.Equal(9, inflator.Machine.Strength);
+
+        inflator.Machine.Strength = 2;
+        inflator.Machine.TimesUsed = 4;
+        Machines.Repaired(simulation, inflator);
+        Assert.Equal(2, inflator.Machine.Strength);
     }
 
     private static RoomObject Inflator(Simulation simulation) => simulation.Entities.OfType<RoomObject>().Single(o => o.ObjectType == "inflator");

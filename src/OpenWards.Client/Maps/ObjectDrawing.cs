@@ -183,20 +183,20 @@ internal sealed class ObjectDrawing
     }
 
     /// <summary>
-    /// The smoke over a machine that needs urgent repair (<c>setSmoke</c>, <c>updateSmokeDisplay</c>): one plume below 4
-    /// uses left, two below 3, three below 2 (layers 10 to 12); mirrored facing east and west.
+    /// The smoke over a worn machine (CorsixTH's <c>setSmoke</c>, <c>updateSmokeDisplay</c> draw it): one plume from 75 %
+    /// wear, two from 85 %, three once worn out (layers 10 to 12); mirrored facing east and west.
     /// </summary>
-    public void DrawSmoke(SpriteBatch batch, int animation, TilePosition tile, Direction orientation, int remainingUses, long tick)
+    public void DrawSmoke(SpriteBatch batch, int animation, TilePosition tile, Direction orientation, Sim.Objects.MachineState machine, long tick)
     {
-        if (remainingUses >= 4)
+        if (!machine.IsBreaking)
         {
             return;
         }
 
         Span<byte> layers = stackalloc byte[13];
         layers[10] = 2;
-        layers[11] = (byte)(remainingUses < 3 ? 2 : 0);
-        layers[12] = (byte)(remainingUses < 2 ? 2 : 0);
+        layers[11] = (byte)(machine.IsNearlyWornOut ? 2 : 0);
+        layers[12] = (byte)(machine.RemainingUses <= 0 ? 2 : 0);
         var set = _renderer.Animations;
         var first = set.FirstFrame(animation);
         var frame = set.Advance(first, (int)(tick % set.Length(first)));

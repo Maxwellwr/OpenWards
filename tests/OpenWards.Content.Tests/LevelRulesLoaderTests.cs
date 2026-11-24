@@ -34,7 +34,6 @@ public class LevelRulesLoaderTests
         var eight = LevelRulesLoader.LoadOriginal(install, "LEVEL.L8", BaseGameContent.Create());
         Assert.Equal(new Sim.Research.ResearchObjectRules(6000, false, 0, 9, true, null), eight.Research.Object(22));
         Assert.Equal(80_000, eight.Research.ExpertiseRequired(40));
-        Assert.Equal(5, eight.Research.PointsDivisor);
         Assert.Equal(20, eight.Research.MaxObjectStrength);
 
         var map = new Sim.Maps.LevelMap(4, 4, playerCount: 1);

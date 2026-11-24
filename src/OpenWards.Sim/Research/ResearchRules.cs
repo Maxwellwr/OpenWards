@@ -19,9 +19,6 @@ public readonly record struct ResearchObjectRules(int StartCost, bool StartAvail
 /// <summary>What research goes by on a level.</summary>
 public sealed class ResearchRules
 {
-    /// <summary>base_config.lua's <c>gbv.ResearchPointsDivisor</c>.</summary>
-    public const int DefaultPointsDivisor = 5;
-
     /// <summary>base_config.lua's <c>gbv.RschImproveCostPercent</c>.</summary>
     public const int DefaultImproveCostPercent = 10;
 
@@ -31,9 +28,6 @@ public sealed class ResearchRules
     /// <summary>base_config.lua's <c>gbv.DrugImproveRate</c>.</summary>
     public const int DefaultDrugImproveRate = 5;
 
-    /// <summary>base_config.lua's <c>gbv.MinDrugCost</c>.</summary>
-    public const int DefaultMinDrugCost = 50;
-
     /// <summary>base_config.lua's <c>gbv.MaxObjectStrength</c>.</summary>
     public const int DefaultMaxObjectStrength = 20;
 
@@ -42,9 +36,6 @@ public sealed class ResearchRules
 
     /// <summary>base_config.lua's <c>gbv.AutopsyRschPercent</c>.</summary>
     public const int DefaultAutopsyPercent = 33;
-
-    /// <summary>base_config.lua's <c>gbv.AutopsyRepHitPercent</c>.</summary>
-    public const int DefaultAutopsyReputationHitPercent = 25;
 
     private const int MaxObjects = 256;
 
@@ -56,15 +47,12 @@ public sealed class ResearchRules
     public ResearchRules(
         IEnumerable<KeyValuePair<int, ResearchObjectRules>>? objects = null,
         IReadOnlyList<int>? expertiseRequired = null,
-        int pointsDivisor = DefaultPointsDivisor,
         int improveCostPercent = DefaultImproveCostPercent,
         int improveIncrementPercent = DefaultImproveIncrementPercent,
         int drugImproveRate = DefaultDrugImproveRate,
-        int minDrugCost = DefaultMinDrugCost,
         int maxObjectStrength = DefaultMaxObjectStrength,
         int researchIncrement = DefaultResearchIncrement,
-        int autopsyPercent = DefaultAutopsyPercent,
-        int autopsyReputationHitPercent = DefaultAutopsyReputationHitPercent)
+        int autopsyPercent = DefaultAutopsyPercent)
     {
         _objects = new SortedDictionary<int, ResearchObjectRules>();
         foreach (var (thob, entry) in objects ?? [])
@@ -78,34 +66,25 @@ public sealed class ResearchRules
             _expertiseRequired[i] = expertiseRequired![i];
         }
 
-        PointsDivisor = pointsDivisor > 0 ? pointsDivisor : DefaultPointsDivisor;
         ImproveCostPercent = improveCostPercent;
         ImproveIncrementPercent = improveIncrementPercent;
         DrugImproveRate = drugImproveRate;
-        MinDrugCost = minDrugCost;
         MaxObjectStrength = maxObjectStrength;
         ResearchIncrement = researchIncrement;
         AutopsyPercent = autopsyPercent;
-        AutopsyReputationHitPercent = autopsyReputationHitPercent;
     }
 
     /// <summary>No objects to research: what levels without settings get.</summary>
     public static ResearchRules Default { get; } = new();
 
-    /// <summary>Divides the points the researchers produce (<c>gbv.ResearchPointsDivisor</c>).</summary>
-    public int PointsDivisor { get; }
-
-    /// <summary>The first improvement of an object takes this percent of its discovery's points (<c>RschImproveCostPercent</c>).</summary>
+    /// <summary>An improvement takes at least this percent of the item's discovery points (<c>RschImproveCostPercent</c>).</summary>
     public int ImproveCostPercent { get; }
 
-    /// <summary>Each further improvement takes this many percent more (<c>RschImproveIncrementPercent</c>).</summary>
+    /// <summary>Each step of an item's improvement takes this many percent more (<c>RschImproveIncrementPercent</c>).</summary>
     public int ImproveIncrementPercent { get; }
 
     /// <summary>What an improvement adds to a drug's effectiveness (<c>DrugImproveRate</c>).</summary>
     public int DrugImproveRate { get; }
-
-    /// <summary>The lowest a drug's cost gets by research (<c>MinDrugCost</c>).</summary>
-    public int MinDrugCost { get; }
 
     /// <summary>The highest a machine's strength gets by research (<c>MaxObjectStrength</c>).</summary>
     public int MaxObjectStrength { get; }
@@ -115,9 +94,6 @@ public sealed class ResearchRules
 
     /// <summary>The share of an object's discovery an autopsy brings, in percent (<c>AutopsyRschPercent</c>).</summary>
     public int AutopsyPercent { get; }
-
-    /// <summary>The share of its reputation a hospital loses when an autopsy comes out, in percent (<c>AutopsyRepHitPercent</c>).</summary>
-    public int AutopsyReputationHitPercent { get; }
 
     /// <summary>The level's entry for an object type number, if it has one.</summary>
     public ResearchObjectRules? Object(int objectType) => _objects.TryGetValue(objectType, out var entry) ? entry : null;
@@ -145,15 +121,12 @@ public sealed class ResearchRules
             writer.WriteInt32(required);
         }
 
-        writer.WriteInt32(PointsDivisor);
         writer.WriteInt32(ImproveCostPercent);
         writer.WriteInt32(ImproveIncrementPercent);
         writer.WriteInt32(DrugImproveRate);
-        writer.WriteInt32(MinDrugCost);
         writer.WriteInt32(MaxObjectStrength);
         writer.WriteInt32(ResearchIncrement);
         writer.WriteInt32(AutopsyPercent);
-        writer.WriteInt32(AutopsyReputationHitPercent);
     }
 
     internal static ResearchRules Read(SimReader reader)
@@ -173,13 +146,30 @@ public sealed class ResearchRules
             expertise[i] = reader.ReadInt32();
         }
 
-        var settings = new int[8];
-        for (var i = 0; i < settings.Length; i++)
+        // Version 111 dropped CorsixTH's ResearchPointsDivisor, MinDrugCost and AutopsyRepHitPercent, which research no
+        // longer uses.
+        var old = reader.Version is not 0 and < 111;
+        if (old)
         {
-            settings[i] = reader.ReadInt32();
+            reader.ReadInt32();
         }
 
-        var reputationHit = reader.Version is 0 or >= 71 ? reader.ReadInt32() : DefaultAutopsyReputationHitPercent;
-        return new ResearchRules(objects, expertise, settings[0], settings[1], settings[2], settings[3], settings[4], settings[5], settings[6], settings[7], reputationHit);
+        var improveCost = reader.ReadInt32();
+        var improveIncrement = reader.ReadInt32();
+        var drugImprove = reader.ReadInt32();
+        if (old)
+        {
+            reader.ReadInt32();
+        }
+
+        var maxStrength = reader.ReadInt32();
+        var increment = reader.ReadInt32();
+        var autopsy = reader.ReadInt32();
+        if (old && reader.Version >= 71)
+        {
+            reader.ReadInt32();
+        }
+
+        return new ResearchRules(objects, expertise, improveCost, improveIncrement, drugImprove, maxStrength, increment, autopsy);
     }
 }

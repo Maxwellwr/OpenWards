@@ -38,15 +38,14 @@ internal sealed class ResearchWindow : UiWindow
             var area = research.Area(category);
             var working = area.Current.Kind switch
             {
-                ResearchTargetKind.None => UiText.Get("openwards.research.finished", "Finished"),
-                ResearchTargetKind.Drain => UiText.Get("openwards.research.nothing_yet", "Nothing yet"),
+                ResearchTargetKind.None => UiText.Get("openwards.research.nothing_yet", "Nothing yet"),
                 ResearchTargetKind.Object => UiText.ObjectName(simulation.Content, area.Current.Id),
                 _ => host.Texts?.DiseaseName(area.Current.Id) ?? area.Current.Id,
             };
             yield return WindowRow.Of(
                 Name(category),
                 new WindowCell(working, Dim: area.Current.IsNone),
-                WindowCell.Number(Progress(simulation, research, area.Current)),
+                WindowCell.Number(Progress(simulation, simulation.Hospitals[host.Player], area.Current)),
                 WindowCell.Number(string.Create(CultureInfo.InvariantCulture, $"{area.Share} %")),
                 Adjust(host, "-20", category, -20, area.Share > 0),
                 Adjust(host, "-5", category, -5, area.Share > 0),
@@ -74,15 +73,16 @@ internal sealed class ResearchWindow : UiWindow
     };
 
     /// <summary>How far the area's work is, as the window's progress bar.</summary>
-    private static string Progress(OpenWards.Sim.Simulation simulation, ResearchDepartment research, ResearchTarget target)
+    private static string Progress(OpenWards.Sim.Simulation simulation, OpenWards.Sim.Economy.Hospital hospital, ResearchTarget target)
     {
+        var research = hospital.Research;
         decimal? points = target.Kind switch
         {
             ResearchTargetKind.Object => research.Objects.TryGetValue(target.Id, out var obj) ? obj.Points : null,
             ResearchTargetKind.Drug => research.Drugs.TryGetValue(target.Id, out var drug) ? drug : null,
             _ => null,
         };
-        if (points is not { } done || research.Required(simulation, target) is not { } required || required <= 0)
+        if (points is not { } done || research.Required(simulation, hospital, target) is not { } required || required <= 0)
         {
             return string.Empty;
         }

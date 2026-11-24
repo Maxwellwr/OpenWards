@@ -1,7 +1,7 @@
-// Machines wearing out, breaking down and being repaired, ported from CorsixTH CorsixTH/Lua/entities/machine.lua
-// (Machine:Machine, machineUsed, incrementUsageCounts, callHandymanForRepairIfNecessary, calculateIsMachineMustExplode,
-// explodeMachine, machineRepaired, reduceStrengthOnRepair, getRemainingUses), cheats.lua (cheatRepairAllMachines,
-// invulnerable_machines) and room.lua (Room:crashRoom).
+// Machines wearing out, breaking down and being repaired. The wear, the explosion chance and the loss of strength on
+// repair follow the community's logic specification of the original game; the rest is ported from CorsixTH
+// CorsixTH/Lua/entities/machine.lua (Machine:Machine, machineUsed, explodeMachine, replaceMachine), cheats.lua
+// (cheatRepairAllMachines, invulnerable_machines) and room.lua (Room:crashRoom).
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using OpenWards.Sim.Economy;
@@ -13,8 +13,9 @@ using OpenWards.Sim.Serialization;
 namespace OpenWards.Sim.Objects;
 
 /// <summary>
-/// A machine's wear: how many uses it stands between repairs (<c>strength</c>, from the hospital's research of it) and how
-/// many it has had since the last repair (<c>times_used</c>).
+/// A machine's wear: its strength s, the uses that wear it out completely (from the hospital's research of it), and its
+/// wear w, the uses since the last repair. It smokes from 75 % wear, the adviser warns from 85 %, and from 100 % each use
+/// may make it explode, surely by 150 %.
 /// </summary>
 public sealed class MachineState
 {
@@ -29,11 +30,20 @@ public sealed class MachineState
     /// <summary>Uses since it was built (<c>total_usage</c>).</summary>
     public int TotalUsage { get; internal set; }
 
-    /// <summary><c>getRemainingUses</c>: below 6 it wants a handyman, below 4 urgently and it smokes, below 1 it may explode.</summary>
+    /// <summary>Uses left before it is worn out; at 0 or below it may explode.</summary>
     public int RemainingUses => Strength - TimesUsed;
 
-    /// <summary><c>isBreaking</c>: smoking, needing a repair urgently.</summary>
-    public bool IsBreaking => RemainingUses < 4;
+    /// <summary>The wear in percent of the strength.</summary>
+    public int WearPercent => Strength > 0 ? (int)(100L * TimesUsed / Strength) : 100;
+
+    /// <summary>Worn past a third of its strength (w > ⌊s / 3⌋): a handyman is asked to repair it.</summary>
+    public bool NeedsRepair => TimesUsed > Strength / 3;
+
+    /// <summary>Smoking: worn 75 % or more.</summary>
+    public bool IsBreaking => 4L * TimesUsed >= 3L * Strength;
+
+    /// <summary>Worn 85 % or more: the adviser warns.</summary>
+    public bool IsNearlyWornOut => 100L * TimesUsed >= 85L * Strength;
 
     /// <summary>
     /// The player called a handyman from the machine window (<c>setRepairingStatus</c>, the room's <c>manual_repair</c> and
@@ -85,8 +95,8 @@ internal static class Machines
     }
 
     /// <summary>
-    /// <c>Machine:machineUsed</c>, after someone other than a handyman has used it: one use more; worn out it may
-    /// explode, which crashes the room.
+    /// After someone other than a handyman has used it: one use more, up to twice its strength; worn out it may explode,
+    /// which crashes the room.
     /// </summary>
     internal static void Used(Simulation simulation, RoomObject placed, Humanoid user)
     {
@@ -101,7 +111,8 @@ internal static class Machines
         // The invulnerable machines cheat: only the total usage counts, and nothing wears or explodes.
         if (!IsInvulnerable(simulation, room))
         {
-            Wear(simulation, room, machine);
+            machine.TimesUsed = Math.Min(machine.TimesUsed + 1, 2 * machine.Strength);
+            CheckExplosion(simulation, room, machine);
         }
     }
 
@@ -132,57 +143,57 @@ internal static class Machines
     }
 
     /// <summary>
-    /// A round of an earthquake's damage (<c>Earthquake:tick</c> calling <c>Machine:earthquakeImpact</c>): every machine in
-    /// every room that has not crashed counts a use, though not in its total usage, and may explode.
+    /// The damage of an earthquake, once at the end of its main quake: every machine in every room that has not crashed
+    /// wears by the quake's size, past the usual limit of twice its strength, and may smoke or explode as after a use. It
+    /// returns how many machines it damaged.
     /// </summary>
-    internal static void EarthquakeImpact(Simulation simulation)
+    internal static int EarthquakeImpact(Simulation simulation, int size)
     {
+        var damaged = 0;
         foreach (var placed in simulation.Entities.OfType<RoomObject>().Where(o => o.Machine is not null && !o.IsDestroyed).ToList())
         {
-            if (simulation.FindEntity(placed.RoomId) is Room { IsCrashed: false } room && !IsInvulnerable(simulation, room))
+            if (simulation.FindEntity(placed.RoomId) is Room { IsCrashed: false } room && !IsInvulnerable(simulation, room) && size > 0)
             {
-                Wear(simulation, room, placed.Machine!);
+                placed.Machine!.TimesUsed += size;
+                damaged++;
+                CheckExplosion(simulation, room, placed.Machine);
             }
         }
+
+        return damaged;
     }
 
-    /// <summary><c>incrementUsageCounts</c>'s use since the last repair, then the explosion check.</summary>
-    private static void Wear(Simulation simulation, Room room, MachineState machine)
+    /// <summary>Worn out, the machine may explode and crash its room.</summary>
+    private static void CheckExplosion(Simulation simulation, Room room, MachineState machine)
     {
-        machine.TimesUsed++;
-        if (MustExplode(simulation, room, machine))
+        if (MustExplode(simulation.Random, machine))
         {
             Crash(simulation, room);
         }
     }
 
     /// <summary>
-    /// <c>calculateIsMachineMustExplode</c>: worn out (no uses left), it explodes without a fire extinguisher in the room or
-    /// four uses past; otherwise the chance is 2 over its strength, plus a fifth for each use past, less a twentieth for
-    /// each extinguisher up to four, plus a twentieth, kept between 5 and 95 percent.
+    /// From 100 % wear (w ≥ s) a machine explodes with a chance of 1 / (⌊1.5 × s⌋ − w + 1), surely once w reaches
+    /// ⌊1.5 × s⌋: with a strength of 8, one in five on the 8th use, then one in four, three, two, and surely on the 12th.
     /// </summary>
-    private static bool MustExplode(Simulation simulation, Room room, MachineState machine)
+    /// <remarks>
+    /// CorsixTH lets it explode surely without a fire extinguisher in the room, and otherwise at 2 / s plus a fifth for
+    /// each use past, less a twentieth for each extinguisher. The specification knows no extinguishers.
+    /// </remarks>
+    internal static bool MustExplode(SimRandom random, MachineState machine)
     {
-        var remaining = machine.RemainingUses;
-        if (remaining >= 1)
+        if (machine.TimesUsed < machine.Strength)
         {
             return false;
         }
 
-        var extinguishers = Math.Min(4, simulation.Entities.Count(e => e is RoomObject { ObjectType: "extinguisher" } o && o.RoomId == room.Id));
-        if (extinguishers == 0 || remaining < -3)
-        {
-            return true;
-        }
-
-        var chance = (2m / machine.Strength) + (remaining * -0.2m) - (extinguishers * 0.05m) + 0.05m;
-        chance = Math.Clamp(chance, 0.05m, 0.95m);
-        return simulation.Random.Next(1_000_000) / 1_000_000m < chance;
+        var odds = (3 * machine.Strength / 2) - machine.TimesUsed + 1;
+        return odds <= 1 || random.Next(odds) == 0;
     }
 
     /// <summary>
-    /// <c>machineRepaired</c> and <c>reduceStrengthOnRepair</c>: as good as new, though a well worn machine (more uses over
-    /// its strength) may come out one use weaker, never below 2.
+    /// A handyman's repair: its wear goes back to 0, and with a chance of w / s (taken before) it loses a use of strength
+    /// for good, while above 2; repaired at 100 % wear or more it always does.
     /// </summary>
     internal static void Repaired(Simulation simulation, RoomObject placed)
     {
@@ -191,7 +202,8 @@ internal static class Machines
             return;
         }
 
-        if (machine.Strength > 2 && simulation.Random.Next(1_000_000) / 1_000_000m < (decimal)machine.TimesUsed / machine.Strength)
+        if (machine.Strength > 2 && machine.TimesUsed > 0
+            && (machine.TimesUsed >= machine.Strength || simulation.Random.Next(machine.Strength) < machine.TimesUsed))
         {
             machine.Strength--;
         }
@@ -214,7 +226,7 @@ internal static class Machines
 
     /// <summary>
     /// The machine window's replace button (<c>UIMachine:replaceMachine</c>, <c>Machine:replaceMachine</c>): the hospital pays
-    /// what the machine costs now and gets a new one, as strong as its research has made it. False without the money.
+    /// what the machine costs now and gets a new one, as strong as new ones of its type are now. False without the money.
     /// </summary>
     internal static bool Replace(Simulation simulation, Hospital hospital, RoomObject placed)
     {
@@ -241,7 +253,8 @@ internal static class Machines
 
     /// <summary>
     /// <c>explodeMachine</c> and <c>Room:crashRoom</c>: everyone in the room dies, its other objects go, soot covers its floor
-    /// and walls, the hospital loses the room's value and 50 reputation, and the room stays a wreck until it is taken down.
+    /// and walls, the hospital loses the room's value and 10 % of the visits in reputation, counts the explosion for the
+    /// year's judgement of its machines, and the room stays a wreck until it is taken down.
     /// </summary>
     internal static void Crash(Simulation simulation, Room room)
     {

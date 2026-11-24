@@ -229,6 +229,12 @@ public sealed class DiseaseCase
     /// <summary>How likely a cure works, in percent (CorsixTH's <c>cure_effectiveness</c>): the drug's rating, otherwise 100.</summary>
     public int CureEffectiveness { get; internal set; } = FullEffectiveness;
 
+    /// <summary>
+    /// Whether the pharmacy has a drug for it: from the start for a disease the level marks <c>Known</c>, otherwise once
+    /// research has found it. Always true for a disease not cured with a drug.
+    /// </summary>
+    public bool DrugAvailable { get; internal set; } = true;
+
     /// <summary>What the drug of each cure costs, or 0 for a disease not cured with a drug (CorsixTH's <c>drug_cost</c>).</summary>
     public int DrugCost { get; internal set; }
 
@@ -644,7 +650,11 @@ public sealed class Hospital
         }
     }
 
-    /// <summary>Machines that have exploded and wrecked their room (CorsixTH's <c>num_explosions</c>, kept but never read there).</summary>
+    /// <summary>
+    /// Machines that have exploded and wrecked their room this year, for the year's judgement of the hospital's care of its
+    /// machines. The original game never clears its flag, so the reprimand comes every year after one explosion; here it
+    /// is cleared at the end of the year, as intended.
+    /// </summary>
     public int Explosions { get; internal set; }
 
     /// <summary>Whether a patient has dropped litter in the hospital yet (CorsixTH's <c>hospital_littered</c>).</summary>
@@ -818,18 +828,6 @@ public sealed class Hospital
     /// <summary>The hospital's research (CorsixTH's <c>research</c>).</summary>
     public Research.ResearchDepartment Research { get; internal set; } = new();
 
-    /// <summary>
-    /// <c>Hospital:onEndMonth</c>'s research costs: what the month's research cost is paid, rounded.
-    /// </summary>
-    internal void PayResearch(long tick)
-    {
-        var cost = Research.TakeAccumulatedCost();
-        if (cost > 0)
-        {
-            Spend(tick, cost, TransactionKind.Research, string.Empty);
-        }
-    }
-
     /// <summary>Casebook entries made so far, by disease id.</summary>
     public IReadOnlyDictionary<string, DiseaseCase> Casebook => _casebook;
 
@@ -874,6 +872,7 @@ public sealed class Hospital
         {
             entry.CureEffectiveness = rules.DrugStartRating;
             entry.DrugCost = rules.DrugStartCost;
+            entry.DrugAvailable = rules.IsKnown(disease.ExpertiseId);
         }
 
         return entry;
@@ -1205,7 +1204,7 @@ public sealed class Hospital
                 && IsRoomDiscovered(disease.Id[DiseaseCatalog.DiagnosisPrefix.Length..]);
         }
 
-        return rules.Frequency(disease) != 0 && PeekCase(disease, rules).Discovered && disease.TreatmentRooms.All(IsRoomDiscovered);
+        return rules.Frequency(disease) != 0 && PeekCase(disease, rules) is { Discovered: true, DrugAvailable: true } && disease.TreatmentRooms.All(IsRoomDiscovered);
     }
 
     internal void AdvisePrice(PriceJudgment judgment, DiseaseCase entry)
@@ -1559,6 +1558,7 @@ public sealed class Hospital
     {
         JudgeYear(random, prices);
 
+        Explosions = 0;
         RatShotsThisYear = 0;
         RatsKilledThisYear = 0;
         SodasSold = 0;
@@ -1814,6 +1814,7 @@ public sealed class Hospital
             writer.WriteBool(entry.Reputation is not null);
             writer.WriteInt32(entry.Reputation ?? 0);
             writer.WriteInt32(entry.TurnedAway);
+            writer.WriteBool(entry.DrugAvailable);
         }
 
         Research.Write(writer);
@@ -2037,6 +2038,9 @@ public sealed class Hospital
             var diseaseReputation = reader.ReadInt32();
             entry.Reputation = hasReputation ? diseaseReputation : null;
             entry.TurnedAway = reader.ReadInt32();
+
+            // Version 111 researches drugs; older games keep every drug they had.
+            entry.DrugAvailable = reader.Version is not 0 and < 111 || reader.ReadBool();
             if (DiseaseCatalog.Find(id) is { } disease && !OpenWards.Sim.Research.ResearchDepartment.IsDrugDisease(disease))
             {
                 // Games imported before the fix took the original's 0 for these, and their patients all died.

@@ -30,7 +30,7 @@ public class EarthquakeTests
     }
 
     [Fact]
-    public void AWarningQuakeComesSixHundredHoursBeforeTheMainOne()
+    public void AWarningQuakeComesFiveToNineDaysBeforeTheMainOne()
     {
         var simulation = NewSimulation(new PlannedEarthquake(1, 1, 6), new PlannedEarthquake(3, 3, 2));
         var earthquakes = simulation.Earthquakes;
@@ -41,6 +41,7 @@ public class EarthquakeTests
         Assert.Equal(earthquakes.StartDay, day.Day);
         Assert.Equal(GameDate.HoursPerDay - 1, day.Hour);
 
+        var warning = earthquakes.WarningHours;
         var shakes = new List<EarthquakeShake>();
         while (earthquakes.IsActive)
         {
@@ -48,19 +49,32 @@ public class EarthquakeTests
             shakes.Add(earthquakes.Shake);
         }
 
-        // The warning quake for 25 hours, quiet until the main quake, then six rounds of damage 16 hours apart.
-        Assert.Equal(697, shakes.Count);
+        // The warning quake for 25 hours, quiet until the main quake 5 to 9 days later, then six rounds 16 hours apart.
+        Assert.InRange(warning, 5 * GameDate.HoursPerDay, 9 * GameDate.HoursPerDay);
+        Assert.Equal(0, warning % GameDate.HoursPerDay);
+        Assert.Equal(warning + 97, shakes.Count);
         Assert.All(shakes[..25], shake => Assert.Equal(EarthquakeShake.Small, shake));
-        Assert.All(shakes[25..600], shake => Assert.Equal(EarthquakeShake.None, shake));
-        Assert.All(shakes[600..648], shake => Assert.Equal(EarthquakeShake.Small, shake));
-        Assert.All(shakes[648..664], shake => Assert.Equal(EarthquakeShake.Large, shake));
-        Assert.All(shakes[664..696], shake => Assert.Equal(EarthquakeShake.Small, shake));
+        Assert.All(shakes[25..warning], shake => Assert.Equal(EarthquakeShake.None, shake));
+        Assert.All(shakes[warning..(warning + 48)], shake => Assert.Equal(EarthquakeShake.Small, shake));
+        Assert.All(shakes[(warning + 48)..(warning + 64)], shake => Assert.Equal(EarthquakeShake.Large, shake));
+        Assert.All(shakes[(warning + 64)..(warning + 96)], shake => Assert.Equal(EarthquakeShake.Small, shake));
         Assert.Equal(EarthquakeShake.None, shakes[^1]);
 
         // The next one is planned.
         Assert.True(earthquakes.IsNextPlanned);
         Assert.Equal(3, earthquakes.StartMonth);
         Assert.Equal(2, earthquakes.RemainingDamage);
+        Assert.Equal(2, earthquakes.PlannedSoFar);
+    }
+
+    [Fact]
+    public void AnEntryWhoseMonthsHavePassedIsSkipped()
+    {
+        var earthquakes = Earthquakes.Start([new PlannedEarthquake(0, 0, 5), new PlannedEarthquake(2, 4, 3)], new SimRandom(5));
+
+        Assert.True(earthquakes.IsNextPlanned);
+        Assert.InRange(earthquakes.StartMonth, 2, 4);
+        Assert.Equal(3, earthquakes.Size);
         Assert.Equal(2, earthquakes.PlannedSoFar);
     }
 

@@ -94,7 +94,7 @@ public sealed class Simulation
                 }
             }
 
-            _hospitals[player].Research = Research.ResearchDepartment.Create(Rules, _hospitals[player]);
+            _hospitals[player].Research = Research.ResearchDepartment.Create(this, _hospitals[player]);
         }
 
         // World:World adds the computer opponents after the players' hospitals.
@@ -257,9 +257,14 @@ public sealed class Simulation
         LandAuction.Tick(this);
 
         // CorsixTH's World:onTick ticks the earthquake, then handles the end of a day before the hour that starts the next one.
-        if (Earthquakes.Tick(Rules.Earthquakes, Random))
+        var round = Earthquakes.Tick(Rules.Earthquakes, Random, Date);
+        if (round != EarthquakeRound.None)
         {
-            Objects.Machines.EarthquakeImpact(this);
+            // At the end of the main quake every machine wears once by its size.
+            if (round == EarthquakeRound.Last)
+            {
+                Objects.Machines.EarthquakeImpact(this, Earthquakes.Size);
+            }
 
             // Earthquake:tick: a patient out of a room might fall over, one time in two.
             foreach (var humanoid in Entities.OfType<Humanoid>().ToList())
@@ -352,22 +357,6 @@ public sealed class Simulation
         }
 
         Temperatures.Update(Map, TileTemperatures.OutsideTemperature(month), _radiatorTemperatures);
-    }
-
-    /// <summary>The player's staff at work in a research room (<c>researchCost</c>'s <c>staff_member_set</c>).</summary>
-    private int Researchers(int player)
-    {
-        var count = 0;
-        foreach (var entity in _entities)
-        {
-            if (entity is Humanoid { Behaviour: People.IRoomStaff { RoomId: > 0 } staff, Employer: var employer } && employer == player
-                && FindEntity(staff.RoomId) is Room { RoomType: "research" })
-            {
-                count++;
-            }
-        }
-
-        return count;
     }
 
     /// <summary>Creates an entity with the next free id.</summary>
@@ -865,8 +854,8 @@ public sealed class Simulation
 
         foreach (var hospital in _hospitals)
         {
-            // Hospital:onEndDay: the day's research cost, by the researchers at work.
-            hospital.Research.AccumulateCost(Researchers(hospital.Player));
+            // The day's research: the areas take their share of the pool.
+            hospital.Research.OnEndDay(this, hospital);
             hospital.OnEndDayHeating(Random, radiators[hospital.Player], handymen[hospital.Player], date.DaysInMonth, Rules.Difficulty);
 
             // PlayerHospital's end of the day: rat holes, then rats.
@@ -880,14 +869,6 @@ public sealed class Simulation
             {
                 (humanoid.Behaviour as VipBehaviour)?.OnEndDay(this, humanoid);
                 Feelings.OnEndDay(this, humanoid);
-
-                // Doctor:tickDay: a researcher in the research department researches, 1,550 points and 1,000 more for full skill.
-                if (humanoid is { Behaviour: DoctorBehaviour { RoomId: > 0 } doctor, Profile: { IsResearcher: true } profile, Employer: var employer, IsFired: false }
-                    && employer >= 0 && employer < _hospitals.Length
-                    && FindEntity(doctor.RoomId) is Room { RoomType: RoomVisits.ResearchRoom } research && research.Area.Contains(humanoid.Tile))
-                {
-                    _hospitals[employer].Research.AddPoints(this, _hospitals[employer], 1550 + (1000 * profile.Skill / StaffProfile.MaxSkill));
-                }
             }
             else if (entity is RoomObject { Plant: { } plant } placed)
             {
@@ -946,7 +927,6 @@ public sealed class Simulation
             hospital.PayInsurance(Hours);
             hospital.PayHeating(Hours);
             hospital.PayInterest(Hours);
-            hospital.PayResearch(Hours);
             hospital.UpdatePriceLevel(Rules.Diseases);
 
             // Hospital:onEndMonth: equipment the level brings this month.

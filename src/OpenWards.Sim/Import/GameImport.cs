@@ -300,6 +300,9 @@ public static class GameImport
                 book.Discovered |= entry.Discovered;
                 if (Research.ResearchDepartment.IsDrugDisease(disease))
                 {
+                    // The original's saves do not tell which drugs research has found; an imported game keeps them all.
+                    book.DrugAvailable = true;
+
                     // The original keeps 0 here for diseases not cured by drugs, which are always fully effective.
                     book.CureEffectiveness = Math.Clamp(entry.Effectiveness, 0, DiseaseCase.FullEffectiveness);
                 }

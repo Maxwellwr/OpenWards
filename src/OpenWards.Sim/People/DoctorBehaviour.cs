@@ -752,17 +752,17 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
 
                         break;
                     case ObjectUseEvent.Done:
+                        // An action of research: 50 points at a desk, 100 at a computer or analyser, plus the researcher's skill.
                         var points = used?.ObjectType switch
                         {
-                            DeskType => 100,
-                            "computer" => 500,
-                            "analyser" => 800,
+                            DeskType => Research.ResearchDepartment.DeskPoints,
+                            "computer" or "analyser" => Research.ResearchDepartment.MachinePoints,
                             _ => 0,
                         };
                         if (points > 0 && humanoid.Employer >= 0 && humanoid.Employer < simulation.Hospitals.Count)
                         {
-                            var hospital = simulation.Hospitals[humanoid.Employer];
-                            hospital.Research.AddPoints(simulation, hospital, points);
+                            simulation.Hospitals[humanoid.Employer].Research.AddPoints(
+                                Research.ResearchDepartment.ActionPoints(simulation, points, humanoid.Profile?.Skill ?? 0, humanoid.Fatigue));
                         }
 
                         _previousResearchObject = ResearchObjectId;

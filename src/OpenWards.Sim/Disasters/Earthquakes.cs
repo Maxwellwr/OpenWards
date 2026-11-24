@@ -1,6 +1,7 @@
-// Earthquakes, ported from CorsixTH CorsixTH/Lua/earthquake.lua (Earthquake:tick, onEndDay, nextEarthquake,
-// createEarthquake), the screen shake of hospitals/player_hospital.lua (PlayerHospital:tickEarthquake) and the
-// earthquake cheats of cheats.lua (cheatEarthquake, cheatToggleEarthquake).
+// Earthquakes. The schedule, the time to the main quake and the damage follow the community's logic specification of
+// the original game; the shaking is ported from CorsixTH CorsixTH/Lua/earthquake.lua (Earthquake:tick, onEndDay,
+// createEarthquake), hospitals/player_hospital.lua (PlayerHospital:tickEarthquake) and the earthquake cheats of
+// cheats.lua (cheatEarthquake, cheatToggleEarthquake).
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using OpenWards.Sim.Calendar;
@@ -10,12 +11,25 @@ namespace OpenWards.Sim.Disasters;
 
 /// <summary>
 /// One of the level's planned earthquakes (<c>quake_control[n]</c>): it starts on a random day of a random month of
-/// the game from <see cref="StartMonth"/> to <see cref="EndMonth"/> and does <see cref="Severity"/> rounds of damage.
+/// the game from <see cref="StartMonth"/> to <see cref="EndMonth"/> and wears every machine by <see cref="Severity"/>.
 /// </summary>
 /// <param name="StartMonth">The first month of the game it may start in, from 1.</param>
 /// <param name="EndMonth">The last month of the game it may start in.</param>
 /// <param name="Severity">Its size; 0 ends the level's earthquakes.</param>
 public readonly record struct PlannedEarthquake(int StartMonth, int EndMonth, int Severity);
+
+/// <summary>What an hour of an earthquake brings.</summary>
+public enum EarthquakeRound : byte
+{
+    /// <summary>No round of the main quake.</summary>
+    None,
+
+    /// <summary>A round of the main quake: patients out of rooms may stumble.</summary>
+    Shaking,
+
+    /// <summary>The last round of the main quake, which wears every machine by the quake's size.</summary>
+    Last,
+}
 
 /// <summary>How hard the screen shakes during an earthquake (CorsixTH's <c>beginShakeScreen</c> intensities).</summary>
 public enum EarthquakeShake : byte
@@ -34,21 +48,26 @@ public enum EarthquakeShake : byte
 }
 
 /// <summary>
-/// The world's earthquakes, as CorsixTH's <c>Earthquake</c>: the next one is planned from the level's
-/// <see cref="PlannedEarthquake"/> entries in turn; on its day a short warning quake comes, then 600 hours later the
-/// main quake, which does a round of damage every 16 hours until its size is used up.
+/// The world's earthquakes: the next one is planned from the first of the level's <see cref="PlannedEarthquake"/>
+/// entries not used yet whose months have not all passed, on a day drawn evenly from what is left of them. On its day a
+/// short, harmless warning quake comes, then 5 to 9 days later the main quake, which shakes for a round every 16 hours,
+/// as many rounds as its size. Patients out of rooms may stumble in each round; at the end of the last round every
+/// machine wears once by the quake's size, which the simulation does when <see cref="Tick"/> says so.
 /// </summary>
 /// <remarks>
-/// A round of damage wears the machines in every room (<c>Machine:earthquakeImpact</c>) and may knock over patients out of
-/// rooms, done by the simulation when <see cref="Tick"/> says so.
+/// CorsixTH wears the machines by one use in each round, plans the level's entries strictly in turn (so an entry whose
+/// months have passed stops the earthquakes) and always waits 600 hours for the main quake.
 /// </remarks>
 public sealed class Earthquakes
 {
     /// <summary>Hours between rounds of damage (CorsixTH's <c>damage_time</c>).</summary>
     public const int DamageTime = 16;
 
-    /// <summary>Hours from the warning quake to the main one (<c>warning_period</c>).</summary>
-    public const int WarningPeriod = 600;
+    /// <summary>The fewest days from the warning quake to the main one.</summary>
+    public const int MinWarningDays = 5;
+
+    /// <summary>The most days from the warning quake to the main one.</summary>
+    public const int MaxWarningDays = 9;
 
     /// <summary>How long the warning quake lasts, in hours (<c>warning_length</c>).</summary>
     public const int WarningLength = 25;
@@ -83,6 +102,9 @@ public sealed class Earthquakes
     /// <summary>Hours to the main quake.</summary>
     public int WarningTimer { get; private set; }
 
+    /// <summary>Hours from the warning quake to the main one, drawn when the earthquake is planned.</summary>
+    public int WarningHours { get; private set; } = MaxWarningDays * GameDate.HoursPerDay;
+
     /// <summary>How many of the level's planned earthquakes have been used.</summary>
     public int PlannedSoFar { get; private set; }
 
@@ -93,34 +115,37 @@ public sealed class Earthquakes
     internal static Earthquakes Start(IReadOnlyList<PlannedEarthquake> planned, SimRandom random)
     {
         var earthquakes = new Earthquakes();
-        earthquakes.PlanNext(planned, random);
+        earthquakes.PlanNext(planned, random, monthOfGame: 1, day: 0);
         return earthquakes;
     }
 
-    /// <summary>One hour of an earthquake (<c>Earthquake:tick</c>). True when this hour does a round of damage.</summary>
-    internal bool Tick(IReadOnlyList<PlannedEarthquake> planned, SimRandom random)
+    /// <summary>
+    /// One hour of an earthquake (<c>Earthquake:tick</c>). Returns a round of the main quake: its last round does the
+    /// damage.
+    /// </summary>
+    internal EarthquakeRound Tick(IReadOnlyList<PlannedEarthquake> planned, SimRandom random, GameDate date)
     {
         if (!IsActive || IsDisabled)
         {
-            return false;
+            return EarthquakeRound.None;
         }
 
         if (RemainingDamage == 0)
         {
             IsActive = false;
             Shake = EarthquakeShake.None;
-            PlanNext(planned, random);
-            return false;
+            PlanNext(planned, random, date.MonthOfGame, date.Day);
+            return EarthquakeRound.None;
         }
 
-        if (WarningTimer == WarningPeriod)
+        if (WarningTimer == WarningHours)
         {
             IsNextPlanned = false;
             Shake = EarthquakeShake.Warning;
         }
 
         // The end of the warning quake.
-        if (WarningTimer >= WarningPeriod - WarningLength && WarningTimer - 1 < WarningPeriod - WarningLength)
+        if (WarningTimer >= WarningHours - WarningLength && WarningTimer - 1 < WarningHours - WarningLength)
         {
             Shake = EarthquakeShake.None;
         }
@@ -131,9 +156,9 @@ public sealed class Earthquakes
 
             // Nothing more happens between the warning quake and the main one. CorsixTH's "main_start" announcement
             // comes after this test and so never plays: the hour the timer reaches 0 returns here too.
-            if (WarningTimer < WarningPeriod - WarningLength)
+            if (WarningTimer < WarningHours - WarningLength)
             {
-                return false;
+                return EarthquakeRound.None;
             }
         }
 
@@ -142,18 +167,18 @@ public sealed class Earthquakes
 
         if (WarningTimer > 0)
         {
-            return false;
+            return EarthquakeRound.None;
         }
 
         DamageTimer--;
         if (DamageTimer > 0)
         {
-            return false;
+            return EarthquakeRound.None;
         }
 
         RemainingDamage--;
         DamageTimer += DamageTime;
-        return true;
+        return RemainingDamage == 0 ? EarthquakeRound.Last : EarthquakeRound.Shaking;
     }
 
     /// <summary>Starts the planned earthquake on its day (<c>Earthquake:onEndDay</c>).</summary>
@@ -183,7 +208,8 @@ public sealed class Earthquakes
             Size = random.NextInclusive(1, MaxCheatSize);
             RemainingDamage = Size;
             DamageTimer = DamageTime;
-            WarningTimer = WarningPeriod;
+            WarningHours = random.NextInclusive(MinWarningDays, MaxWarningDays) * GameDate.HoursPerDay;
+            WarningTimer = WarningHours;
         }
 
         return true;
@@ -203,31 +229,41 @@ public sealed class Earthquakes
     }
 
     /// <summary>
-    /// Plans the level's next earthquake, if it has one (<c>Earthquake:nextEarthquake</c>).
-    /// </summary>
-    /// <remarks>
-    /// CorsixTH draws the day from the length of the month after the start month (<c>month_length[(start_month % 12) + 1]</c>),
-    /// so a day 31 drawn before a 30-day month never comes and the level's earthquakes stop. This draws it from the
-    /// start month's own length. An entry whose months are the wrong way round, an error in Lua, starts in its
+    /// Plans the level's next earthquake, if it has one: the first entry not used yet that still has a day after
+    /// <paramref name="day"/> of <paramref name="monthOfGame"/>, on a day drawn evenly from the days of its months left.
+    /// Entries whose months have passed are used up. An entry whose months are the wrong way round starts in its
     /// <see cref="PlannedEarthquake.StartMonth"/>.
-    /// </remarks>
-    private void PlanNext(IReadOnlyList<PlannedEarthquake> planned, SimRandom random)
+    /// </summary>
+    private void PlanNext(IReadOnlyList<PlannedEarthquake> planned, SimRandom random, int monthOfGame, int day)
     {
         IsActive = false;
-        if (PlannedSoFar >= planned.Count || planned[PlannedSoFar].Severity == 0)
+        while (PlannedSoFar < planned.Count && planned[PlannedSoFar].Severity != 0)
         {
+            var control = planned[PlannedSoFar];
+            PlannedSoFar++;
+            var days = new List<(int Month, int Day)>();
+            for (var month = Math.Max(control.StartMonth, monthOfGame); month <= Math.Max(control.StartMonth, control.EndMonth); month++)
+            {
+                for (var d = month == monthOfGame ? day + 1 : 1; d <= GameDate.DaysIn((((month - 1) % 12) + 12) % 12 + 1); d++)
+                {
+                    days.Add((month, d));
+                }
+            }
+
+            if (days.Count == 0)
+            {
+                continue;
+            }
+
+            (StartMonth, StartDay) = days[random.Next(days.Count)];
+            Size = control.Severity;
+            RemainingDamage = Size;
+            DamageTimer = DamageTime;
+            WarningHours = random.NextInclusive(MinWarningDays, MaxWarningDays) * GameDate.HoursPerDay;
+            WarningTimer = WarningHours;
+            IsNextPlanned = true;
             return;
         }
-
-        var control = planned[PlannedSoFar];
-        StartMonth = random.NextInclusive(control.StartMonth, Math.Max(control.StartMonth, control.EndMonth));
-        StartDay = random.NextInclusive(1, GameDate.DaysIn((((StartMonth - 1) % 12) + 12) % 12 + 1));
-        Size = control.Severity;
-        RemainingDamage = Size;
-        DamageTimer = DamageTime;
-        WarningTimer = WarningPeriod;
-        PlannedSoFar++;
-        IsNextPlanned = true;
     }
 
     internal void Write(SimWriter writer)
@@ -241,6 +277,7 @@ public sealed class Earthquakes
         writer.WriteInt32(RemainingDamage);
         writer.WriteInt32(DamageTimer);
         writer.WriteInt32(WarningTimer);
+        writer.WriteInt32(WarningHours);
         writer.WriteInt32(PlannedSoFar);
         writer.WriteByte((byte)Shake);
     }
@@ -258,8 +295,11 @@ public sealed class Earthquakes
             RemainingDamage = reader.ReadInt32(),
             DamageTimer = reader.ReadInt32(),
             WarningTimer = reader.ReadInt32(),
-            PlannedSoFar = reader.ReadInt32(),
         };
+
+        // Version 111 draws the days to the main quake; before, CorsixTH's 600 hours.
+        earthquakes.WarningHours = reader.Version is 0 or >= 111 ? reader.ReadInt32() : 600;
+        earthquakes.PlannedSoFar = reader.ReadInt32();
         var shake = reader.ReadByte();
         earthquakes.Shake = shake <= (byte)EarthquakeShake.Large ? (EarthquakeShake)shake : throw new InvalidDataException($"Unknown earthquake shake {shake}.");
         return earthquakes;
