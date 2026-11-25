@@ -1139,6 +1139,34 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         Phase = PatientPhase.SeekRoom;
     }
 
+    /// <summary>
+    /// An imported patient picks up their route: one already diagnosed heads for treatment, one already seen by the GP
+    /// goes back to the GP, both without seeing reception again. Others start from reception.
+    /// </summary>
+    internal void ResumeImportedRoute(bool diagnosed, bool seenByGp)
+    {
+        if (Disease is not { } disease || (!diagnosed && !seenByGp))
+        {
+            return;
+        }
+
+        HasPassedReception = true;
+        TargetId = 0;
+        Waiting = -1;
+        Phase = PatientPhase.SeekRoom;
+        if (diagnosed)
+        {
+            DiagnosisProgress = Math.Max(DiagnosisProgress, PatientCare.FullDiagnosis);
+            IsDiagnosed = true;
+            AddToTreatmentHistory(new TreatmentHistoryEntry(TreatmentHistoryKind.Diagnosis, disease.Id));
+            Seeking = RoomSeek.Treatment;
+        }
+        else
+        {
+            Seeking = RoomSeek.Gp;
+        }
+    }
+
     /// <summary>After leaving the room, the patient goes home.</summary>
     internal void SetNextGoHome()
     {

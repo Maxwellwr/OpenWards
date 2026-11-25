@@ -234,6 +234,27 @@ public sealed class Earthquakes
     /// Entries whose months have passed are used up. An entry whose months are the wrong way round starts in its
     /// <see cref="PlannedEarthquake.StartMonth"/>.
     /// </summary>
+    /// <summary>
+    /// An imported save's planned earthquake: it comes on <paramref name="next"/> with strength <paramref name="size"/>,
+    /// and the level's first <paramref name="used"/> planned ones are spent. Without one the level's plan stays: every
+    /// save seen marks all sixteen flags used, so they say nothing on their own.
+    /// </summary>
+    internal void Import(int plannedCount, int used, GameDate next, int size)
+    {
+        if (IsActive || size <= 0)
+        {
+            return;
+        }
+
+        PlannedSoFar = Math.Clamp(used, 0, plannedCount);
+        (StartMonth, StartDay) = (next.MonthOfGame, next.Day);
+        Size = size;
+        RemainingDamage = Size;
+        DamageTimer = DamageTime;
+        WarningTimer = WarningHours;
+        IsNextPlanned = true;
+    }
+
     private void PlanNext(IReadOnlyList<PlannedEarthquake> planned, SimRandom random, int monthOfGame, int day)
     {
         IsActive = false;

@@ -88,7 +88,8 @@ public static class OriginalSaveImporter
                     new TilePosition(entity.TileX, entity.TileY),
                     DirectionOf(entity.Direction),
                     entity.Strength,
-                    entity.TimesUsed));
+                    entity.TimesUsed,
+                    definition.Id == "plant" ? (short)entity.PlantWater : null));
             }
         }
 
@@ -158,7 +159,10 @@ public static class OriginalSaveImporter
                 entity.DiagnosisDifficulty,
                 entity.Bowel,
                 entity.Nausea,
-                entity.ContagiousStrength));
+                entity.ContagiousStrength,
+                Diagnosed: entity.DiagnosedDisease == entity.Disease,
+                SeenByGp: entity.ProceduresDone > 0,
+                IsEmergency: (entity.PatientFlags & EmergencyPatientFlag) != 0));
         }
 
         var casebook = new List<ImportedCase>();
@@ -210,7 +214,15 @@ public static class OriginalSaveImporter
             ReputationRecord = hospital.ReputationVisits > 0 ? (hospital.ReputationPoints, hospital.ReputationVisits) : null,
             PriceLevel = hospital.PriceLevel,
             VipsThisYear = save.VipsThisYear,
-            DaysSinceVip = hospital.VipArrivalTick is > 0 and var vip && vip <= save.Tick ? (save.Tick - vip) / 50 : null,
+            // OpenWards counts the days since the VIP was invited: the arrival less the journey.
+            DaysSinceVip = hospital.VipArrivalTick is > 0 and var vip ? Math.Max(0, save.Tick - vip + VipVisits.TravelTicks) / 50 : null,
+            Vip = VipOf(save, hospital),
+            Emergency = hospital.EmergencyTimer > 0 && DiseaseCatalog.All.FirstOrDefault(d => d.ExpertiseId == hospital.EmergencyDisease && !d.IsPseudo) is { } emergencyDisease
+                ? new ImportedEmergency(emergencyDisease.Id, hospital.EmergencyPatients, hospital.EmergencyCured, hospital.EmergencyBonus, hospital.EmergencyPassPercent, hospital.EmergencyTimer * 25)
+                : null,
+            NextEmergency = (save.EmergenciesUsed, save.NextEmergency is { Planned: true, Tick: var emergencyTick } ? Math.Max(0, emergencyTick - save.Tick) : null),
+            NextEarthquake = (save.EarthquakesUsed, save.NextEarthquake is { Planned: true, Tick: var quakeTick } ? Math.Max(0, quakeTick - save.Tick) : null, save.NextEarthquake.Strength),
+            ResearchPointsThisYear = save.ResearchPointsThisYear,
             RatsThisYear = save.RatsThisYear,
             Litter = LitterOf(save),
             Ratholes = Enumerable.Range(0, Math.Min(hospital.RatholeCount, OriginalSaveHospital.MaxRatholes))
@@ -468,6 +480,29 @@ public static class OriginalSaveImporter
         4 => new CompetitorAction(CompetitorActionKind.Loan),
         _ => null,
     };
+
+    /// <summary>Patient flag (+116) of those brought by the emergency helicopter.</summary>
+    private const int EmergencyPatientFlag = 0x40;
+
+    /// <summary>The VIP visit as the save leaves it: the state, who, when they arrive and, in the hospital, where they stand.</summary>
+    private static ImportedVip? VipOf(OriginalSaveGame save, OriginalSaveHospital hospital)
+    {
+        if (hospital.VipState is < 1 or > 4)
+        {
+            return null;
+        }
+
+        TilePosition? tile = null;
+        if (hospital.VipState == 3 && save.Entities.FirstOrDefault(e => e.Slot == hospital.VipSlot && e.Kind == VipKind) is { } vip)
+        {
+            tile = new TilePosition(vip.TileX, vip.TileY);
+        }
+
+        return new ImportedVip((VipState)hospital.VipState, hospital.VipName, (long)hospital.VipArrivalTick - save.Tick, hospital.VipRoomsLeft, tile);
+    }
+
+    /// <summary>The entity kind of a VIP.</summary>
+    private const int VipKind = 20;
 
     private static DoorPlacement DoorOf(OriginalSaveRoom room)
     {

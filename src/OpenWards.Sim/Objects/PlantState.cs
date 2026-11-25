@@ -55,6 +55,22 @@ public sealed class PlantState
         }
     }
 
+    /// <summary>The water of a freshly watered plant in the original game's saves.</summary>
+    public const int OriginalFullWater = 400;
+
+    /// <summary>
+    /// An original save's plant water (400 when watered, falling a few points a day and below 0 when long dry): the
+    /// water used up spreads evenly over the states up to the last before death, and as much again below 0 kills it.
+    /// </summary>
+    /// <remarks>An estimate: the saves show the water, not when the original draws a plant drooping.</remarks>
+    internal void ImportOriginalWater(int water)
+    {
+        var perState = (decimal)OriginalFullWater / (Dead - 1);
+        var steps = Math.Max(0m, (OriginalFullWater - water) / perState);
+        State = (int)Math.Min(Math.Floor(steps), Dead);
+        DaysLeft = State == Dead ? DaysBetweenStates : Math.Max(1m, Math.Round(DaysBetweenStates * (1 - (steps - Math.Floor(steps))), 2));
+    }
+
     /// <summary><c>Plant:restoreToFullHealth</c>: watered, the plant is healthy again and starts its days afresh.</summary>
     internal void Restore()
     {

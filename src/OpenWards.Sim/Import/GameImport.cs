@@ -21,7 +21,8 @@ public sealed record ImportedRoom(string RoomType, TileRect Area, DoorPlacement 
 /// <param name="Orientation">Way it faces.</param>
 /// <param name="Strength">Its strength, for machines.</param>
 /// <param name="TimesUsed">How many times it has been used, for machines.</param>
-public sealed record ImportedObject(string ObjectType, TilePosition Tile, Direction Orientation, int Strength, int TimesUsed);
+/// <param name="PlantWater">A plant's water in the original's terms (<see cref="Objects.PlantState.OriginalFullWater"/> when watered), if known.</param>
+public sealed record ImportedObject(string ObjectType, TilePosition Tile, Direction Orientation, int Strength, int TimesUsed, int? PlantWater = null);
 
 /// <summary>A member of staff of an imported save.</summary>
 /// <param name="Profile">Who they are (<see cref="StaffProfile.Import"/>).</param>
@@ -56,6 +57,9 @@ public sealed record ImportedStaff(
 /// <param name="Bowel">How much they need the toilet, if known.</param>
 /// <param name="Nausea">How sick they feel, if known.</param>
 /// <param name="ContagiousStrength">How contagious they are, if known.</param>
+/// <param name="Diagnosed">Whether they have been diagnosed: they head for treatment.</param>
+/// <param name="SeenByGp">Whether the GP has seen them: they go back to the GP rather than to reception.</param>
+/// <param name="IsEmergency">Whether they came with the emergency under way (<see cref="ImportedGame.Emergency"/>).</param>
 public sealed record ImportedPatient(
     string DiseaseId,
     TilePosition Tile,
@@ -69,7 +73,27 @@ public sealed record ImportedPatient(
     int? DiagnosisDifficulty = null,
     int? Bowel = null,
     int? Nausea = null,
-    int? ContagiousStrength = null);
+    int? ContagiousStrength = null,
+    bool Diagnosed = false,
+    bool SeenByGp = false,
+    bool IsEmergency = false);
+
+/// <summary>Where an imported save's VIP visit stands.</summary>
+/// <param name="State">The visit's state, as <see cref="VipState"/>.</param>
+/// <param name="Name">Which VIP (0 to 10).</param>
+/// <param name="ArrivalInHours">Hours from the save's moment to the VIP's arrival (negative once they have come).</param>
+/// <param name="RoomsLeft">Rooms the VIP in the hospital has still to see.</param>
+/// <param name="Tile">Where the VIP in the hospital stands, if they are.</param>
+public sealed record ImportedVip(VipState State, int Name, long ArrivalInHours, int RoomsLeft, TilePosition? Tile);
+
+/// <summary>An imported save's emergency under way.</summary>
+/// <param name="DiseaseId">The emergency's disease.</param>
+/// <param name="Victims">Patients brought in.</param>
+/// <param name="Cured">Patients cured so far.</param>
+/// <param name="Bonus">Bonus per patient cured.</param>
+/// <param name="Percentage">Share of patients to cure, in percent.</param>
+/// <param name="HoursLeft">Hours left on the watch.</param>
+public sealed record ImportedEmergency(string DiseaseId, int Victims, int Cured, int Bonus, int Percentage, int HoursLeft);
 
 /// <summary>A casebook entry of an imported save.</summary>
 /// <param name="DiseaseId">The disease.</param>
@@ -241,6 +265,27 @@ public sealed record ImportedGame
 
     /// <summary>The rat holes: the corridor tile each opens onto and the wall it is in.</summary>
     public IReadOnlyList<(TilePosition Tile, Direction Wall)> Ratholes { get; init; } = [];
+
+    /// <summary>The research points earned this year, for the year's award, or null for none.</summary>
+    public int? ResearchPointsThisYear { get; init; }
+
+    /// <summary>Where the VIP visit stands, or null to keep the level's.</summary>
+    public ImportedVip? Vip { get; init; }
+
+    /// <summary>The emergency under way, or null for none; its patients are those marked <see cref="ImportedPatient.IsEmergency"/>.</summary>
+    public ImportedEmergency? Emergency { get; init; }
+
+    /// <summary>
+    /// The level's planned emergencies used up (the next planned one among them) and the hours until the next, or null
+    /// to keep the level's plan.
+    /// </summary>
+    public (int Used, long? HoursToNext)? NextEmergency { get; init; }
+
+    /// <summary>
+    /// The level's planned earthquakes used up, the hours until the next and its strength; without a next one the
+    /// level's plan stays.
+    /// </summary>
+    public (int Used, long? HoursToNext, int Size)? NextEarthquake { get; init; }
 
     /// <summary>The rats killed and shots fired this year, or null for none.</summary>
     public (int Killed, int Shots)? RatsThisYear { get; init; }
@@ -426,6 +471,7 @@ public static class GameImport
             hospital.SetRadiatorHeat(heat);
         }
 
+        var emergencyPatients = new List<Humanoid>();
         foreach (var imported in game.Patients)
         {
             // Someone sitting on a bench stands up next to it.
@@ -469,6 +515,14 @@ public static class GameImport
             patient.Behaviour = behaviour;
             patient.Happiness = Math.Clamp(imported.Happiness, 0m, 1m);
             patient.Warmth = Math.Clamp(imported.Warmth, 0m, 1m);
+            if (imported.IsEmergency && game.Emergency is not null)
+            {
+                emergencyPatients.Add(patient);
+            }
+            else
+            {
+                behaviour.ResumeImportedRoute(imported.Diagnosed, imported.SeenByGp);
+            }
         }
 
         foreach (var entry in game.Casebook)
@@ -545,6 +599,12 @@ public static class GameImport
         }
 
         ImportYearCounters(hospital, game);
+        ImportVip(simulation, hospital, game.Vip, problems);
+        ImportEmergencies(simulation, hospital, game, emergencyPatients);
+        if (game.NextEarthquake is { HoursToNext: >= 0 and var quakeHours } quake)
+        {
+            simulation.Earthquakes.Import(simulation.Rules.Earthquakes.Count, quake.Used, GameDate.FromHours(simulation.Hours + quakeHours), quake.Size);
+        }
 
         // The calendar has moved on: hiring dates count back from the save's day.
         foreach (var (staff, ago) in hired)
@@ -554,6 +614,95 @@ public static class GameImport
 
         ImportCompetitors(simulation, game.Competitors);
         return new ImportReport(problems);
+    }
+
+    /// <summary>
+    /// The save's VIP: invited, on the way (arriving as much later as in the save) or in the hospital with the rooms
+    /// they have still to see; after the visit, nothing changes.
+    /// </summary>
+    private static void ImportVip(Simulation simulation, Hospital hospital, ImportedVip? imported, List<string> problems)
+    {
+        if (imported is null || imported.Name is < 0 or >= VipVisits.NameCount)
+        {
+            return;
+        }
+
+        var vips = hospital.Vips;
+        switch (imported.State)
+        {
+            case VipState.Invited:
+                vips.State = VipState.Invited;
+                vips.InvitedName = imported.Name;
+                vips.InvitationExpires = simulation.Tick + (VipVisits.InvitationDays * GameDate.HoursPerDay);
+                break;
+            case VipState.Travelling:
+                vips.State = VipState.Travelling;
+                vips.InvitedName = imported.Name;
+                vips.ArrivalTick = simulation.Tick + Math.Max(0, imported.ArrivalInHours);
+                break;
+            case VipState.Visiting:
+                if (imported.Tile is not { } at || NearestPassable(simulation.Map, at) is not { } tile)
+                {
+                    problems.Add($"the VIP at {imported.Tile} could not be placed");
+                    return;
+                }
+
+                var vip = simulation.AddEntity(id => Humanoid.CreateVip(id, tile, hospital.Player));
+                var behaviour = new People.VipBehaviour(imported.Name);
+                behaviour.ResumeImportedVisit(imported.RoomsLeft);
+                vip.Behaviour = behaviour;
+                vips.State = VipState.Visiting;
+                vips.InvitedName = imported.Name;
+                vips.ArrivalTick = simulation.Tick + Math.Min(0, imported.ArrivalInHours);
+                vips.Count++;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// The save's emergencies: the one under way with its patients and the time left on its watch, and the level's
+    /// planned emergencies used up, the next on the day the save planned it.
+    /// </summary>
+    private static void ImportEmergencies(Simulation simulation, Hospital hospital, ImportedGame game, List<Humanoid> emergencyPatients)
+    {
+        var state = hospital.Emergencies;
+        if (game.NextEmergency is { } next)
+        {
+            state.NextNumber = Math.Max(0, next.Used);
+            var index = next.Used - 1;
+            if (next.HoursToNext is >= 0 and var hours && simulation.Rules.Emergencies.Any(e => e.Index == index))
+            {
+                var date = GameDate.FromHours(simulation.Hours + hours);
+                (state.NextIndex, state.NextMonth, state.NextDay) = (index, date.MonthOfGame, date.Day);
+            }
+            else
+            {
+                Disasters.Emergencies.NextEmergency(simulation, hospital);
+            }
+        }
+
+        if (game.Emergency is not { } imported || emergencyPatients.Count == 0 || imported.HoursLeft <= 0)
+        {
+            return;
+        }
+
+        var emergency = new Disasters.Emergency(imported.DiseaseId, Math.Max(imported.Victims, emergencyPatients.Count), imported.Bonus, imported.Percentage)
+        {
+            IsAccepted = true,
+            Cured = Math.Max(0, imported.Cured),
+            WatchTimer = Math.Min(imported.HoursLeft / Disasters.HospitalEmergencies.WatchTickRate, Disasters.HospitalEmergencies.WatchSegments - 1),
+            WatchTickTimer = Math.Max(1, imported.HoursLeft % Disasters.HospitalEmergencies.WatchTickRate),
+        };
+        state.Current = emergency;
+        var number = 0;
+        foreach (var patient in emergencyPatients)
+        {
+            emergency.PatientIds.Add(patient.Id);
+            if (patient.Behaviour is People.PatientBehaviour behaviour)
+            {
+                behaviour.StartEmergency(simulation, patient, ++number);
+            }
+        }
     }
 
     /// <summary>The year's VIP visits and rats for the awards, and the days since the last VIP for the next.</summary>
@@ -571,6 +720,11 @@ public static class GameImport
         if (game.DaysSinceVip is >= 0 and var days)
         {
             hospital.Vips.DaysSinceLast = days;
+        }
+
+        if (game.ResearchPointsThisYear is > 0 and var research)
+        {
+            hospital.ResearchPointsThisYear = research;
         }
 
         if (game.RatsThisYear is { } rats)
@@ -665,6 +819,11 @@ public static class GameImport
         if (created is null)
         {
             return false;
+        }
+
+        if (obj.PlantWater is { } water && created.Plant is { } plant)
+        {
+            plant.ImportOriginalWater(water);
         }
 
         if (created.Machine is { } machine)

@@ -397,6 +397,46 @@ public class OriginalSaveGameTests
     }
 
     [Fact]
+    public void ReadsTheVipEmergenciesEarthquakeAndPatientRoute()
+    {
+        var data = new byte[OriginalSaveGame.Length];
+        var hospital = OriginalSaveGame.HospitalOffset;
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 499), 72700);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 503), 67);
+        data[hospital + 505] = 10;
+        data[hospital + 506] = 3;
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 507), 4);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 473), 37);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.NextEmergencyOffset), 8295);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(OriginalSaveGame.NextEmergencyOffset + 4), 500);
+        byte[] emergency = [1, 29, 3, 75];
+        emergency.CopyTo(data, OriginalSaveGame.NextEmergencyOffset + 6);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.NextEarthquakeOffset), 9000);
+        data[OriginalSaveGame.NextEarthquakeOffset + 4] = 4;
+        data[OriginalSaveGame.NextEarthquakeOffset + 5] = 1;
+        data.AsSpan(OriginalSaveGame.UsedEmergencyOffset, 9).Fill(1);
+        data.AsSpan(OriginalSaveGame.UsedEarthquakeOffset, 2).Fill(1);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.AwardCounterOffset + 13), 25701);
+        var entity = OriginalSaveGame.EntityOffset + (30 * OriginalSaveGame.EntityLength);
+        data[entity + 12] = 2;
+        data[entity + 168] = 16;
+        data[entity + 169] = 16;
+        data[entity + 148] = 7;
+        data[entity + 149] = 9;
+        data[entity + 116] = 0x40;
+
+        var save = OriginalSaveGame.Parse(data);
+        var read = save.Hospitals[0];
+        var patient = Assert.Single(save.Entities);
+
+        Assert.Equal((72700, 67, 10, 3, 4, 37), (read.VipArrivalTick, read.VipSlot, read.VipName, read.VipState, read.VipRoomsLeft, read.EmergencyTimer));
+        Assert.Equal((8295, 500, true, 29, 3, 75), save.NextEmergency);
+        Assert.Equal((9000, 4, true), save.NextEarthquake);
+        Assert.Equal((9, 2, 25701), (save.EmergenciesUsed, save.EarthquakesUsed, save.ResearchPointsThisYear));
+        Assert.Equal(((byte)16, 2, 0x40), (patient.DiagnosedDisease, patient.ProceduresDone, patient.PatientFlags));
+    }
+
+    [Fact]
     public void ReceptionistsAreNeverTired()
     {
         var install = RealGameData.Require();

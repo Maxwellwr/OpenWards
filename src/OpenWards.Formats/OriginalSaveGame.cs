@@ -139,6 +139,30 @@ public sealed record OriginalSaveEntity(int Slot, ReadOnlyMemory<byte> Raw)
     /// <summary>Patients only: how contagious they are; 255 once vaccinated.</summary>
     public byte ContagiousStrength => Raw.Span[174];
 
+    /// <summary>Patients only: the disease diagnosed (casebook index), or 1 before the diagnosis.</summary>
+    public byte DiagnosedDisease => Raw.Span[169];
+
+    /// <summary>Patients only: how many diagnosis procedures they have been through (non-zero entries at +148).</summary>
+    public int ProceduresDone
+    {
+        get
+        {
+            var done = 0;
+            foreach (var expertise in Raw.Span[148..158])
+            {
+                if (expertise != 0)
+                {
+                    done++;
+                }
+            }
+
+            return done;
+        }
+    }
+
+    /// <summary>Patients only: the flags at +116 (0x40 an emergency patient).</summary>
+    public int PatientFlags => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[116..]);
+
     /// <summary>Patients only: happiness from 0 to 100, the first bar of the patient window.</summary>
     public byte Happiness => Raw.Span[81];
 
@@ -493,6 +517,21 @@ public sealed record OriginalSaveHospital(
     /// <summary>The tick the current or last VIP arrived, or 0 before the first.</summary>
     public int VipArrivalTick => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[499..]);
 
+    /// <summary>The entity slot of the current or last VIP.</summary>
+    public int VipSlot => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[503..]);
+
+    /// <summary>Which VIP (0 to 10) the current or last visit is.</summary>
+    public int VipName => Raw.Span[505];
+
+    /// <summary>Where the VIP visit stands: 0 none, 1 invited, 2 on the way, 3 in the hospital, 4 over.</summary>
+    public int VipState => Raw.Span[506];
+
+    /// <summary>Rooms the VIP in the hospital has still to look at.</summary>
+    public int VipRoomsLeft => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[507..]);
+
+    /// <summary>Current emergency: the time left on its watch, in half-days (0 when none is under way).</summary>
+    public int EmergencyTimer => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[473..]);
+
     /// <summary>Current or last emergency: the disease (casebook index).</summary>
     public int EmergencyDisease => Raw.Span[484];
 
@@ -705,6 +744,24 @@ public sealed class OriginalSaveGame
     /// </summary>
     public const int AwardCounterOffset = 0x669A8;
 
+    /// <summary>Offset of the next emergency (<see cref="NextEmergency"/>).</summary>
+    public const int NextEmergencyOffset = 0x66815;
+
+    /// <summary>Offset of the next earthquake (<see cref="NextEarthquake"/>).</summary>
+    public const int NextEarthquakeOffset = 0x6681F;
+
+    /// <summary>Offset of the flags of the level's planned emergencies used up.</summary>
+    public const int UsedEmergencyOffset = 0x66853;
+
+    /// <summary>Number of used-emergency flags.</summary>
+    public const int UsedEmergencyCount = 20;
+
+    /// <summary>Offset of the flags of the level's planned earthquakes used up.</summary>
+    public const int UsedEarthquakeOffset = 0x66843;
+
+    /// <summary>Number of used-earthquake flags.</summary>
+    public const int UsedEarthquakeCount = 16;
+
     /// <summary>Offset of the first hospital block.</summary>
     public const int HospitalOffset = 399968;
 
@@ -758,6 +815,44 @@ public sealed class OriginalSaveGame
     /// <summary>The rats the player killed and the shots fired this year.</summary>
     public (int Killed, int Shots) RatsThisYear =>
         (BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 21)..]), BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 25)..]));
+
+    /// <summary>The research points the player earned this year, for the year's award.</summary>
+    public int ResearchPointsThisYear => BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 13)..]);
+
+    /// <summary>
+    /// The next emergency: its tick, bonus per patient, whether one is planned, disease (casebook index), patients and
+    /// the share to cure in percent.
+    /// </summary>
+    public (int Tick, int Bonus, bool Planned, int Disease, int Patients, int Percent) NextEmergency => (
+        BinaryPrimitives.ReadInt32LittleEndian(Data.Span[NextEmergencyOffset..]),
+        BinaryPrimitives.ReadUInt16LittleEndian(Data.Span[(NextEmergencyOffset + 4)..]),
+        Data.Span[NextEmergencyOffset + 6] != 0,
+        Data.Span[NextEmergencyOffset + 7],
+        Data.Span[NextEmergencyOffset + 8],
+        Data.Span[NextEmergencyOffset + 9]);
+
+    /// <summary>The next earthquake: its tick, strength and whether one is planned.</summary>
+    public (int Tick, int Strength, bool Planned) NextEarthquake => (
+        BinaryPrimitives.ReadInt32LittleEndian(Data.Span[NextEarthquakeOffset..]),
+        Data.Span[NextEarthquakeOffset + 4],
+        Data.Span[NextEarthquakeOffset + 5] != 0);
+
+    /// <summary>How many of the level's planned emergencies have been used up, from the first.</summary>
+    public int EmergenciesUsed => CountFlags(UsedEmergencyOffset, UsedEmergencyCount);
+
+    /// <summary>How many of the level's planned earthquakes have been used up, from the first.</summary>
+    public int EarthquakesUsed => CountFlags(UsedEarthquakeOffset, UsedEarthquakeCount);
+
+    private int CountFlags(int offset, int count)
+    {
+        var used = 0;
+        while (used < count && Data.Span[offset + used] != 0)
+        {
+            used++;
+        }
+
+        return used;
+    }
 
     /// <summary>
     /// Owner of a land parcel (numbered as in the level's <c>LEVEL.L*</c> map): 0 for sale, 1 bought by the
