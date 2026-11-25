@@ -514,7 +514,7 @@ public class OriginalSaveGameTests
         Assert.Equal(76877, opponent.CompetitorNextTick);
         Assert.Equal((0, 0, 0), opponent.CompetitorQueue[0]);
         Assert.Equal((1, 1, 32), opponent.CompetitorQueue[1]);
-        Assert.Equal((3, 4, 1), opponent.CompetitorPending);
+        Assert.Equal((3, 4, 1, false), opponent.CompetitorPending);
         Assert.Equal(4200, opponent.CompetitorWages);
         Assert.Equal(3, opponent.CompetitorRooms);
         Assert.Equal(13, opponent.CompetitorScenarioPosition);

@@ -69,7 +69,7 @@ public sealed class OriginalSaveImporterTests(ITestOutputHelper output)
                     Assert.Equal(rival.IsOpen, opponent.IsOpen);
                     Assert.Equal(rival.Nurses + rival.Doctors + rival.Handymen + rival.Receptionists, opponent.Staff.Count);
                     Assert.Equal(rival.CompetitorScenarioPosition is >= 1 and <= 9 ? rival.CompetitorScenarioPosition - 1 : opponent.ScenarioStep, opponent.ScenarioStep);
-                    Assert.Equal(rival.CompetitorQueue.Count(task => task.Type == 1), opponent.Queue.Count(task => task is not null));
+                    Assert.Equal(rival.CompetitorQueue.Count(task => task.Type is 1 or 4), opponent.Queue.Count(task => task is not null));
                     Assert.Equal(rival.CompetitorPending.Kind != 0, opponent.Pending is not null);
                 }
             }

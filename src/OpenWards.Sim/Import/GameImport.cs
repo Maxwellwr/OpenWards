@@ -160,7 +160,7 @@ public sealed record ImportedCompetitor(
 /// <param name="PatientsInHospital">Its patients in the hospital, if known.</param>
 /// <param name="Rooms">The room types it has built.</param>
 /// <param name="Objects">Objects it has bought outside its rooms, by type.</param>
-/// <param name="Queue">Its queue: for each of the eight places a hire of a class (with a specialism) or nothing.</param>
+/// <param name="Queue">Its queue: for each of the eight places a hire of a class (with a specialism), a loan request or nothing.</param>
 /// <param name="Pending">The action it waits to carry out when its time comes, if any; else it decides afresh then.</param>
 public sealed record ImportedCompetitorScenario(
     bool IsOpen,
@@ -171,11 +171,8 @@ public sealed record ImportedCompetitorScenario(
     int? PatientsInHospital,
     IReadOnlyList<string> Rooms,
     IReadOnlyList<(string ObjectType, int Count)> Objects,
-    IReadOnlyList<ImportedCompetitorHire?> Queue,
+    IReadOnlyList<CompetitorAction?> Queue,
     CompetitorAction? Pending = null);
-
-/// <summary>A hire waiting in a computer player's queue.</summary>
-public readonly record struct ImportedCompetitorHire(StaffClass Class, Specialism? Ability);
 
 /// <summary>
 /// The state of a hospital taken from a save of another game (the original Theme Hospital), to be rebuilt on a

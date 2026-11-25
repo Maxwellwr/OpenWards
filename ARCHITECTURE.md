@@ -402,10 +402,13 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   hospital not yet open is lost. The level's computer opponents (`computer[n].Playing`, CorsixTH's
   `AIHospital`) are `Simulation.Competitors` (`CompetitorHospital`): not on the map, they play a scenario as the
   logic specification describes the original. Once every 25 ticks, when its time has come, an opponent decides on an
-  action or carries it out (hire a receptionist, desk, 4 benches, GP's office, open, hire a doctor; then over and over
-  staff, a room, comfort objects and land, the loan), with ⌊clamp(Speed − rng % Skill, 1, 100) × delay / 10⌋ ticks
-  between; failed actions wait in 8 places to be tried again. It hires the most skilled candidate it can pay for from
-  the shared candidates, builds the rooms research has made available to the player, and borrows by the player's rules.
+  action or carries it out (hire a receptionist, desk, 4 benches, GP's office, open, hire a doctor, the first diagnosis
+  room; then over and over staff, a room, comfort objects one at a time, the loan), with ⌊clamp(Speed − rng % Skill, 1,
+  100) × delay / 10⌋ ticks between. The queue of 8 places holds only hires for its rooms and loan requests, which take
+  their time but lend nothing. It hires the first fitting candidate from the shared candidates and builds the rooms
+  research has made available to the player: a diagnosis room if it can, else a treatment room; a list whose rooms are
+  all too dear puts a loan request in the queue, so one step may ask for a loan and build a treatment room, or ask twice.
+  It buys no land.
   Its patients live through their stay at once (`Admit`): a room every five days, diagnosis by its staff's average
   skill, leaving and dying by chance, guessing above its `GuessAt`; the outcomes reach it every five days.
   Reputation (points × 500 / visits), value and the year's raise go by the player's rules. Its traits (`Skill`,
@@ -414,8 +417,9 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   blocks (by name, else in order), and their scenarios too: whether open, the scenario position (the number of the next
   record: start step = position − 1, 12–15 the cycle), the tick of the next action and the action waiting for it (+4604:
   0 none, 1 hire, 2 build, 3 buy, 4 loan), staff by class with summed skills and total wages, the patients in the
-  hospital, the counts of rooms and objects from the players' lists at 0x616B8 and the queue (type 1 a hire by its
-  qualification bits, type 0 a free place). Each `Hospital` runs CorsixTH's opening
+  hospital, the counts of rooms and objects from the players' lists at 0x616B8 and the queue (type 1 a hire of a staff
+  class with the qualification bits it needs, type 0 a free place); an action taken from the queue (+4610) keeps its place
+  there, the first of its type. Each `Hospital` runs CorsixTH's opening
   watch (`UIWatch` "initial_opening"), 13 segments of 385 hours, and opens an hour after it has run
   down, 5006 hours (about 100 days) into the game. `OpenHospitalCommand` opens it early, as the watch's button does; the client's O
   key stands in for that button and the date box shows the days left. `--demo` opens at once.
