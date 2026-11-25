@@ -264,6 +264,12 @@ strings:
       bid: 'Tarjoa $%1%'
       sold: 'Tontti %1% myyty: %2%, $%3%'
       unsold: 'Tonttia %1% ei myyty: kukaan ei tarjonnut'
+    netmission:
+      fallback: 'Tehtävä %1%: kuukausia jäljellä %2%'
+      all_failed: 'Kukaan ei suorittanut tehtävää. Peli jatkuu.'
+      passed: 'Suoritit tehtävän.'
+      failed: 'Et suorittanut tehtävää.'
+      who_failed: 'Tehtävän epäonnistuivat: %1%'
     chat:
       caption: 'Keskustelu'
       none: 'Kukaan ei ole vielä sanonut mitään.'

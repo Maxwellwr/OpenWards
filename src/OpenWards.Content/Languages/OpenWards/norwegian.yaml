@@ -192,6 +192,12 @@ strings:
       bid: 'By $%1%'
       sold: 'Tomt %1% solgt til %2% for $%3%'
       unsold: 'Tomt %1% ble ikke solgt: ingen bød'
+    netmission:
+      fallback: 'Oppdrag %1%: %2% måneder igjen'
+      all_failed: 'Ingen klarte oppdraget. Spillet fortsetter.'
+      passed: 'Du klarte oppdraget.'
+      failed: 'Du klarte ikke oppdraget.'
+      who_failed: 'Klarte ikke oppdraget: %1%'
     chat:
       caption: 'Chat'
       none: 'Ingen har sagt noe ennå.'

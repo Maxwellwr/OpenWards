@@ -60,6 +60,12 @@ strings:
       bid: 'Enchérir $%1%'
       sold: 'Parcelle %1% vendue à %2% pour $%3%'
       unsold: 'Parcelle %1% invendue : personne n''a enchéri'
+    netmission:
+      fallback: 'Mission %1% : %2% mois restants'
+      all_failed: 'Personne n''a rempli la mission. La partie continue.'
+      passed: 'Vous avez rempli la mission.'
+      failed: 'Vous n''avez pas rempli la mission.'
+      who_failed: 'Mission non remplie : %1%'
     chat:
       caption: 'Discussion'
       none: 'Personne n''a encore rien dit.'

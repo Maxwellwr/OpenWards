@@ -578,6 +578,9 @@ public sealed class Hospital
     /// <summary>What the hospital owes the bank (CorsixTH's <c>loan</c>).</summary>
     public long Loan { get; private set; }
 
+    /// <summary>The player's network mission (<see cref="Economy.NetMission"/>).</summary>
+    public NetMission NetMission { get; private set; } = new();
+
     /// <summary>The bank's yearly interest on the loan, in hundredths of a percent.</summary>
     public int InterestRate { get; private set; }
 
@@ -1926,6 +1929,8 @@ public sealed class Hospital
             writer.WriteInt32(month.PlantsWatered);
             writer.WriteInt32(month.Waiting);
         }
+
+        NetMission.Write(writer);
     }
 
     internal static Hospital Read(SimReader reader, int player)
@@ -2217,6 +2222,12 @@ public sealed class Hospital
             {
                 hospital._awardMonths.Add(new AwardMonth(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32()));
             }
+        }
+
+        // Version 117 keeps the network mission.
+        if (reader.Version is 0 or >= 117)
+        {
+            hospital.NetMission = NetMission.Read(reader);
         }
 
         return hospital;

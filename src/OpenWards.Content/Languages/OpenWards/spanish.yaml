@@ -46,6 +46,12 @@ strings:
       bid: 'Pujar $%1%'
       sold: 'Parcela %1% vendida a %2% por $%3%'
       unsold: 'Parcela %1% sin vender: nadie pujó'
+    netmission:
+      fallback: 'Misión %1%: quedan %2% meses'
+      all_failed: 'Nadie ha cumplido la misión. El juego continúa.'
+      passed: 'Has cumplido la misión.'
+      failed: 'No has cumplido la misión.'
+      who_failed: 'No cumplieron la misión: %1%'
     chat:
       caption: 'Chat'
       none: 'Nadie ha dicho nada todavía.'

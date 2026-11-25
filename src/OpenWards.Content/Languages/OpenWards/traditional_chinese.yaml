@@ -115,6 +115,12 @@ strings:
       bid: '出價$%1%'
       sold: '地塊%1%以$%3%賣給%2%'
       unsold: '地塊%1%未售出：無人出價'
+    netmission:
+      fallback: '任務 %1%：剩餘 %2% 個月'
+      all_failed: '沒有人完成任務。遊戲繼續。'
+      passed: '你完成了任務。'
+      failed: '你沒有完成任務。'
+      who_failed: '未完成任務：%1%'
     chat:
       caption: '聊天'
       none: '還沒有人說話。'

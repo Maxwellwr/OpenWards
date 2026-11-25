@@ -217,6 +217,12 @@ strings:
       bid: 'Licytuj $%1%'
       sold: 'Działka %1% sprzedana: %2% za $%3%'
       unsold: 'Działka %1% nie sprzedana: nikt nie licytował'
+    netmission:
+      fallback: 'Zadanie %1%: zostało miesięcy: %2%'
+      all_failed: 'Nikt nie wykonał zadania. Gra toczy się dalej.'
+      passed: 'Wykonałeś zadanie.'
+      failed: 'Nie wykonałeś zadania.'
+      who_failed: 'Nie wykonali zadania: %1%'
     chat:
       caption: 'Czat'
       none: 'Nikt jeszcze nic nie powiedział.'

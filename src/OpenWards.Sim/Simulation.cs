@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 116;
+    private const int FormatVersion = 117;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -55,7 +55,6 @@ public sealed class Simulation
     /// Which parcels touch, by passable tiles of the map as the level began (CorsixTH's
     /// <c>parcel_adjacency_matrix</c>), as parcel × parcel count + parcel.
     /// </summary>
-    private bool[] _parcelAdjacency = [];
 
     /// <summary>Candidates for hire per <see cref="StaffClass"/>, shared by every hospital as in CorsixTH.</summary>
     private readonly List<StaffProfile>[] _availableStaff = [[], [], [], []];
@@ -109,7 +108,6 @@ public sealed class Simulation
             StaffHiring.HireStartStaff(this, player);
         }
 
-        _parcelAdjacency = ParcelAdjacency(map);
         MakeAvailableStaff(0);
 
         // CorsixTH's World:World plans the first earthquake after the candidates for hire and before the arrivals.
@@ -153,6 +151,9 @@ public sealed class Simulation
 
     /// <summary>How the last land auction ended, if one has. Part of the saved state.</summary>
     public AuctionResult? LastAuction { get; internal set; }
+
+    /// <summary>How the last network mission was judged, if one has been (<see cref="NetMission"/>). Part of the saved state.</summary>
+    public NetMissionResult? LastNetMission { get; internal set; }
 
     /// <summary>Each player's hospital, by player (0-based).</summary>
     public IReadOnlyList<Hospital> Hospitals => _hospitals;
@@ -585,6 +586,12 @@ public sealed class Simulation
             simulation.AuctionFrames = reader.ReadInt64();
         }
 
+        // Version 117 keeps how the last network mission was judged.
+        if (reader.Version is 0 or >= 117)
+        {
+            simulation.LastNetMission = reader.ReadBool() ? NetMissionResult.Read(reader, map.PlayerCount) : null;
+        }
+
         foreach (var pool in simulation._availableStaff)
         {
             var count = reader.ReadCount(MaxAvailableStaff);
@@ -619,10 +626,13 @@ public sealed class Simulation
             simulation._delayedObjects.Add(MapObjectPlacement.Read(reader));
         }
 
-        simulation._parcelAdjacency = new bool[map.ParcelCount * map.ParcelCount];
-        for (var i = 0; i < simulation._parcelAdjacency.Length; i++)
+        // Before version 117 the parcels' adjacency on the map was kept; the level's neighbour lists replace it.
+        if (version is not 0 and < 117)
         {
-            simulation._parcelAdjacency[i] = reader.ReadBool();
+            for (var i = 0; i < map.ParcelCount * map.ParcelCount; i++)
+            {
+                reader.ReadBool();
+            }
         }
 
         // Version 106 keeps the stream of the patients' money; older games start it from the game's.
@@ -712,6 +722,8 @@ public sealed class Simulation
         writer.WriteBool(LastAuction is not null);
         LastAuction?.Write(writer);
         writer.WriteInt64(AuctionFrames);
+        writer.WriteBool(LastNetMission is not null);
+        LastNetMission?.Write(writer);
 
         foreach (var pool in _availableStaff)
         {
@@ -743,18 +755,15 @@ public sealed class Simulation
             placement.Write(writer);
         }
 
-        foreach (var adjacent in _parcelAdjacency)
-        {
-            writer.WriteBool(adjacent);
-        }
-
         writer.WriteUInt64(MoneyRandom.State);
         writer.WriteUInt64(MoneyRandom.Increment);
     }
 
     /// <summary>
-    /// <c>level_map::is_parcel_purchasable</c>: a parcel nobody owns, other than the outside (0), that touches one of
-    /// the player's parcels or the outside.
+    /// Whether a player may buy a parcel, by the maintainer's specification of the game's logic ("Кто может купить"): a
+    /// parcel nobody owns, other than the outside (0), that the level lists with neighbours only when the player owns
+    /// one of them (<see cref="LevelRules.NeighboursOf"/>), any other at any time. Whether parcels touch on the map does
+    /// not count, unlike CorsixTH's <c>level_map::is_parcel_purchasable</c>.
     /// </summary>
     /// <param name="parcel">The parcel.</param>
     /// <param name="player">The player, 0-based.</param>
@@ -766,9 +775,14 @@ public sealed class Simulation
             return false;
         }
 
-        for (var other = 0; other < count; other++)
+        if (Rules.NeighboursOf(parcel) is not { } anyOf)
         {
-            if ((other == 0 || Map.GetParcelOwner(other) == player + 1) && _parcelAdjacency[(parcel * count) + other])
+            return true;
+        }
+
+        foreach (var other in anyOf)
+        {
+            if (other > 0 && other < count && Map.GetParcelOwner(other) == player + 1)
             {
                 return true;
             }
@@ -807,48 +821,7 @@ public sealed class Simulation
         {
             SetParcelOwner(parcel, player + 1);
             hospital.Spend(Hours, checked((int)price), TransactionKind.BuyLand, parcel.ToString(CultureInfo.InvariantCulture));
-        }
-    }
-
-    /// <summary>
-    /// <c>level_map::make_adjacency_matrix</c>: every parcel touches itself, and two parcels touch where passable tiles
-    /// of each are side by side.
-    /// </summary>
-    private static bool[] ParcelAdjacency(LevelMap map)
-    {
-        var count = map.ParcelCount;
-        var adjacency = new bool[count * count];
-        for (var i = 0; i < count; i++)
-        {
-            adjacency[(i * count) + i] = true;
-        }
-
-        for (var y = 0; y < map.Height; y++)
-        {
-            for (var x = 0; x < map.Width; x++)
-            {
-                if (x > 0)
-                {
-                    TestAdjacent(map, adjacency, map.OriginalTile(x, y), map.OriginalTile(x - 1, y));
-                }
-
-                if (y > 0)
-                {
-                    TestAdjacent(map, adjacency, map.OriginalTile(x, y), map.OriginalTile(x, y - 1));
-                }
-            }
-        }
-
-        return adjacency;
-
-        static void TestAdjacent(LevelMap map, bool[] adjacency, MapTile tile, MapTile other)
-        {
-            var count = map.ParcelCount;
-            if (tile.Parcel != other.Parcel && tile.Parcel < count && other.Parcel < count && tile.Has(TileFlags.Passable) && other.Has(TileFlags.Passable))
-            {
-                adjacency[(tile.Parcel * count) + other.Parcel] = true;
-                adjacency[tile.Parcel + (other.Parcel * count)] = true;
-            }
+            hospital.NetMission.Happened(NetCriterion.BuyPlot);
         }
     }
 
@@ -964,6 +937,9 @@ public sealed class Simulation
             hospital.Research.CheckAutomaticDiscovery(this, hospital, date.MonthOfGame);
             hospital.RecordMonth(wages[hospital.Player]);
         }
+
+        // The network game's missions at the quarter's end.
+        NetMission.OnEndMonth(this, date.MonthOfGame);
 
         // The shares of the town's patients and what the month showed, for the year's awards; then the opponents' month.
         YearEndAwards.OnEndMonth(this);
