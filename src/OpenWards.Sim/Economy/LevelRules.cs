@@ -353,6 +353,16 @@ public sealed class LevelRules
             .Select(pair => (pair.Key, pair.Value));
     }
 
+    /// <summary>A planned opponent; its traits since version 117.</summary>
+    private static PlannedCompetitor ReadCompetitor(SimReader reader)
+    {
+        var number = reader.ReadInt32();
+        var name = reader.ReadString();
+        return reader.Version is 0 or >= 117
+            ? new PlannedCompetitor(number, name, new CompetitorPersonality(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32()))
+            : new PlannedCompetitor(number, name);
+    }
+
     internal void Write(SimWriter writer)
     {
         writer.WriteInt32(_startCash);
@@ -404,6 +414,12 @@ public sealed class LevelRules
         {
             writer.WriteInt32(competitor.Number);
             writer.WriteString(competitor.Name);
+            var personality = competitor.Personality ?? CompetitorPersonality.Default;
+            writer.WriteInt32(personality.Skill);
+            writer.WriteInt32(personality.StaffLevels);
+            writer.WriteInt32(personality.Speed);
+            writer.WriteInt32(personality.Comfort);
+            writer.WriteInt32(personality.GuessAt);
         }
 
         writer.WriteInt32(ScoreMaxIncrease);
@@ -472,7 +488,7 @@ public sealed class LevelRules
 
         var rules = new LevelRules(startCash, rooms, objects, staff, population, diseases, startReputation, awards, landCostPerTile, endConditions, interestRate, overdraftDifferential, availability, earthquakes, reader.ReadInt32(), TirednessRules.Read(reader), reader.ReadInt32(),
             Enumerable.Range(0, reader.ReadCount(MaxEntries)).Select(_ => PlannedEmergency.Read(reader)).ToList(), EpidemicRules.Read(reader),
-            Enumerable.Range(0, reader.ReadCount(MaxEntries)).Select(_ => new PlannedCompetitor(reader.ReadInt32(), reader.ReadString())).ToList(),
+            Enumerable.Range(0, reader.ReadCount(MaxEntries)).Select(_ => ReadCompetitor(reader)).ToList(),
             reader.ReadInt32(), reader.ReadInt32() is var level and > 0 ? level : null,
             reader.ReadBool() ? new RandomEmergencies(reader.ReadInt32(), reader.ReadInt32()) : null,
             reader.ReadByte() is var difficulty && Enum.IsDefined((Difficulty)difficulty) ? (Difficulty)difficulty : throw new InvalidDataException($"Unknown difficulty {difficulty}."),

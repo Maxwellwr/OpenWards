@@ -532,20 +532,30 @@ public class LevelRulesLoaderTests
     }
 
     [Fact]
-    public void ReadsThePlayingComputerOpponentsInCorsixThsOrder()
+    public void ReadsThePlayingComputerOpponentsInOrderWithTheirTraits()
     {
+        // The difficulty's base table, then the level's own file for those that play.
         var config = LevelConfig.Parse(Encoding.ASCII.GetBytes("""
-            #computer[0].Playing.Name 1 DEEPBLUE
-            #computer[3].Playing 1
+            #computer[0].Playing.Skill.StaffLevels.Luck.Speed.Comfort.GuessAt 0 2 3 1 40 4 80
+            #computer[1].Playing.Skill.StaffLevels.Luck.Speed.Comfort.GuessAt 0 2 3 1 40 4 80
+            #computer[3].Playing.Skill.StaffLevels.Luck.Speed.Comfort.GuessAt 0 2 3 1 40 4 80
             #computer[12].Playing.Name 1 CORSIX
             #computer[13].Playing.Name 0 ROUJIN
+            """));
+        config.Apply(Encoding.ASCII.GetBytes("""
+            #computer[3].Playing.Skill.StaffLevels.Luck.Speed.Comfort.GuessAt 1 5 9 4 20 9 60
+            #computer[1].Playing 1
             """));
 
         var rules = LevelRulesLoader.FromConfig(config, null, BaseGameContent.Create());
 
-        // pairs visits base_config.lua's 1 to 14 before 0; a missing name is base_config.lua's.
+        // In the order of i; the names by i as the original's language files number them; Luck is not kept.
         Assert.Equal(
-            [new PlannedCompetitor(4, "MULTIVAC"), new PlannedCompetitor(13, "CORSIX"), new PlannedCompetitor(1, "DEEPBLUE")],
+            [
+                new PlannedCompetitor(2, "HAL", new CompetitorPersonality(2, 3, 40, 4, 80)),
+                new PlannedCompetitor(4, "MULTIVAC", new CompetitorPersonality(5, 9, 20, 9, 60)),
+                new PlannedCompetitor(13, "CORSIX", CompetitorPersonality.Default),
+            ],
             rules.Competitors);
         Assert.Empty(LevelRulesLoader.CompetitorsFromConfig(LevelConfig.Parse([])));
     }

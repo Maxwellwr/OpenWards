@@ -344,6 +344,80 @@ public class OriginalSaveGameTests
     }
 
     [Fact]
+    public void ReadsTheComputerPlayersScenario()
+    {
+        var data = new byte[OriginalSaveGame.Length];
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.TickOffset), 76780);
+        var hospital = OriginalSaveGame.HospitalOffset + (2 * OriginalSaveGame.HospitalLength);
+        data[hospital + 42] = 2;
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 4600), 76877);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4604), 3);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4606), 4);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4608), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4612 + 6), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4612 + 8), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4612 + 10), 32);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 4660), 4200);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 4664), 3);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4672), 13);
+        data[hospital + 4677] = 1;
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4678 + 2), 1500);
+        data[hospital + 4694] = 1;
+        var lists = OriginalSaveGame.ObjectListOffset + (2 * OriginalSaveGame.HospitalListLength);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(lists + (2 * 4)), 6);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(lists + OriginalSaveGame.HospitalRoomListOffset + (2 * 7)), 1);
+
+        var save = OriginalSaveGame.Parse(data);
+        var opponent = save.Hospitals[2];
+
+        Assert.Equal(76780, save.Tick);
+        Assert.Equal(76877, opponent.CompetitorNextTick);
+        Assert.Equal((0, 0, 0), opponent.CompetitorQueue[0]);
+        Assert.Equal((1, 1, 32), opponent.CompetitorQueue[1]);
+        Assert.Equal((3, 4, 1), opponent.CompetitorPending);
+        Assert.Equal(4200, opponent.CompetitorWages);
+        Assert.Equal(3, opponent.CompetitorRooms);
+        Assert.Equal(13, opponent.CompetitorScenarioPosition);
+        Assert.Equal(1, opponent.CompetitorNameNumber);
+        Assert.Equal(1500, opponent.CompetitorSkillSum(1));
+        Assert.True(opponent.IsOpen);
+        Assert.False(save.Hospitals[1].IsOpen);
+        Assert.Equal(6, save.HospitalObjects(2, 4));
+        Assert.Equal(0, save.HospitalObjects(1, 4));
+        Assert.Equal(1, save.HospitalRooms(2, 7));
+    }
+
+    [Fact]
+    public void RealComputerPlayersAreInTheirScenario()
+    {
+        var install = RealGameData.Require();
+        var folder = install.FindDirectory("SAVE");
+        var files = folder is null
+            ? []
+            : Directory.EnumerateFiles(folder, "*.H*").Where(file => new FileInfo(file).Length == OriginalSaveGame.Length).ToList();
+        if (files.Count == 0)
+        {
+            Assert.Skip("No original saves in the SAVE folder.");
+        }
+
+        // Positions 1 to 9 are the start (the number of the next record) and 12 to 15 the cycle; a computer player that
+        // has opened is past the start's opening step (position 6), and the rooms it counts are those of its list less the type 4 count.
+        var opponents = files.Select(file => OriginalSaveGame.Parse(File.ReadAllBytes(file)))
+            .SelectMany(save => save.Hospitals.Select((h, player) => (save, h, player)).Where(p => p.h.Kind == 2))
+            .ToList();
+        Assert.NotEmpty(opponents);
+        Assert.All(opponents, p =>
+        {
+            Assert.True(p.h.CompetitorScenarioPosition is >= 0 and <= 9 or >= 12 and <= 15, $"{p.h.Name}: {p.h.CompetitorScenarioPosition}");
+            Assert.True(!p.h.IsOpen || p.h.CompetitorScenarioPosition > 6, $"{p.h.Name} open at {p.h.CompetitorScenarioPosition}");
+            Assert.InRange(p.h.CompetitorPending.Kind, 0, 4);
+            Assert.All(p.h.CompetitorQueue, task => Assert.InRange(task.Type, 0, 2));
+            var rooms = Enumerable.Range(0, OriginalSaveGame.HospitalRoomTypes).Where(t => t != 4).Sum(t => p.save.HospitalRooms(p.player, t));
+            Assert.Equal(p.h.CompetitorRooms, rooms);
+        });
+    }
+
+    [Fact]
     public void RejectsWrongSize()
     {
         Assert.Throws<InvalidDataException>(() => OriginalSaveGame.Parse(new byte[OriginalSaveGame.Length - 1]));

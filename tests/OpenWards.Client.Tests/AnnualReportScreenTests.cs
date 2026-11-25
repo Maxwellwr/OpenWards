@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using OpenWards.Client.Ui.Windows;
 using OpenWards.Sim.Economy;
+using OpenWards.Sim.Import;
 using Xunit;
 
 namespace OpenWards.Client.Tests;
@@ -35,10 +36,7 @@ public sealed class AnnualReportScreenTests
         var rules = new LevelRules(0, [], [], competitors: [new PlannedCompetitor(1, "ORAC"), new PlannedCompetitor(2, "HAL")]);
         var host = new WindowTestHost(rules);
         var orac = host.Simulation.Competitors[0];
-        for (var i = 0; i < 50; i++)
-        {
-            orac.CountNewPatient();
-        }
+        orac.Import(new ImportedCompetitor("ORAC", 600, 50, Cured: 30));
 
         var entries = AnnualReportScreen.Entries(host);
         Assert.Equal(((Ui.IWindowHost)host).PlayerName, entries[0].Name);
