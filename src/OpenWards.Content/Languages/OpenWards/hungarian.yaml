@@ -280,6 +280,12 @@ strings:
       bid: 'Licit: $%1%'
       sold: 'A(z) %1%. telek %2% tulajdona lett $%3%-ért'
       unsold: 'A(z) %1%. telek nem kelt el: senki sem licitált'
+    netmission:
+      fallback: '%1%. feladat: még %2% hónap'
+      all_failed: 'Senki sem teljesítette a feladatot. A játék folytatódik.'
+      passed: 'Teljesítetted a feladatot.'
+      failed: 'Nem teljesítetted a feladatot.'
+      who_failed: 'Nem teljesítették a feladatot: %1%'
     chat:
       caption: 'Csevegés'
       none: 'Még senki nem mondott semmit.'

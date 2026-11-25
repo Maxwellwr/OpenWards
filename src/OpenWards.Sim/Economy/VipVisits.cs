@@ -313,6 +313,12 @@ public sealed class VipVisits
             }
         }
 
+        // The network mission waits for a visit without a bad report.
+        if (vip.Score <= PleasedScore)
+        {
+            hospital.NetMission.Happened(NetCriterion.Vip);
+        }
+
         vips.ThisYear++;
         vips.Report = new VipReport(vip.Name, vip.Score, grant, percent, simulation.Tick + (InvitationDays * GameDate.HoursPerDay));
         if (vips.State == VipState.Visiting)

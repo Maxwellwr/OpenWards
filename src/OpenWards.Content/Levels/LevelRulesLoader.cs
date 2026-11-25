@@ -53,6 +53,12 @@ public static partial class LevelRulesLoader
     /// <summary>Number of levels in the original campaign; each has its own settings file.</summary>
     public const int CampaignLevels = 12;
 
+    /// <summary>The first of the original network levels (<c>LEVEL.L20</c>, <c>NET20.SAM</c>).</summary>
+    public const int FirstNetworkLevel = 20;
+
+    /// <summary>The last of the original network levels (<c>LEVEL.L44</c>, <c>NET44.SAM</c>).</summary>
+    public const int LastNetworkLevel = 44;
+
     /// <summary>The most <c>start_staff</c> entries read.</summary>
     private const int MaxStartStaff = 1000;
 
@@ -117,9 +123,18 @@ public static partial class LevelRulesLoader
     /// <summary>
     /// Reads the settings of a level: the difficulty's base file (such as <c>FULL00.SAM</c>), then,
     /// for a campaign level, the level's own file (such as <c>FULL01.SAM</c>) and CorsixTH's extra settings for it.
+    /// A network level (20 to 44) that has its own file reads the network files instead, as the original does:
+    /// <c>NET00.SAM</c>, then the level's (such as <c>NET20.SAM</c>), whatever the difficulty.
     /// </summary>
     public static LevelConfig LoadConfig(ThemeHospitalInstall install, int? levelNumber, Difficulty difficulty = Difficulty.Medium)
     {
+        if (levelNumber is >= FirstNetworkLevel and <= LastNetworkLevel && install.FileExists("LEVELS", $"NET{levelNumber:00}.SAM"))
+        {
+            var network = LevelConfig.Parse(install.ReadDataFile("LEVELS", "NET00.SAM"));
+            network.Apply(install.ReadDataFile("LEVELS", $"NET{levelNumber:00}.SAM"));
+            return network;
+        }
+
         var prefix = FilePrefix(difficulty);
         var config = LevelConfig.Parse(install.ReadDataFile("LEVELS", $"{prefix}00.SAM"));
         if (levelNumber is >= 1 and <= CampaignLevels)
@@ -233,7 +248,31 @@ public static partial class LevelRulesLoader
             config.GetInt("gbv.SodaPrice") ?? LevelRules.DefaultSodaPrice,
             ResearchFromConfig(config),
             AllocationFromConfig(config),
-            NeedsFromConfig(config, difficulty));
+            NeedsFromConfig(config, difficulty),
+            NetMissionsFromConfig(config),
+            PlotNeighbours.ForLevel(levelNumber));
+    }
+
+    /// <summary>
+    /// The network missions (<c>net_criteria[0…19].Criteria.Value.Month.TimeToDo</c>). <see cref="LevelConfig"/> keeps the
+    /// last of a row given twice, as the original does (level 34 gives row 5 twice).
+    /// </summary>
+    public static IEnumerable<NetMissionRule> NetMissionsFromConfig(LevelConfig config)
+    {
+        for (var i = 0; i <= NetMissionRule.MaxIndex; i++)
+        {
+            if (config.GetInt($"net_criteria[{i}].Criteria") is not { } criterion || criterion is <= 0 or > (int)NetCriterion.NotLowestMoney)
+            {
+                continue;
+            }
+
+            yield return new NetMissionRule(
+                i,
+                (NetCriterion)criterion,
+                config.GetInt($"net_criteria[{i}].Value") ?? 0,
+                config.GetInt($"net_criteria[{i}].Month") ?? 0,
+                Math.Max(0, config.GetInt($"net_criteria[{i}].TimeToDo") ?? 0));
+        }
     }
 
     /// <summary>

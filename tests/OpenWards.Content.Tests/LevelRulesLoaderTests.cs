@@ -600,4 +600,56 @@ public class LevelRulesLoaderTests
         Assert.False(diseases.IsKnown(2));
         Assert.Equal(2, diseases.HoldVisualPeepCount);
     }
+
+    [Fact]
+    public void ReadsTheNetworkMissionsTheLastOfARowGivenTwice()
+    {
+        var config = LevelConfig.Parse(Encoding.ASCII.GetBytes("""
+            #net_criteria[0].Criteria.Value.Month.TimeToDo 0 0 0 0
+            #net_criteria[1].Criteria.Value.Month.TimeToDo 0 0 0 0
+            """));
+        config.Apply(Encoding.ASCII.GetBytes("""
+            #net_criteria[0].Criteria.Value.Month.TimeToDo 4 15 16 4
+            #net_criteria[5].Criteria.Value.Month.TimeToDo 9 1 31 12
+            #net_criteria[5].Criteria.Value.Month.TimeToDo 8 1 44 8
+            #net_criteria[20].Criteria.Value.Month.TimeToDo 3 1 2 4
+            """));
+
+        Assert.Equal(
+            [new NetMissionRule(0, NetCriterion.Cures, 15, 16, 4), new NetMissionRule(5, NetCriterion.NotLowestReputation, 1, 44, 8)],
+            LevelRulesLoader.NetMissionsFromConfig(config));
+    }
+
+    [Fact]
+    public void GivesTheOriginalLevelsTheirParcelNeighbourLists()
+    {
+        var content = BaseGameContent.Create();
+        var nine = LevelRulesLoader.FromConfig(new LevelConfig(), 9, content);
+        Assert.Equal([4, 5, 6], nine.NeighboursOf(8));
+        Assert.Equal([2, 6, 8], nine.NeighboursOf(5));
+        Assert.Null(nine.NeighboursOf(2));
+        Assert.Equal(4, nine.ParcelNeighbourLists.Count);
+        Assert.Empty(LevelRulesLoader.FromConfig(new LevelConfig(), 1, content).ParcelNeighbourLists);
+        Assert.Empty(LevelRulesLoader.FromConfig(new LevelConfig(), null, content).ParcelNeighbourLists);
+        Assert.Equal(54, Enumerable.Range(1, 44).Sum(level => PlotNeighbours.ForLevel(level).Count));
+    }
+
+    [Fact]
+    public void NetworkLevelsReadTheNetworkFilesAndTheirMissions()
+    {
+        var install = RealGameData.Require();
+        var content = BaseGameContent.Create();
+
+        // Level 34's file gives row 5 twice; the second counts. Network land costs 25 a tile.
+        var level34 = LevelRulesLoader.LoadOriginal(install, "LEVEL.L34", content);
+        Assert.Equal(6, level34.NetMissions.Count);
+        Assert.Equal(new NetMissionRule(5, NetCriterion.NotLowestReputation, 1, 44, 8), level34.NetMissions[^1]);
+        Assert.Equal(25, level34.LandCostPerTile);
+
+        var all = new[] { 20, 21, 22, 23, 24, 30, 31, 32, 33, 34, 40, 41, 42, 43, 44 }
+            .Sum(level => LevelRulesLoader.LoadOriginal(install, $"LEVEL.L{level}", content).NetMissions.Count);
+        Assert.Equal(69, all);
+        Assert.Empty(LevelRulesLoader.LoadOriginal(install, "LEVEL.L21", content).NetMissions);
+        Assert.Empty(LevelRulesLoader.LoadOriginal(install, "LEVEL.L5", content).NetMissions);
+    }
 }

@@ -114,6 +114,12 @@ strings:
       bid: 'Bied $%1%'
       sold: 'Perceel %1% verkocht aan %2% voor $%3%'
       unsold: 'Perceel %1% is niet verkocht: niemand bood'
+    netmission:
+      fallback: 'Opdracht %1%: nog %2% maanden'
+      all_failed: 'Niemand heeft de opdracht gehaald. Het spel gaat door.'
+      passed: 'U hebt de opdracht gehaald.'
+      failed: 'U hebt de opdracht niet gehaald.'
+      who_failed: 'Opdracht niet gehaald: %1%'
     chat:
       caption: 'Chat'
       none: 'Nog niemand heeft iets gezegd.'

@@ -13,6 +13,9 @@ namespace OpenWards.Sim.Economy;
 /// </summary>
 public readonly record struct ObjectAvailability(bool ForLevel, bool AtStart);
 
+/// <summary>A parcel that may be bought only by a player who owns one of <see cref="AnyOf"/>.</summary>
+public sealed record ParcelNeighbours(int Parcel, IReadOnlyList<int> AnyOf);
+
 /// <summary>
 /// The money settings of a level, from its level files: starting cash, what rooms and objects
 /// cost, and the staff settings (salaries, who is available for hire). Unlike <see cref="GameContent"/>, they differ between levels, so they are part of the
@@ -62,6 +65,7 @@ public sealed class LevelRules
     private readonly int _startCash;
 
     private readonly EndConditions _endConditions;
+    private readonly Dictionary<int, IReadOnlyList<int>> _neighbourLookup;
     private readonly StaffRules _staff;
 
     /// <param name="startCash">Each hospital's balance at the start.</param>
@@ -92,6 +96,8 @@ public sealed class LevelRules
     /// <param name="research">What research goes by; by default nothing to research.</param>
     /// <param name="allocation">How patients are shared between the hospitals; by default base_config.lua's <c>gbv.Alloc…</c>.</param>
     /// <param name="needs">What patients put up with before they leave; by default <see cref="PatientNeedsRules.ForDifficulty"/>.</param>
+    /// <param name="netMissions">The network game's missions (<c>net_criteria</c>); by default none.</param>
+    /// <param name="parcelNeighbours">For the parcels that have one, the parcels of which a player must own one to buy it; by default none.</param>
     public LevelRules(
         int startCash,
         IEnumerable<KeyValuePair<string, int>> roomCosts,
@@ -120,8 +126,18 @@ public sealed class LevelRules
         int sodaPrice = DefaultSodaPrice,
         Research.ResearchRules? research = null,
         PatientAllocationRules? allocation = null,
-        PatientNeedsRules? needs = null)
+        PatientNeedsRules? needs = null,
+        IEnumerable<NetMissionRule>? netMissions = null,
+        IEnumerable<ParcelNeighbours>? parcelNeighbours = null)
     {
+        // A row given twice counts as the last one given; empty rows are left out.
+        NetMissions = [.. (netMissions ?? [])
+            .GroupBy(row => row.Index)
+            .Select(rows => rows.Last())
+            .Where(row => row.Criterion != NetCriterion.None)
+            .OrderBy(row => row.Index)];
+        ParcelNeighbourLists = [.. (parcelNeighbours ?? []).OrderBy(entry => entry.Parcel)];
+        _neighbourLookup = ParcelNeighbourLists.ToDictionary(entry => entry.Parcel, entry => entry.AnyOf);
         Allocation = allocation ?? PatientAllocationRules.Default;
         Needs = needs ?? PatientNeedsRules.ForDifficulty(Enum.IsDefined(difficulty) ? difficulty : Difficulty.Medium);
         Research = research ?? Sim.Research.ResearchRules.Default;
@@ -157,6 +173,18 @@ public sealed class LevelRules
         _objectAvailability = [.. (objectAvailability ?? []).Select(pair => (pair.Key, pair.Value)).OrderBy(entry => entry.Key, StringComparer.Ordinal)];
         _availabilityLookup = _objectAvailability.ToDictionary(entry => entry.Id, entry => entry.Availability, StringComparer.Ordinal);
     }
+
+    /// <summary>The network game's missions in row order, the empty rows left out.</summary>
+    public IReadOnlyList<NetMissionRule> NetMissions { get; }
+
+    /// <summary>The parcels that may be bought only next to one of the player's, in parcel order.</summary>
+    public IReadOnlyList<ParcelNeighbours> ParcelNeighbourLists { get; }
+
+    /// <summary>
+    /// The parcels of which a player must own one to buy <paramref name="parcel"/>, or null if anyone may buy it at any
+    /// time.
+    /// </summary>
+    public IReadOnlyList<int>? NeighboursOf(int parcel) => _neighbourLookup.TryGetValue(parcel, out var anyOf) ? anyOf : null;
 
     /// <summary>Each hospital's balance at the start; 0 in free build mode.</summary>
     public int StartCash { get; private set; }
@@ -266,6 +294,14 @@ public sealed class LevelRules
         rules.EndConditions = EndConditions.None;
         rules.Staff = _staff.WithoutSalaries();
         return rules;
+    }
+
+    /// <summary>The same level with the given network missions and parcel neighbour lists.</summary>
+    public LevelRules With(IEnumerable<NetMissionRule> netMissions, IEnumerable<ParcelNeighbours> parcelNeighbours)
+    {
+        return new LevelRules(_startCash, _roomCosts.Select(c => KeyValuePair.Create(c.Id, c.Cost)), _objectCosts.Select(c => KeyValuePair.Create(c.Id, c.Cost)), _staff, Population, Diseases, StartReputation,
+            Awards, LandCostPerTile, _endConditions, InterestRate, OverdraftDifferential, _objectAvailability.Select(a => KeyValuePair.Create(a.Id, a.Availability)), Earthquakes, MaxSalary, Tiredness,
+            MayorLaunch, Emergencies, Epidemics, Competitors, ScoreMaxIncrease, LevelNumber, RandomEmergencies, Difficulty, SodaPrice, Research, Allocation, Needs, netMissions, parcelNeighbours);
     }
 
     /// <summary>The same level with no computer opponents, so every patient comes to the players' hospitals.</summary>
@@ -401,6 +437,22 @@ public sealed class LevelRules
         Allocation.Write(writer);
         Needs.Write(writer);
         writer.WriteBool(FreeBuild);
+        writer.WriteInt32(NetMissions.Count);
+        foreach (var row in NetMissions)
+        {
+            row.Write(writer);
+        }
+
+        writer.WriteInt32(ParcelNeighbourLists.Count);
+        foreach (var entry in ParcelNeighbourLists)
+        {
+            writer.WriteInt32(entry.Parcel);
+            writer.WriteInt32(entry.AnyOf.Count);
+            foreach (var other in entry.AnyOf)
+            {
+                writer.WriteInt32(other);
+            }
+        }
     }
 
     internal static LevelRules Read(SimReader reader)
@@ -448,7 +500,34 @@ public sealed class LevelRules
 
             // Version 108 keeps what patients put up with; a game saved before gets the difficulty's defaults.
             reader.Version is 0 or >= 108 ? PatientNeedsRules.Read(reader) : null);
-        return reader.ReadBool() ? rules.WithFreeBuild() : rules;
+        var freeBuild = reader.ReadBool();
+
+        // Version 118 keeps the network missions and the parcels' neighbour lists.
+        if (reader.Version is 0 or >= 118)
+        {
+            var missions = new NetMissionRule[reader.ReadCount(NetMissionRule.MaxIndex + 1)];
+            for (var i = 0; i < missions.Length; i++)
+            {
+                missions[i] = NetMissionRule.Read(reader);
+            }
+
+            var neighbours = new ParcelNeighbours[reader.ReadCount(MaxEntries)];
+            for (var i = 0; i < neighbours.Length; i++)
+            {
+                var parcel = reader.ReadInt32();
+                var anyOf = new int[reader.ReadCount(MaxEntries)];
+                for (var j = 0; j < anyOf.Length; j++)
+                {
+                    anyOf[j] = reader.ReadInt32();
+                }
+
+                neighbours[i] = new ParcelNeighbours(parcel, anyOf);
+            }
+
+            rules = rules.With(missions, neighbours);
+        }
+
+        return freeBuild ? rules.WithFreeBuild() : rules;
     }
 
     private static (string Id, int Cost)[] Sorted(IEnumerable<KeyValuePair<string, int>> costs)

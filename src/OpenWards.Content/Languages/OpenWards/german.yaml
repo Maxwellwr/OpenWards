@@ -127,6 +127,12 @@ strings:
       bid: '$%1% bieten'
       sold: 'Grundstück %1% an %2% für $%3% verkauft'
       unsold: 'Grundstück %1% nicht verkauft: niemand hat geboten'
+    netmission:
+      fallback: 'Auftrag %1%: noch %2% Monate'
+      all_failed: 'Niemand hat den Auftrag erfüllt. Das Spiel geht weiter.'
+      passed: 'Sie haben den Auftrag erfüllt.'
+      failed: 'Sie haben den Auftrag nicht erfüllt.'
+      who_failed: 'Auftrag nicht erfüllt: %1%'
     chat:
       caption: 'Chat'
       none: 'Bisher hat niemand etwas gesagt.'
