@@ -122,7 +122,7 @@ public static class OriginalSaveImporter
                 name,
                 simulation.Rules.Staff,
                 simulation.Random);
-            staff.Add(new ImportedStaff(profile, new TilePosition(entity.TileX, entity.TileY), entity.Morale / 100m, 1m - (entity.Energy / 1000m)));
+            staff.Add(new ImportedStaff(profile, new TilePosition(entity.TileX, entity.TileY), entity.Morale / 100m, entity.Fatigue / 1000m));
         }
 
         var patients = new List<ImportedPatient>();
@@ -142,7 +142,7 @@ public static class OriginalSaveImporter
                 entity.Happiness / 100m,
                 1m - (entity.Thirst / 100m),
                 entity.Warmth / 100m,
-                entity.DiagnosisCertainty * 1000 / 255));
+                entity.DiagnosisProgress));
         }
 
         var casebook = new List<ImportedCase>();

@@ -113,10 +113,10 @@ public sealed record OriginalSaveEntity(int Slot, ReadOnlyMemory<byte> Raw)
     public byte Disease => Raw.Span[168];
 
     /// <summary>
-    /// Patients only: how certain the diagnosis is, from 0 to 255. Patients below the policy's "guess at cure"
-    /// share go back to the GP's office; above it they head for treatment.
+    /// Patients only: diagnosis progress in thousandths (16 bits). It has no upper limit: real saves hold values up
+    /// to about 2,800 for patients diagnosed past certainty.
     /// </summary>
-    public byte DiagnosisCertainty => Raw.Span[146];
+    public int DiagnosisProgress => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[146..]);
 
     /// <summary>Patients only: happiness from 0 to 100, the first bar of the patient window.</summary>
     public byte Happiness => Raw.Span[81];
@@ -136,8 +136,10 @@ public sealed record OriginalSaveEntity(int Slot, ReadOnlyMemory<byte> Raw)
     /// <summary>Staff and patients: morale or happiness from 0 to 100 (the first bar of their windows).</summary>
     public byte Morale => Raw.Span[81];
 
-    /// <summary>Staff only: energy from 0 to 1000; the tiredness bar shows 1000 minus this.</summary>
-    public int Energy => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[120..]);
+    /// <summary>
+    /// Staff only: tiredness from 0 (rested) to 1000. Receptionists, who do not tire, always hold 0 in real saves.
+    /// </summary>
+    public int Fatigue => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[120..]);
 
     /// <summary>
     /// Doctors only: training progress towards the surgeon, psychiatrist and researcher specialities (the small
@@ -341,7 +343,8 @@ public sealed record OriginalSaveHospital(
         [.. Enumerable.Range(0, 5).Select(i => (int)BinaryPrimitives.ReadInt16LittleEndian(Raw.Span[(433 + (2 * i))..]))];
 
     /// <summary>Current or last emergency: bonus paid per patient cured.</summary>
-    public int EmergencyBonus => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[477..]);
+    /// <remarks>16 bits: the next two bytes hold the slot of the emergency's helicopter while it is on the map.</remarks>
+    public int EmergencyBonus => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[477..]);
 
     /// <summary>Current or last emergency: the disease (casebook index).</summary>
     public int EmergencyDisease => Raw.Span[484];
@@ -383,10 +386,16 @@ public sealed record OriginalSaveHospital(
 public sealed record OriginalSaveDisease(int Index, ReadOnlyMemory<byte> Raw)
 {
     /// <summary>
-    /// Research towards the next drug improvement: rises while drug research runs and drops back when the
-    /// drug improves (<see cref="DrugEffectiveness"/> then goes up by 5).
+    /// The disease's own reputation, 500 × <see cref="ReputationPoints"/> / <see cref="ReputationVisits"/>
+    /// (500 at the start, when both are 20).
     /// </summary>
-    public int DrugResearch => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span);
+    public int Reputation => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span);
+
+    /// <summary>Points behind the disease's reputation; 20 at the start.</summary>
+    public int ReputationPoints => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[4..]);
+
+    /// <summary>Visits behind the disease's reputation; 20 at the start.</summary>
+    public int ReputationVisits => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[8..]);
 
     /// <summary>Treatment charge.</summary>
     public int Charge => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[12..]);

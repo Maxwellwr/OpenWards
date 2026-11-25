@@ -158,6 +158,7 @@ public class OriginalSaveGameTests
         BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 45), 74131);
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 455), 193);
         BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 477), 500);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 479), 812);
         data[hospital + 484] = 29;
         data[hospital + 485] = 3;
         data[hospital + 486] = 3;
@@ -168,7 +169,9 @@ public class OriginalSaveGameTests
         BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(gp + 20), 9180);
         data[gp + 27] = 100;
         data[gp + 29] = 1;
-        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(gp), 53);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(gp), 611);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(gp + 4), 44);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(gp + 8), 36);
         BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 221), 3450);
         BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 225 + (39 * 4)), 21345);
         data[gp + 28] = 1;
@@ -189,7 +192,7 @@ public class OriginalSaveGameTests
         Assert.Equal((3, 2, 1), (disease.Recoveries, disease.Fatalities, disease.TurnedAway));
         Assert.Equal(100, disease.DrugEffectiveness);
         Assert.True(disease.Discovered);
-        Assert.Equal(53, disease.DrugResearch);
+        Assert.Equal((611, 44, 36), (disease.Reputation, disease.ReputationPoints, disease.ReputationVisits));
         Assert.Equal(3450, parsed.ResearchPoints);
         Assert.Equal(21345, parsed.ExpertiseResearch(39));
         Assert.False(parsed.Disease(2).Known);
@@ -266,7 +269,7 @@ public class OriginalSaveGameTests
         Assert.Equal(7, staff.AttentionToDetail);
         Assert.Equal(13, staff.Layers.Count);
         Assert.Equal(4, staff.Layers[5]);
-        Assert.Equal(324, staff.Energy);
+        Assert.Equal(324, staff.Fatigue);
     }
 
     [Fact]
@@ -281,7 +284,7 @@ public class OriginalSaveGameTests
         data[entity + 134] = 42;
         data[entity + 83] = 31;
         data[entity + 168] = 16;
-        data[entity + 146] = 248;
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(entity + 146), 1922);
 
         var patient = Assert.Single(OriginalSaveGame.Parse(data).Entities);
 
@@ -290,7 +293,27 @@ public class OriginalSaveGameTests
         Assert.Equal(42, patient.Thirst);
         Assert.Equal(31, patient.Warmth);
         Assert.Equal(16, patient.Disease);
-        Assert.Equal(248, patient.DiagnosisCertainty);
+        Assert.Equal(1922, patient.DiagnosisProgress);
+    }
+
+    [Fact]
+    public void ReceptionistsAreNeverTired()
+    {
+        var install = RealGameData.Require();
+        var folder = install.FindDirectory("SAVE");
+        var files = folder is null
+            ? []
+            : Directory.EnumerateFiles(folder, "*.H*").Where(file => new FileInfo(file).Length == OriginalSaveGame.Length).ToList();
+        if (files.Count == 0)
+        {
+            Assert.Skip("No original saves in the SAVE folder.");
+        }
+
+        // Byte 120 is tiredness, not energy: receptionists, who never tire, hold 0 there.
+        var receptionists = files.SelectMany(file => OriginalSaveGame.Parse(File.ReadAllBytes(file)).Entities)
+            .Where(e => e.Kind == 4 && e.Type == 3 && e.TileX != 0)
+            .ToList();
+        Assert.All(receptionists, receptionist => Assert.Equal(0, receptionist.Fatigue));
     }
 
     [Fact]
