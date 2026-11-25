@@ -67,7 +67,7 @@ public static class OriginalSaveImporter
             if (content.Rooms.FirstOrDefault(r => r.LevelConfigId == room.Type) is { } definition)
             {
                 var area = new TileRect(room.Origin.X, room.Origin.Y, room.Width, room.Height);
-                rooms.Add(new ImportedRoom(definition.Id, area, DoorOf(room)));
+                rooms.Add(new ImportedRoom(definition.Id, area, DoorOf(room), room.MaxQueueSize));
             }
         }
 
@@ -211,6 +211,11 @@ public static class OriginalSaveImporter
             VipsThisYear = save.VipsThisYear,
             DaysSinceVip = hospital.VipArrivalTick is > 0 and var vip && vip <= save.Tick ? (save.Tick - vip) / 50 : null,
             RatsThisYear = save.RatsThisYear,
+            Litter = LitterOf(save),
+            Ratholes = Enumerable.Range(0, Math.Min(hospital.RatholeCount, OriginalSaveHospital.MaxRatholes))
+                .Select(hospital.Rathole)
+                .Select(hole => (new TilePosition(hole.X, hole.Y), (Direction)(hole.Wall & 3)))
+                .ToList(),
 
             // The save keeps each company's debt by the calendar month it is paid in; OpenWards by months from now.
             InsuranceOwed =
@@ -355,6 +360,34 @@ public static class OriginalSaveImporter
     /// The door as a room plan wants it: on the north or west edge of the door's tile when the outside lies north or
     /// west, otherwise on the edge of the tile outside.
     /// </summary>
+    /// <summary>
+    /// The litter of the low nibble of each tile's extra byte: 1 to 4 are the rubbish patients drop, as OpenWards numbers
+    /// it; 5 and 6 are taken for puke and pee (unchecked against the original's sprites); 7 and 8 mark rat holes.
+    /// </summary>
+    private static List<(TilePosition Tile, LitterType Type)> LitterOf(OriginalSaveGame save)
+    {
+        var litter = new List<(TilePosition, LitterType)>();
+        for (var y = 0; y < OriginalSaveGame.MapSize; y++)
+        {
+            for (var x = 0; x < OriginalSaveGame.MapSize; x++)
+            {
+                LitterType? type = (save[x, y].Extra & 0x0F) switch
+                {
+                    >= 1 and <= 4 and var rubbish => (LitterType)rubbish,
+                    5 => LitterType.Puke,
+                    6 => LitterType.Pee,
+                    _ => null,
+                };
+                if (type is { } found)
+                {
+                    litter.Add((new TilePosition(x, y), found));
+                }
+            }
+        }
+
+        return litter;
+    }
+
     private static DoorPlacement DoorOf(OriginalSaveRoom room)
     {
         var (dx, dy) = (room.Outside.X - room.Door.X, room.Outside.Y - room.Door.Y);

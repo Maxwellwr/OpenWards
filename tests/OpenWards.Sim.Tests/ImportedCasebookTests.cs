@@ -139,6 +139,25 @@ public class ImportedCasebookTests
         Assert.Equal((7, 12), (hospital.RatsKilledThisYear, hospital.RatShotsThisYear));
     }
 
+    [Fact]
+    public void LitterAndRatholesComeBack()
+    {
+        var simulation = NewSimulation();
+
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 3,
+            Day = 1,
+            Litter = [(new TilePosition(1, 1), Entities.LitterType.Banana), (new TilePosition(2, 4), Entities.LitterType.Puke)],
+            Ratholes = [(new TilePosition(3, 3), Entities.Direction.West)],
+        });
+
+        var litter = simulation.Entities.OfType<Entities.Litter>().OrderBy(l => l.Tile.X).Select(l => (l.Tile, l.Type));
+        Assert.Equal([(new TilePosition(1, 1), Entities.LitterType.Banana), (new TilePosition(2, 4), Entities.LitterType.Puke)], litter);
+        var hole = Assert.Single(simulation.Hospitals[0].Ratholes);
+        Assert.Equal((new TilePosition(3, 3), Entities.Direction.West), (hole.Tile, hole.Wall));
+    }
+
     private static Simulation NewSimulation()
     {
         var map = new LevelMap(6, 6, 1);

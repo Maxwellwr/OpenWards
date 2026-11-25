@@ -378,6 +378,25 @@ public class OriginalSaveGameTests
     }
 
     [Fact]
+    public void ReadsRatholesAndLitteredTiles()
+    {
+        var data = new byte[OriginalSaveGame.Length];
+        var hospital = OriginalSaveGame.HospitalOffset;
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 3242), 117);
+        data[hospital + 3246] = 2;
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 3247), (42 * 128) + 46);
+        data[hospital + 3249] = 2;
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 3250), (36 * 128) + 27);
+        data[hospital + 3252] = 3;
+
+        var read = OriginalSaveGame.Parse(data).Hospitals[0];
+
+        Assert.Equal((117, 2), (read.LitteredTiles, read.RatholeCount));
+        Assert.Equal((46, 42, 2), read.Rathole(0));
+        Assert.Equal((27, 36, 3), read.Rathole(1));
+    }
+
+    [Fact]
     public void ReceptionistsAreNeverTired()
     {
         var install = RealGameData.Require();

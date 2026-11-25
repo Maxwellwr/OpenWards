@@ -370,6 +370,28 @@ public sealed record OriginalSaveHospital(
     /// <summary>The price level of the last month's end, in percent of the expected prices.</summary>
     public int PriceLevel => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[3214..]);
 
+    /// <summary>The most rat holes the save keeps.</summary>
+    public const int MaxRatholes = 40;
+
+    /// <summary>How many tiles of the hospital have litter.</summary>
+    public int LitteredTiles => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[3242..]);
+
+    /// <summary>How many rat holes the hospital has (<see cref="Rathole"/>).</summary>
+    public int RatholeCount => Raw.Span[3246];
+
+    /// <summary>
+    /// A rat hole: the corridor tile it opens onto and the wall it is in (0 north, 1 east, 2 south, 3 west; holes in east
+    /// and south walls are in the neighbouring tile's west or north wall and are not drawn).
+    /// </summary>
+    public (int X, int Y, int Wall) Rathole(int index)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, MaxRatholes);
+        var offset = 3247 + (3 * index);
+        var tile = BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[offset..]);
+        return (tile % OriginalSaveGame.MapSize, tile / OriginalSaveGame.MapSize, Raw.Span[offset + 2]);
+    }
+
     /// <summary>
     /// What insurance company <paramref name="company"/> (0 to 2) owes, to be paid at the end of calendar month
     /// <paramref name="month"/> (0 January).

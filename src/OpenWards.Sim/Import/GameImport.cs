@@ -12,7 +12,8 @@ namespace OpenWards.Sim.Import;
 /// <param name="RoomType">Id of the room's definition.</param>
 /// <param name="Area">The room's tiles.</param>
 /// <param name="Door">Where its door is.</param>
-public sealed record ImportedRoom(string RoomType, TileRect Area, DoorPlacement Door);
+/// <param name="MaxQueue">The longest its door queue may grow, if known.</param>
+public sealed record ImportedRoom(string RoomType, TileRect Area, DoorPlacement Door, int? MaxQueue = null);
 
 /// <summary>An object of an imported save, in a room or in a corridor.</summary>
 /// <param name="ObjectType">Id of the object's definition.</param>
@@ -207,6 +208,12 @@ public sealed record ImportedGame
     /// <summary>How many days ago the last VIP came, or null to count from the import.</summary>
     public int? DaysSinceVip { get; init; }
 
+    /// <summary>The litter on the floor.</summary>
+    public IReadOnlyList<(TilePosition Tile, LitterType Type)> Litter { get; init; } = [];
+
+    /// <summary>The rat holes: the corridor tile each opens onto and the wall it is in.</summary>
+    public IReadOnlyList<(TilePosition Tile, Direction Wall)> Ratholes { get; init; } = [];
+
     /// <summary>The rats killed and shots fired this year, or null for none.</summary>
     public (int Killed, int Shots)? RatsThisYear { get; init; }
 
@@ -308,6 +315,10 @@ public static class GameImport
             }
 
             new ConfirmRoomCommand(built.Id).Execute(simulation, player);
+            if (room.MaxQueue is >= 0 and <= People.HumanoidQueue.MaxMaxSize and var maxQueue && built.DoorQueue is { } queue)
+            {
+                queue.ChangeMaxSize(maxQueue - queue.MaxSize);
+            }
             if (!built.IsActive)
             {
                 problems.Add($"room {room.RoomType} at {room.Area} could not be finished");
@@ -353,6 +364,22 @@ public static class GameImport
             if (member.HandymanShares is { } shares && staff.Behaviour is People.HandymanBehaviour handyman)
             {
                 handyman.ImportShares(shares.Cleaning, shares.Watering, shares.Repairing);
+            }
+        }
+
+        foreach (var (tile, type) in game.Litter)
+        {
+            if (simulation.Map.Contains(tile.X, tile.Y) && simulation.Map[tile.X, tile.Y].RoomId == 0)
+            {
+                Entities.Litter.Drop(simulation, player, type, tile, isMirrored: false);
+            }
+        }
+
+        foreach (var (tile, wall) in game.Ratholes.Take(Disasters.Rats.MaxRatholes))
+        {
+            if (simulation.Map.Contains(tile.X, tile.Y) && simulation.Map[tile.X, tile.Y].RoomId == 0)
+            {
+                hospital.AddRathole(new Rathole(tile, wall, simulation.Map[tile.X, tile.Y].Parcel));
             }
         }
 
