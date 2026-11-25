@@ -339,7 +339,7 @@ public sealed record OriginalSaveHospital(
     public int CompetitorPatients => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[4668..]);
 
     /// <summary>
-    /// Computer player: where it is in its scenario. 0 to 8 are the steps of the start (seen 2 to 6 early in a level),
+    /// Computer player: the number of the next record of its scenario: 1 to 9 the steps of the start (step = position − 1),
     /// 12 to 15 the four steps of the cycle.
     /// </summary>
     public int CompetitorScenarioPosition => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4672..]);
@@ -359,8 +359,16 @@ public sealed record OriginalSaveHospital(
     }
 
     /// <summary>
-    /// Computer player: its queue of eight places, each a type (0 a hire) and two arguments (1 for a doctor, 0 for others;
-    /// the qualification bits: 4 nurse, 16 doctor, 32 surgeon, 64 psychiatrist). Empty places are all zero.
+    /// Computer player: the action it waits to carry out at <see cref="CompetitorNextTick"/>: what (0 none, it decides
+    /// afresh; 1 hire, 2 build, 3 buy, 4 loan) and two arguments.
+    /// </summary>
+    public (int Kind, int Argument, int Second) CompetitorPending =>
+        (BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4604..]), BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4606..]), BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4608..]));
+
+    /// <summary>
+    /// Computer player: its queue of eight places, each a type (0 a free place, whose arguments are left over; 1 a hire)
+    /// and two arguments (for a hire 1 for a doctor, 0 for others, and the qualification bits of
+    /// <see cref="OriginalSaveEntity"/>: 1 receptionist, 2 handyman, 4 nurse, 16 doctor, 32 surgeon, 64 psychiatrist).
     /// </summary>
     public IReadOnlyList<(int Type, int Argument, int Qualification)> CompetitorQueue
     {

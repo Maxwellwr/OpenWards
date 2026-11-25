@@ -1003,8 +1003,7 @@ public sealed class CompetitorHospital
     /// An opponent of an imported save of the original: its reputation over its patients, its money and what the year's
     /// charts show of it, and, when the save gives it, where it had got in its scenario: whether it is open, its staff
     /// (as many as it had of each class, each with the average skill and an even share of the wages), its rooms, the
-    /// objects it bought, its queue of hires and when it acts next. The action it was waiting to carry out is not known,
-    /// so it decides afresh at that time.
+    /// objects it bought, its queue of hires, when it acts next and the action it waits to carry out then.
     /// </summary>
     internal void Import(ImportedCompetitor state, Simulation? simulation = null)
     {
@@ -1030,12 +1029,14 @@ public sealed class CompetitorHospital
     }
 
     /// <summary>
-    /// The scenario step for the original's scenario position: 0 to 8 are the same steps of the start, 12 to 15 the
-    /// four steps of the cycle (staff, room, objects, loan); anything else starts the cycle.
+    /// The scenario step for the original's scenario position, the number of its next record: 1 to 9 are the steps of
+    /// the start (step = position − 1), 12 to 15 the four steps of the cycle (staff, room, objects, loan); 0 is the
+    /// first step and anything else starts the cycle.
     /// </summary>
     internal static int ScenarioStepOf(int position) => position switch
     {
-        >= 0 and < StartSteps => position,
+        <= 0 => 0,
+        <= StartSteps => position - 1,
         >= 12 => StartSteps + ((position - 12) % CycleSteps),
         _ => StartSteps,
     };
@@ -1044,7 +1045,7 @@ public sealed class CompetitorHospital
     {
         IsOpen = scenario.IsOpen;
         ScenarioStep = ScenarioStepOf(scenario.Position);
-        Pending = null;
+        Pending = scenario.Pending is { } pending ? pending with { Slot = -1, FromStart = ScenarioStep < StartSteps } : null;
         NextActionTick = simulation.Tick + Math.Max(0, scenario.TicksToAction);
         if (scenario.PatientsInHospital is { } patients)
         {

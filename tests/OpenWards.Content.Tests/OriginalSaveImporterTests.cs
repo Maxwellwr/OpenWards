@@ -65,10 +65,12 @@ public sealed class OriginalSaveImporterTests(ITestOutputHelper output)
             {
                 if (simulation.Competitors.FirstOrDefault(c => string.Equals(c.Name, rival.Name, StringComparison.OrdinalIgnoreCase)) is { } opponent)
                 {
-                    output.WriteLine($"   {rival.Name}: position {rival.CompetitorScenarioPosition} → step {opponent.ScenarioStep}, open {opponent.IsOpen}, staff {opponent.Staff.Count}, rooms {string.Join(",", opponent.Rooms)}, wages {opponent.Wages}, patients {opponent.PatientsInHospital}");
+                    output.WriteLine($"   {rival.Name}: position {rival.CompetitorScenarioPosition} → step {opponent.ScenarioStep}, pending {opponent.Pending}, open {opponent.IsOpen}, staff {opponent.Staff.Count}, rooms {string.Join(",", opponent.Rooms)}, wages {opponent.Wages}, patients {opponent.PatientsInHospital}");
                     Assert.Equal(rival.IsOpen, opponent.IsOpen);
                     Assert.Equal(rival.Nurses + rival.Doctors + rival.Handymen + rival.Receptionists, opponent.Staff.Count);
-                    Assert.Equal(OpenWards.Sim.Economy.CompetitorHospital.ScenarioStepOf(rival.CompetitorScenarioPosition), opponent.ScenarioStep);
+                    Assert.Equal(rival.CompetitorScenarioPosition is >= 1 and <= 9 ? rival.CompetitorScenarioPosition - 1 : opponent.ScenarioStep, opponent.ScenarioStep);
+                    Assert.Equal(rival.CompetitorQueue.Count(task => task.Type == 1), opponent.Queue.Count(task => task is not null));
+                    Assert.Equal(rival.CompetitorPending.Kind != 0, opponent.Pending is not null);
                 }
             }
 

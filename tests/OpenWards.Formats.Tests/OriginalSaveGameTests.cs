@@ -351,7 +351,10 @@ public class OriginalSaveGameTests
         var hospital = OriginalSaveGame.HospitalOffset + (2 * OriginalSaveGame.HospitalLength);
         data[hospital + 42] = 2;
         BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 4600), 76877);
-        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4612 + 6), 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4604), 3);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4606), 4);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4608), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4612 + 6), 1);
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4612 + 8), 1);
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 4612 + 10), 32);
         BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 4660), 4200);
@@ -370,7 +373,8 @@ public class OriginalSaveGameTests
         Assert.Equal(76780, save.Tick);
         Assert.Equal(76877, opponent.CompetitorNextTick);
         Assert.Equal((0, 0, 0), opponent.CompetitorQueue[0]);
-        Assert.Equal((0, 1, 32), opponent.CompetitorQueue[1]);
+        Assert.Equal((1, 1, 32), opponent.CompetitorQueue[1]);
+        Assert.Equal((3, 4, 1), opponent.CompetitorPending);
         Assert.Equal(4200, opponent.CompetitorWages);
         Assert.Equal(3, opponent.CompetitorRooms);
         Assert.Equal(13, opponent.CompetitorScenarioPosition);
@@ -396,16 +400,18 @@ public class OriginalSaveGameTests
             Assert.Skip("No original saves in the SAVE folder.");
         }
 
-        // Positions 0 to 8 are the start and 12 to 15 the cycle; a computer player that has opened is past the start's
-        // opening step, and the rooms it counts are those of its list less the type 4 count.
+        // Positions 1 to 9 are the start (the number of the next record) and 12 to 15 the cycle; a computer player that
+        // has opened is past the start's opening step (position 6), and the rooms it counts are those of its list less the type 4 count.
         var opponents = files.Select(file => OriginalSaveGame.Parse(File.ReadAllBytes(file)))
             .SelectMany(save => save.Hospitals.Select((h, player) => (save, h, player)).Where(p => p.h.Kind == 2))
             .ToList();
         Assert.NotEmpty(opponents);
         Assert.All(opponents, p =>
         {
-            Assert.True(p.h.CompetitorScenarioPosition is >= 0 and <= 8 or >= 12 and <= 15, $"{p.h.Name}: {p.h.CompetitorScenarioPosition}");
-            Assert.True(!p.h.IsOpen || p.h.CompetitorScenarioPosition > 5, $"{p.h.Name} open at {p.h.CompetitorScenarioPosition}");
+            Assert.True(p.h.CompetitorScenarioPosition is >= 0 and <= 9 or >= 12 and <= 15, $"{p.h.Name}: {p.h.CompetitorScenarioPosition}");
+            Assert.True(!p.h.IsOpen || p.h.CompetitorScenarioPosition > 6, $"{p.h.Name} open at {p.h.CompetitorScenarioPosition}");
+            Assert.InRange(p.h.CompetitorPending.Kind, 0, 4);
+            Assert.All(p.h.CompetitorQueue, task => Assert.InRange(task.Type, 0, 2));
             var rooms = Enumerable.Range(0, OriginalSaveGame.HospitalRoomTypes).Where(t => t != 4).Sum(t => p.save.HospitalRooms(p.player, t));
             Assert.Equal(p.h.CompetitorRooms, rooms);
         });

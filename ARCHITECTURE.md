@@ -411,10 +411,11 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   Reputation (points × 500 / visits), value and the year's raise go by the player's rules. Its traits (`Skill`,
   `StaffLevels`, `Speed`, `Comfort`, `GuessAt`) come from the level files, and it draws from a random stream of its own
   (`CompetitorRandom`). Importing a save of the original takes their reputations and patients from its computer players'
-  blocks (by name, else in order), and their scenarios too: whether open, the scenario position (0–8 the start, 12–15
-  the cycle), the tick of the next action, staff by class with summed skills and total wages, the counts of rooms and
-  objects from the players' lists at 0x616B8 and the queue of hires (qualification bits 4, 16, 32, 64). The action an
-  opponent was waiting to carry out is not known, so it decides afresh when its time comes. Each `Hospital` runs CorsixTH's opening
+  blocks (by name, else in order), and their scenarios too: whether open, the scenario position (the number of the next
+  record: start step = position − 1, 12–15 the cycle), the tick of the next action and the action waiting for it (+4604:
+  0 none, 1 hire, 2 build, 3 buy, 4 loan), staff by class with summed skills and total wages, the patients in the
+  hospital, the counts of rooms and objects from the players' lists at 0x616B8 and the queue (type 1 a hire by its
+  qualification bits, type 0 a free place). Each `Hospital` runs CorsixTH's opening
   watch (`UIWatch` "initial_opening"), 13 segments of 385 hours, and opens an hour after it has run
   down, 5006 hours (about 100 days) into the game. `OpenHospitalCommand` opens it early, as the watch's button does; the client's O
   key stands in for that button and the date box shows the days left. `--demo` opens at once.
