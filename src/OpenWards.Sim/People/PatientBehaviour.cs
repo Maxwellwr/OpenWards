@@ -2231,10 +2231,9 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
         }
     }
 
-    /// <summary>Every room of the treatment is there and, for a drug, research has found it.</summary>
+    /// <summary>Every room of the treatment is there; a drug is there from the start.</summary>
     private static bool IsCureAvailable(Simulation simulation, Humanoid humanoid, DiseaseDefinition disease) =>
-        disease.TreatmentRooms.All(roomType => FindRoom(simulation, humanoid, roomType) is not null)
-        && simulation.Hospitals[humanoid.HospitalPlayer].CaseOf(disease, simulation.Rules.Diseases).DrugAvailable;
+        disease.TreatmentRooms.All(roomType => FindRoom(simulation, humanoid, roomType) is not null);
 
     /// <summary>The best room of a type that patients can be seen in so far, or null.</summary>
     private static Room? FindRoom(Simulation simulation, Humanoid humanoid, string roomType)

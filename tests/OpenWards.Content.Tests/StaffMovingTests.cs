@@ -188,8 +188,9 @@ public class StaffMovingTests
         Assert.False(pharmacy.StaffPresent);
         Assert.Equal(cured, simulation.Hospitals[0].Cured);
 
-        // The pharmacy sends for her again and she treats the patient from the start.
-        for (var tick = 0; tick < 10 * GameDate.HoursPerDay && simulation.Hospitals[0].Cured == cured; tick++)
+        // The pharmacy sends for her again and she treats the patient from the start. She walks back from the far corner
+        // and treats at her own pace, slow for a nurse of little skill or a tired one, which takes more than ten days.
+        for (var tick = 0; tick < 30 * GameDate.HoursPerDay && simulation.Hospitals[0].Cured == cured; tick++)
         {
             simulation.Step();
         }

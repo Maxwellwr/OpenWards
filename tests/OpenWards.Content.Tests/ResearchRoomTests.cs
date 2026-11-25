@@ -61,8 +61,9 @@ public class ResearchRoomTests
         Assert.Equal(ResearchTargetKind.Object, diagnosis.Kind);
         Assert.True(research.Objects[diagnosis.Id].Points > 2_000, $"Only {research.Objects[diagnosis.Id].Points} points for {diagnosis.Id}.");
 
-        // Research is paid for each month.
-        Assert.Contains(hospital.Transactions, t => t is { Kind: TransactionKind.Research, Amount: < 0 });
+        // Research costs nothing of its own (the specification); only the researcher's wages are paid.
+        Assert.DoesNotContain(hospital.Transactions, t => t.Kind == TransactionKind.Research);
+        Assert.Contains(hospital.Transactions, t => t is { Kind: TransactionKind.Wages, Amount: < 0 });
         Assert.True(hospital.Balance < balance);
     }
 

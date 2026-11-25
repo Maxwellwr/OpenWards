@@ -170,18 +170,13 @@ public class PriceAndPaymentTests
         Assert.Equal(55, hospital.PriceLevel);
         Assert.Equal(PriceJudgment.Under, hospital.LastPriceJudgment);
 
-        // A known disease whose treatment room is missing does not count; with it and its drug, it does.
+        // A known disease whose treatment room is missing does not count; with it, it does (its drug is there from the start).
         var cold = hospital.CaseOf(Cold, rules);
         cold.Discovered = true;
         cold.PricePercent = 200;
         hospital.UpdatePriceLevel(rules);
         Assert.Equal(55, hospital.PriceLevel);
         hospital.DiscoverRoom("pharmacy");
-        hospital.UpdatePriceLevel(rules);
-        Assert.Equal(cold.DrugAvailable ? 163 : 55, hospital.PriceLevel);
-
-        // Nor without its drug, until research finds it.
-        cold.DrugAvailable = true;
         hospital.UpdatePriceLevel(rules);
         Assert.Equal(163, hospital.PriceLevel); // (55 + 600) × 100 / (100 + 300)
     }
