@@ -41,6 +41,10 @@ public class PatientAllocationTests
         var rules = new LevelRules(0, [], [], competitors: [new PlannedCompetitor(13, "CORSIX"), new PlannedCompetitor(14, "ROUJIN")]);
         var simulation = NewSimulation(players: 1, rules);
         Assert.Equal(["CORSIX", "ROUJIN"], simulation.Competitors.Select(c => c.Name));
+        foreach (var competitor in simulation.Competitors)
+        {
+            competitor.Open();
+        }
 
         var chosen = new List<int>();
         for (var i = 0; i < 5; i++)
@@ -80,7 +84,7 @@ public class PatientAllocationTests
     {
         var simulation = NewSimulation(players: 1, ByReputation(randomChance: 0));
         var rival = simulation.Competitors[0];
-        rival.Reputation = Hospital.MaxReputation;
+        rival.SetReputation(Hospital.MaxReputation);
 
         // AllocIndRep 2 × reputation × 100 / 100: the overall reputation (AllocTotalRep) does not count.
         Assert.Equal(1000, PatientArrivals.Appeal(simulation, 0, disease: null));
@@ -90,7 +94,7 @@ public class PatientAllocationTests
         Assert.InRange(toPlayer, 1233, 1433);
 
         // The same reputations share them evenly.
-        rival.Reputation = simulation.Hospitals[0].Reputation;
+        rival.SetReputation(simulation.Hospitals[0].Reputation);
         toPlayer = Enumerable.Range(0, 4000).Count(_ => PatientArrivals.ChooseHospital(simulation) == 0);
         Assert.InRange(toPlayer, 1900, 2100);
     }
@@ -144,6 +148,7 @@ public class PatientAllocationTests
     {
         var rules = new LevelRules(0, [], [], competitors: [new PlannedCompetitor(13, "CORSIX")], allocation: new PatientAllocationRules(Delay: 1, 1, 2, 4));
         var simulation = NewSimulation(players: 1, rules);
+        simulation.Competitors[0].Open();
         Assert.True(rules.Allocation.InTurnIn(simulation.Date.MonthOfGame));
         Assert.False(rules.Allocation.InTurnIn(simulation.Date.MonthOfGame + 1));
 
@@ -169,45 +174,6 @@ public class PatientAllocationTests
     }
 
     [Fact]
-    public void AnOpponentsReputationMovesTowardsItsStandingAndIsSaved()
-    {
-        var rules = new LevelRules(0, [], [], startReputation: 400, competitors: [new PlannedCompetitor(13, "CORSIX"), new PlannedCompetitor(14, "ROUJIN")], difficulty: Difficulty.Hard);
-        var simulation = NewSimulation(players: 1, rules);
-        foreach (var rival in simulation.Competitors)
-        {
-            Assert.Equal(400, rival.Reputation);
-            Assert.InRange(rival.Standing, 400 + CompetitorHospital.LowestStanding + CompetitorHospital.DifficultyStanding, 400 + CompetitorHospital.HighestStanding + CompetitorHospital.DifficultyStanding);
-        }
-
-        // As in the original's saves of level 4: from 500 in January to about 700 in mid-March, then to its standing.
-        var random = new SimRandom(7);
-        var opponent = new CompetitorHospital(1, "ORAC", reputation: 500, standing: 520);
-        opponent.OnEndMonth(1, random);
-        opponent.OnEndMonth(2, random);
-        Assert.InRange(opponent.Reputation, 650, 720);
-        for (var month = 3; month < 36; month++)
-        {
-            opponent.OnEndMonth(month, random);
-        }
-
-        Assert.InRange(opponent.Reputation, 520 - (CompetitorHospital.MonthlyApproach * CompetitorHospital.MonthlyWobble), 520 + (CompetitorHospital.MonthlyApproach * CompetitorHospital.MonthlyWobble));
-
-        // The month's end moves it in the game too, and a save keeps both.
-        while (simulation.Date.MonthOfGame == 1)
-        {
-            simulation.Step();
-        }
-
-        using var stream = new MemoryStream();
-        simulation.Save(stream);
-        stream.Position = 0;
-        var restored = Simulation.Load(stream);
-        Assert.Equal(simulation.Competitors.Select(c => (c.Reputation, c.Standing, c.StartReputation)), restored.Competitors.Select(c => (c.Reputation, c.Standing, c.StartReputation)));
-        Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
-        Assert.Equal(rules.Allocation, restored.Rules.Allocation);
-    }
-
-    [Fact]
     public void AnImportedGameTakesTheOpponentsReputationsByName()
     {
         var rules = new LevelRules(0, [], [], competitors: [new PlannedCompetitor(4, "MULTIVAC"), new PlannedCompetitor(5, "HOLLY"), new PlannedCompetitor(6, "DEEP THOUGHT")]);
@@ -221,7 +187,7 @@ public class PatientAllocationTests
             Competitors = [new ImportedCompetitor("HOLLY", 644, 151), new ImportedCompetitor("MULTIVAC", 516, 137), new ImportedCompetitor("ORAC", 742, 145)],
         });
 
-        Assert.Equal([(516, 516, 137), (644, 644, 151), (742, 742, 145)], simulation.Competitors.Select(c => (c.Reputation, c.Standing, c.Visitors)));
+        Assert.Equal([(516, 137), (644, 151), (742, 145)], simulation.Competitors.Select(c => (c.Reputation, c.Visitors)));
     }
 
     /// <summary>One opponent, and patients by reputation from the start.</summary>

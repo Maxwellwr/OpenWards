@@ -238,14 +238,14 @@ public sealed class PatientArrivals
 
         if (player >= simulation.Hospitals.Count)
         {
-            // An AIHospital has no reception desk, so World:spawnPatient only counts the patient. The disease is still
-            // chosen first, by the local player's hospital as World:getNewPatientDisease does.
+            // An opponent's patient has no place on the map: the stay is simulated at once. The disease is still chosen
+            // first, by the local player's hospital as World:getNewPatientDisease does.
             if (!chosen)
             {
-                _ = PatientCare.NewPatientDisease(simulation, simulation.Hospitals[0]);
+                disease = PatientCare.NewPatientDisease(simulation, simulation.Hospitals[0]);
             }
 
-            simulation.Competitors[player - simulation.Hospitals.Count].CountNewPatient();
+            simulation.Competitors[player - simulation.Hospitals.Count].Admit(simulation, disease);
             return null;
         }
 

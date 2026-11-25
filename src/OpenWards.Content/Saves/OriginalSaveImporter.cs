@@ -2,6 +2,7 @@ using OpenWards.Content.Levels;
 using OpenWards.Formats;
 using OpenWards.Sim;
 using OpenWards.Sim.Calendar;
+using OpenWards.Sim.Definitions;
 using OpenWards.Sim.Diseases;
 using OpenWards.Sim.Economy;
 using OpenWards.Sim.Entities;
@@ -231,17 +232,18 @@ public static class OriginalSaveImporter
             // The computer players' blocks (kind 2), for the opponents' reputations and the year's charts.
             Competitors =
             [
-                .. save.Hospitals.Where(h => h.Kind == 2).Select(h => new ImportedCompetitor(
-                    h.Name,
-                    h.Reputation,
-                    h.Visitors,
-                    VisitorsThisYear: h.Visitors - h.VisitorsAtYearStart,
-                    Money: (long)h.Money - h.Loan,
-                    Value: h.Value,
-                    Cured: h.PeopleCured,
-                    Deaths: h.Deaths,
-                    Salary: h.PlayerSalary,
-                    Tiles: h.Size)),
+                .. save.Hospitals.Select((h, player) => (h, player)).Where(p => p.h.Kind == 2).Select(p => new ImportedCompetitor(
+                    p.h.Name,
+                    p.h.Reputation,
+                    p.h.Visitors,
+                    VisitorsThisYear: p.h.Visitors - p.h.VisitorsAtYearStart,
+                    Money: (long)p.h.Money - p.h.Loan,
+                    Value: p.h.Value,
+                    Cured: p.h.PeopleCured,
+                    Deaths: p.h.Deaths,
+                    Salary: p.h.PlayerSalary,
+                    Tiles: p.h.Size,
+                    Scenario: CompetitorScenario(save, p.player, content))),
             ],
             Months = Months(save),
             Statement = Statement(save, hospital.Money),
@@ -387,6 +389,85 @@ public static class OriginalSaveImporter
 
         return litter;
     }
+
+    /// <summary>The objects a computer player keeps count of outside its rooms.</summary>
+    private static readonly string[] CompetitorObjects = ["reception_desk", "bench", "drinks_machine", "plant", "extinguisher"];
+
+    /// <summary>
+    /// Where a computer player had got in its scenario: its scenario position, when it acts next, whether it is open,
+    /// its staff by class with their skills and wages, the rooms and objects of its lists and its queue of hires.
+    /// </summary>
+    private static ImportedCompetitorScenario CompetitorScenario(OriginalSaveGame save, int player, GameContent content)
+    {
+        var h = save.Hospitals[player];
+        int[] counts = [h.Nurses, h.Doctors, h.Handymen, h.Receptionists];
+        var staff = new List<(StaffClass, int, int)>();
+        for (var i = 0; i < counts.Length; i++)
+        {
+            staff.Add(((StaffClass)i, counts[i], h.CompetitorSkillSum(i)));
+        }
+
+        var rooms = new List<string>();
+        for (var type = 0; type < OriginalSaveGame.HospitalRoomTypes; type++)
+        {
+            if (save.HospitalRooms(player, type) > 0 && content.Rooms.FirstOrDefault(r => r.LevelConfigId == type) is { } room)
+            {
+                rooms.Add(room.Id);
+            }
+        }
+
+        var objects = new List<(string, int)>();
+        foreach (var id in CompetitorObjects)
+        {
+            if (content.FindObject(id) is { ObjectType: var type } && type < OriginalSaveGame.HospitalObjectTypes && save.HospitalObjects(player, type) is > 0 and var count)
+            {
+                objects.Add((id, count));
+            }
+        }
+
+        return new ImportedCompetitorScenario(
+            h.IsOpen,
+            h.CompetitorScenarioPosition,
+            (long)h.CompetitorNextTick - save.Tick,
+            staff,
+            h.CompetitorWages,
+            h.CompetitorPatients,
+            rooms,
+            objects,
+            [.. h.CompetitorQueue.Select(CompetitorHire)],
+            CompetitorPending(h.CompetitorPending, content));
+    }
+
+    /// <summary>A place of a computer player's queue: type 1 a hire, by its qualification bits; type 0 is a free place.</summary>
+    private static ImportedCompetitorHire? CompetitorHire((int Type, int Argument, int Qualification) task) =>
+        task.Type == 1 && HireOf(task.Qualification) is var (staffClass, ability) ? new ImportedCompetitorHire(staffClass, ability) : null;
+
+    /// <summary>The class and specialism of a hire by the qualification bits: 1 receptionist, 2 handyman, 4 nurse, 16 doctor, 32 surgeon, 64 psychiatrist.</summary>
+    private static (StaffClass, Specialism?)? HireOf(int qualification) => qualification switch
+    {
+        1 => (StaffClass.Receptionist, null),
+        2 => (StaffClass.Handyman, null),
+        4 => (StaffClass.Nurse, null),
+        16 => (StaffClass.Doctor, null),
+        32 => (StaffClass.Doctor, Specialism.Surgeon),
+        64 => (StaffClass.Doctor, Specialism.Psychiatrist),
+        _ => null,
+    };
+
+    /// <summary>
+    /// The action a computer player waits to carry out: 1 a hire (the second argument its qualification bits), 2 a room
+    /// (the first its type), 3 objects (the first their type, the second how many), 4 a loan request; 0 or what is not
+    /// known is none, and it decides afresh.
+    /// </summary>
+    private static CompetitorAction? CompetitorPending((int Kind, int Argument, int Second) pending, GameContent content) => pending.Kind switch
+    {
+        1 when HireOf(pending.Second) is var (staffClass, ability) => CompetitorAction.HireOf(staffClass, ability),
+        2 when content.Rooms.FirstOrDefault(r => r.LevelConfigId == pending.Argument) is { } room => new CompetitorAction(CompetitorActionKind.Build, room.Id),
+        3 when content.Objects.FirstOrDefault(o => o.ObjectType == pending.Argument && !o.Id.EndsWith("_b", StringComparison.Ordinal)) is { } obj =>
+            new CompetitorAction(CompetitorActionKind.Buy, obj.Id, Math.Max(1, pending.Second)),
+        4 => new CompetitorAction(CompetitorActionKind.Loan),
+        _ => null,
+    };
 
     private static DoorPlacement DoorOf(OriginalSaveRoom room)
     {
