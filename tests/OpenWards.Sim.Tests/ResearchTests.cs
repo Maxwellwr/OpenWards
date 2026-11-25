@@ -66,8 +66,9 @@ public class ResearchTests
         Assert.Equal(20, research.Area(ResearchCategory.Specialisation).Share);
         Assert.Equal(80, research.Total);
 
-        // Only the points put into items count towards the year's award.
-        Assert.Equal(360, hospital.ResearchDistributedThisYear);
+        // The shares taken count towards the year's award, the lost one too; those given back do not.
+        Assert.Equal(200 + 160 + 128, hospital.ResearchDistributedThisYear);
+        Assert.Equal(0, research.DiagnosisSwitchedOff);
     }
 
     [Fact]

@@ -190,8 +190,11 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
     public static readonly Advice DrugImproved = new(11, 26, "The %s drug has been improved by your Research Department.");
     public static readonly Advice MachineImproved = new(11, 27, "The %s has been improved by your Research Department.");
 
-    /// <summary>ResearchDepartment:nextResearch: nothing more to research in an area (S[17]'s area names).</summary>
-    public static readonly Advice DrugFullyResearched = new(11, 122, "You have researched everything in %s.");
+    /// <summary>
+    /// The day's research switched the diagnosis slider off: nothing more to discover there (S[17]'s area names). The
+    /// key's name says drug, but the original uses it for a research area.
+    /// </summary>
+    public static readonly Advice DrugFullyResearched = new(11, 122, "You've researched %s to 100%.");
 
     // Epidemic:showAppropriateAdviceMessages, during a cover-up
     public static readonly Advice EpidemicSeriousWarning = new(28, 2, "That contagious disease is getting serious. You need to do something about it!");
@@ -374,9 +377,11 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
             }
         }
 
-        // nextResearch: an area with nothing left to research (current = nil) since the last look.
-        foreach (var category in snapshot.DoneAreas.Except(last.DoneAreas))
+        // The diagnosis slider switched off with nothing left to discover, once (the cure area's message is lost in the
+        // original game).
+        if (snapshot.DiagnosisSwitchedOff > last.DiagnosisSwitchedOff)
         {
+            var category = Sim.Research.ResearchCategory.Diagnosis;
             Say(DrugFullyResearched, texts?.String(17, (int)category + 1) ?? category.ToString());
         }
 
@@ -1057,7 +1062,7 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
         int PriceAdvices,
         int NotPaying,
         IReadOnlySet<int> Crazy,
-        IReadOnlySet<Sim.Research.ResearchCategory> DoneAreas)
+        int DiagnosisSwitchedOff)
     {
         public static Snapshot Of(Simulation simulation, int player)
         {
@@ -1100,7 +1105,7 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
                 hospital.PriceAdvices,
                 hospital.NotPaying,
                 staff.Where(s => s.IsCrazy).Select(s => s.Id).ToHashSet(),
-                Enum.GetValues<Sim.Research.ResearchCategory>().Where(category => hospital.Research.Area(category).Current.IsNone).ToHashSet());
+                hospital.Research.DiagnosisSwitchedOff);
         }
     }
 }

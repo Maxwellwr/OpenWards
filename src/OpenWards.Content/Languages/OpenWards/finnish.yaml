@@ -20,6 +20,9 @@ strings:
       queuejump_on_cheat: 'Potilaasi osaavat jonottaa. He päästävät lähes kuolleet jonon kärkeen.'
       superdoctor_off_cheat: 'Lääketieteellisen koulun johtaja ei enää suosittele sinua valmistuneilleen.'
       superdoctor_on_cheat: 'Erinomainen lääketieteellinen koulu on suositellut sinua valmistuneilleen! Katso palkattavissa olevaa henkilökuntaa.'
+    research:
+      # The original uses it for a research area, not a drug.
+      drug_fully_researched: 'Olet tutkinut alueen %s 100-prosenttisesti.'
     staff_place_advice:
       not_enough_lecture_chairs: 'Jokainen lääketieteen opiskelija tarvitsee tuolin luentosaliin!'
     warnings:

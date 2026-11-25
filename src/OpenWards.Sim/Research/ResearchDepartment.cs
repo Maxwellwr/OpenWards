@@ -112,6 +112,13 @@ public sealed class ResearchDepartment
     /// <summary>Points the researchers produced that no area has taken yet.</summary>
     public int Pool { get; private set; }
 
+    /// <summary>
+    /// How many times the day's research switched the diagnosis slider off with nothing left to discover, for the
+    /// adviser. The original game's message for the cure area is lost (its category number 0 reads as an empty adviser
+    /// queue), so only diagnosis counts. Not saved: only the interface reads it, comparing it from one look to the next.
+    /// </summary>
+    public int DiagnosisSwitchedOff { get; private set; }
+
     /// <summary>The sum of the areas' sliders, in percent.</summary>
     public int Total => _areas.Sum(area => area.Share);
 
@@ -191,8 +198,8 @@ public sealed class ResearchDepartment
     /// The day's research: each area in turn takes its slider's percent of what is left in the pool for its cheapest item.
     /// With nothing to work on, the cure and diagnosis areas leave their points in the pool and their sliders go off; the
     /// drugs and improvements areas leave their points in the pool and keep their sliders; and with no disease to
-    /// concentrate on, the specialisation area still takes its share, which is lost. The points put into items count
-    /// towards the year's award for research.
+    /// concentrate on, the specialisation area still takes its share, which is lost. Every share taken and not given
+    /// back counts towards the year's award for research, the lost one too.
     /// </summary>
     internal void OnEndDay(Simulation simulation, Hospital hospital)
     {
@@ -206,11 +213,17 @@ public sealed class ResearchDepartment
                 switch (category)
                 {
                     case ResearchCategory.Cure or ResearchCategory.Diagnosis:
+                        if (category == ResearchCategory.Diagnosis && area.Share > 0)
+                        {
+                            DiagnosisSwitchedOff++;
+                        }
+
                         area.Share = 0;
                         break;
                     case ResearchCategory.Specialisation:
                         Concentrated = string.Empty;
                         Pool -= taken;
+                        hospital.ResearchDistributedThisYear += taken;
                         break;
                 }
 
