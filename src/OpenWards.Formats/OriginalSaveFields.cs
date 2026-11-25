@@ -128,8 +128,14 @@ public static class OriginalSaveFields
         new(OriginalSaveArea.Hospital, 3228, 10, "staff counts", true),
         .. DiseaseFields(),
         new(OriginalSaveArea.Hospital, 3242, 129, "litter/rats?", false),
-        new(OriginalSaveArea.Hospital, 4600, 6, "ai timers?", false),
-        new(OriginalSaveArea.Hospital, 4677, 1, "ai index?", false),
+        new(OriginalSaveArea.Hospital, 4600, 4, "ai next action tick", true),
+        new(OriginalSaveArea.Hospital, 4604, 6, "ai pending action", true),
+        new(OriginalSaveArea.Hospital, 4612, 48, "ai queue", true),
+        new(OriginalSaveArea.Hospital, 4660, 12, "ai wages, rooms, patients", true),
+        new(OriginalSaveArea.Hospital, 4672, 2, "ai scenario position", true),
+        new(OriginalSaveArea.Hospital, 4677, 1, "ai name number", true),
+        new(OriginalSaveArea.Hospital, 4678, 8, "ai skill sums", true),
+        new(OriginalSaveArea.Hospital, 4694, 1, "open", true),
     ];
 
     private static IEnumerable<OriginalSaveField> DiseaseFields()

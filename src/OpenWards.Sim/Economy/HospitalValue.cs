@@ -80,5 +80,10 @@ public static class HospitalValue
         {
             hospital.Value = Of(simulation, hospital);
         }
+
+        foreach (var competitor in simulation.Competitors)
+        {
+            competitor.RefreshValue(simulation);
+        }
     }
 }

@@ -62,11 +62,14 @@ public static partial class LevelRulesLoader
     /// <summary>base_config.lua's <c>gbv.HoldVisualPeepCount</c>.</summary>
     private const int BaseHoldVisualPeepCount = 6;
 
-    /// <summary>CorsixTH's base_config.lua: the names of the computer opponents 0 to 14.</summary>
+    /// <summary>
+    /// The names of the computer opponents 0 to 19, as the original's language files number them (the same as the
+    /// <c>competitor_names</c> of CorsixTH's translations).
+    /// </summary>
     private static readonly string[] BaseCompetitorNames =
     [
-        "ORAC", "COLOSSUS", "HAL", "MULTIVAC", "HOLLY", "DEEP THOUGHT", "ZEN", "SKYNET", "MARVIN", "CEREBRO", "MOTHER",
-        "JAYNE", "CORSIX", "ROUJIN", "EDVIN",
+        "ORAC", "HAL", "COLOSSUS", "MULTIVAC", "HOLLY", "DEEP THOUGHT", "ZEN", "LEON", "AKIRA", "SAM", "CHARLIE", "JAYNE",
+        "ARTHUR", "MAGNUS", "MOTHER", "SAL", "MARVIN", "JOSHUA", "DANEEL", "OLIVAW",
     ];
 
     /// <summary>base_config.lua's <c>visuals_available</c>; its <c>visuals</c>, <c>non_visuals</c> and <c>non_visuals_available</c> are all 0.</summary>
@@ -268,17 +271,25 @@ public static partial class LevelRulesLoader
     }
 
     /// <summary>
-    /// The computer opponents that play (<c>computer[n].Playing</c> 1), with their names (<c>computer[n].Name</c>, by
-    /// default CorsixTH's base_config.lua's), in the order World:World's <c>pairs</c> visits base_config.lua's table:
-    /// 1 to 14, then 0.
+    /// The computer opponents that play (<c>computer[i].Playing</c> 1), in the order of i, with their names
+    /// (<c>computer[i].Name</c>, else the i-th of the original's names) and traits (<c>computer[i].Skill</c>,
+    /// <c>.StaffLevels</c>, <c>.Speed</c>, <c>.Comfort</c> and <c>.GuessAt</c>: the difficulty's base table, replaced by
+    /// the level's own file for those that play; <see cref="CompetitorPersonality.Default"/> where neither says).
     /// </summary>
     public static IEnumerable<PlannedCompetitor> CompetitorsFromConfig(LevelConfig config)
     {
-        foreach (var index in Enumerable.Range(1, BaseCompetitorNames.Length - 1).Append(0))
+        var defaults = CompetitorPersonality.Default;
+        for (var index = 0; index < BaseCompetitorNames.Length; index++)
         {
             if (config.GetInt($"computer[{index}].Playing") == 1)
             {
-                yield return new PlannedCompetitor(index + 1, config[$"computer[{index}].Name"] ?? BaseCompetitorNames[index]);
+                var personality = new CompetitorPersonality(
+                    config.GetInt($"computer[{index}].Skill") ?? defaults.Skill,
+                    config.GetInt($"computer[{index}].StaffLevels") ?? defaults.StaffLevels,
+                    config.GetInt($"computer[{index}].Speed") ?? defaults.Speed,
+                    config.GetInt($"computer[{index}].Comfort") ?? defaults.Comfort,
+                    config.GetInt($"computer[{index}].GuessAt") ?? defaults.GuessAt);
+                yield return new PlannedCompetitor(index + 1, config[$"computer[{index}].Name"] ?? BaseCompetitorNames[index], personality);
             }
         }
     }
