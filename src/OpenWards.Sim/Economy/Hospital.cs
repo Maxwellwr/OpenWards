@@ -2224,8 +2224,8 @@ public sealed class Hospital
             }
         }
 
-        // Version 117 keeps the network mission.
-        if (reader.Version is 0 or >= 117)
+        // Version 118 keeps the network mission.
+        if (reader.Version is 0 or >= 118)
         {
             hospital.NetMission = NetMission.Read(reader);
         }

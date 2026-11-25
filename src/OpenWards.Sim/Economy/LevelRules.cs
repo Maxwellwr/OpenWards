@@ -502,8 +502,8 @@ public sealed class LevelRules
             reader.Version is 0 or >= 108 ? PatientNeedsRules.Read(reader) : null);
         var freeBuild = reader.ReadBool();
 
-        // Version 117 keeps the network missions and the parcels' neighbour lists.
-        if (reader.Version is 0 or >= 117)
+        // Version 118 keeps the network missions and the parcels' neighbour lists.
+        if (reader.Version is 0 or >= 118)
         {
             var missions = new NetMissionRule[reader.ReadCount(NetMissionRule.MaxIndex + 1)];
             for (var i = 0; i < missions.Length; i++)

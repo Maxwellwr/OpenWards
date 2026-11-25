@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 117;
+    private const int FormatVersion = 118;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -605,8 +605,8 @@ public sealed class Simulation
             simulation.AuctionFrames = reader.ReadInt64();
         }
 
-        // Version 117 keeps how the last network mission was judged.
-        if (reader.Version is 0 or >= 117)
+        // Version 118 keeps how the last network mission was judged.
+        if (reader.Version is 0 or >= 118)
         {
             simulation.LastNetMission = reader.ReadBool() ? NetMissionResult.Read(reader, map.PlayerCount) : null;
         }
@@ -645,8 +645,8 @@ public sealed class Simulation
             simulation._delayedObjects.Add(MapObjectPlacement.Read(reader));
         }
 
-        // Before version 117 the parcels' adjacency on the map was kept; the level's neighbour lists replace it.
-        if (version is not 0 and < 117)
+        // Before version 118 the parcels' adjacency on the map was kept; the level's neighbour lists replace it.
+        if (version is not 0 and < 118)
         {
             for (var i = 0; i < map.ParcelCount * map.ParcelCount; i++)
             {
