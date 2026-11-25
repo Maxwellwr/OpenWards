@@ -151,7 +151,7 @@ public static class OriginalSaveImporter
             var record = hospital.Disease(index);
             foreach (var disease in DiseaseCatalog.All.Where(d => d.ExpertiseId == index))
             {
-                casebook.Add(new ImportedCase(disease.Id, record.Discovered, record.DrugEffectiveness, record.Recoveries, record.Fatalities, record.TurnedAway, record.MoneyEarned, record.DrugCost));
+                casebook.Add(new ImportedCase(disease.Id, record.Discovered, record.DrugEffectiveness, record.Recoveries, record.Fatalities, record.TurnedAway, record.MoneyEarned, record.DrugCost, record.ReputationPoints, record.ReputationVisits));
             }
         }
 
@@ -191,6 +191,18 @@ public static class OriginalSaveImporter
             NotCuredThisYear = notCuredThisYear,
             LowestReputationThisYear = lowestReputation,
             Reputation = hospital.Reputation,
+            ReputationRecord = hospital.ReputationVisits > 0 ? (hospital.ReputationPoints, hospital.ReputationVisits) : null,
+            PriceLevel = hospital.PriceLevel,
+
+            // The save keeps each company's debt by the calendar month it is paid in; OpenWards by months from now.
+            InsuranceOwed =
+            [
+                .. from company in Enumerable.Range(0, 3)
+                   from month in Enumerable.Range(0, 12)
+                   let amount = hospital.InsuranceOwed(company, month)
+                   where amount > 0
+                   select (company + 1, (month - Math.Clamp(save.Month, 0, 11) + 12) % 12, (long)amount),
+            ],
             Value = hospital.Value,
 
             // The computer players' blocks (kind 2), for the opponents' reputations and the year's charts.

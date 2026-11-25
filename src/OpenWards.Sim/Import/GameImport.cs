@@ -48,7 +48,19 @@ public sealed record ImportedPatient(string DiseaseId, TilePosition Tile, decima
 /// <param name="TurnedAway">Patients turned away.</param>
 /// <param name="MoneyEarned">Money it brought in.</param>
 /// <param name="DrugCost">What one dose of its drug costs, if known.</param>
-public sealed record ImportedCase(string DiseaseId, bool Discovered, int Effectiveness, int Recoveries, int Fatalities, int TurnedAway, long MoneyEarned, int? DrugCost = null);
+/// <param name="ReputationPoints">The points behind the disease's own reputation, if known.</param>
+/// <param name="ReputationVisits">The visits behind the disease's own reputation, if known.</param>
+public sealed record ImportedCase(
+    string DiseaseId,
+    bool Discovered,
+    int Effectiveness,
+    int Recoveries,
+    int Fatalities,
+    int TurnedAway,
+    long MoneyEarned,
+    int? DrugCost = null,
+    int? ReputationPoints = null,
+    int? ReputationVisits = null);
 
 /// <summary>Research on an object type of an imported save.</summary>
 /// <param name="ObjectType">The object's number in the level files (<c>thob</c>).</param>
@@ -145,6 +157,18 @@ public sealed record ImportedGame
 
     /// <summary>Reputation, or null to keep the level's.</summary>
     public int? Reputation { get; init; }
+
+    /// <summary>
+    /// The points and visits behind the reputation (reputation = <see cref="Hospital.ReputationPerPoint"/> × points /
+    /// visits), or null to weigh <see cref="Reputation"/> against the visitors.
+    /// </summary>
+    public (int Points, int Visits)? ReputationRecord { get; init; }
+
+    /// <summary>What each insurance company (1 to 3) owes, by months from now (0 = this month's end).</summary>
+    public IReadOnlyList<(int Company, int MonthsAhead, long Amount)> InsuranceOwed { get; init; } = [];
+
+    /// <summary>The price level of the last month's end (100 = expected prices), or null to keep the level's.</summary>
+    public int? PriceLevel { get; init; }
 
     /// <summary>Hospital value, or null to keep what rebuilding cost.</summary>
     public long? Value { get; init; }
@@ -343,6 +367,28 @@ public static class GameImport
 
         hospital.ImportFinances(game.Balance, game.Loan);
         hospital.ImportRecords(game.Visitors, game.Cured, game.Deaths, game.Reputation ?? hospital.Reputation, game.Value ?? hospital.Value, game.Months, game.Statement);
+        if (game.ReputationRecord is { Points: var repPoints, Visits: > 0 and var repVisits })
+        {
+            hospital.ImportReputation((long)repPoints * Hospital.ReputationPerPoint, repVisits);
+        }
+
+        // After the records, which weigh each disease's reputation by the hospital's when the save does not tell it.
+        foreach (var entry in game.Casebook)
+        {
+            if (entry is { ReputationPoints: { } points, ReputationVisits: > 0 and var visits } && Diseases.DiseaseCatalog.Find(entry.DiseaseId) is { } disease)
+            {
+                var book = hospital.CaseOf(disease, simulation.Rules.Diseases);
+                book.ReputationVisits = visits;
+                book.ReputationScore = Math.Clamp((long)points * Hospital.ReputationPerPoint, (long)Hospital.MinReputation * visits, (long)Hospital.MaxReputation * visits);
+            }
+        }
+
+        hospital.ImportInsuranceOwed(game.InsuranceOwed);
+        if (game.PriceLevel is { } priceLevel)
+        {
+            hospital.ImportPriceLevel(priceLevel);
+        }
+
         hospital.ImportYear(
             game.VisitorsThisYear ?? game.Visitors,
             game.CuredThisYear ?? game.Cured,

@@ -50,6 +50,32 @@ public class ImportedCasebookTests
         Assert.Equal(40, loaded["broken_wind"].CureEffectiveness);
     }
 
+    [Fact]
+    public void TakesTheSavesReputationRecordInsuranceDebtsAndPriceLevel()
+    {
+        var simulation = NewSimulation();
+
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 3,
+            Day = 17,
+            Visitors = 295,
+            Reputation = 464,
+            ReputationRecord = (239, 257),
+            Casebook = [new ImportedCase("broken_wind", true, 40, 2, 0, 0, 0, ReputationPoints: 44, ReputationVisits: 36)],
+            InsuranceOwed = [(1, 0, 1332), (3, 9, 589)],
+            PriceLevel = 102,
+        });
+
+        var hospital = simulation.Hospitals[0];
+        Assert.Equal((239L * Hospital.ReputationPerPoint, 257), (hospital.ReputationScore, hospital.ReputationVisits));
+        Assert.Equal(464, hospital.Reputation);
+        var wind = hospital.Casebook["broken_wind"];
+        Assert.Equal((44L * Hospital.ReputationPerPoint, 36), (wind.ReputationScore, wind.ReputationVisits));
+        Assert.Equal((1332, 0, 589), (hospital.InsuranceOwed(1), hospital.InsuranceOwed(2), hospital.InsuranceOwed(3)));
+        Assert.Equal(102, hospital.PriceLevel);
+    }
+
     private static Simulation NewSimulation()
     {
         var map = new LevelMap(6, 6, 1);

@@ -1582,6 +1582,34 @@ public sealed class Hospital
     internal void RaiseSalary(int score, int scoreMaxIncrease) => PlayerSalary = RaisedSalary(PlayerSalary, score, StartSalary, scoreMaxIncrease);
 
     /// <summary>The year's this-year counts of an imported game, which the year's awards go by.</summary>
+    /// <summary>Takes over an imported save's reputation record: its score and the visits it is weighed by.</summary>
+    internal void ImportReputation(long score, int visits)
+    {
+        ReputationVisits = Math.Max(1, visits);
+        ReputationScore = Math.Clamp(score, (long)MinReputation * ReputationVisits, (long)MaxReputation * ReputationVisits);
+    }
+
+    /// <summary>Takes over what the insurance companies owe, by company (1 to 3) and months from now.</summary>
+    internal void ImportInsuranceOwed(IReadOnlyList<(int Company, int MonthsAhead, long Amount)> owed)
+    {
+        if (owed.Count == 0)
+        {
+            return;
+        }
+
+        Array.Clear(_insuranceOwed);
+        foreach (var (company, months, amount) in owed)
+        {
+            if (company is >= 1 and <= InsuranceCompanies && months is >= 0 and < InsuranceMonths && amount > 0)
+            {
+                _insuranceOwed[company - 1, months] += amount;
+            }
+        }
+    }
+
+    /// <summary>Takes over an imported save's price level of the last month's end.</summary>
+    internal void ImportPriceLevel(int level) => PriceLevel = Math.Clamp(level, 0, MaxPriceLevel);
+
     internal void ImportYear(int visitors, int cured, int deaths, int notCured, int lowestReputation)
     {
         VisitorsThisYear = Math.Max(0, visitors);

@@ -199,7 +199,7 @@ public class OriginalSaveGameTests
     }
 
     [Fact]
-    public void ReadsObjectTypesAndDrugCost()
+    public void ReadsObjectTypesDrugCostReputationAndInsurance()
     {
         var data = new byte[OriginalSaveGame.Length];
         var hospital = OriginalSaveGame.HospitalOffset;
@@ -212,6 +212,11 @@ public class OriginalSaveGameTests
         data[xRay + 13] = 18;
         var disease = hospital + OriginalSaveHospital.DiseaseOffset + (5 * OriginalSaveHospital.DiseaseLength);
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(disease + 24), 95);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 3202), 239);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 3206), 257);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 3214), 102);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 69 + 8), 1332);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 69 + 96 + 40), 589);
 
         var parsed = OriginalSaveGame.Parse(data).Hospitals[0];
 
@@ -219,6 +224,9 @@ public class OriginalSaveGameTests
         Assert.Equal((3340, 18, 1, true, 9), (type.Cost, type.StartStrength, type.Bought, type.Available, type.Improvements));
         Assert.False(parsed.ObjectType(13).Available);
         Assert.Equal(95, parsed.Disease(5).DrugCost);
+        Assert.Equal((239, 257, 102), (parsed.ReputationPoints, parsed.ReputationVisits, parsed.PriceLevel));
+        Assert.Equal(1332, parsed.InsuranceOwed(0, 2));
+        Assert.Equal(589, parsed.InsuranceOwed(2, 10));
     }
 
     [Fact]

@@ -320,6 +320,28 @@ public sealed record OriginalSaveHospital(
     /// <summary>Reputation as shown in the casebook.</summary>
     public int Reputation => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[3198..]);
 
+    /// <summary>The points behind the reputation: reputation = 500 × points / <see cref="ReputationVisits"/>.</summary>
+    public int ReputationPoints => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[3202..]);
+
+    /// <summary>The visits behind the reputation.</summary>
+    public int ReputationVisits => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[3206..]);
+
+    /// <summary>The price level of the last month's end, in percent of the expected prices.</summary>
+    public int PriceLevel => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[3214..]);
+
+    /// <summary>
+    /// What insurance company <paramref name="company"/> (0 to 2) owes, to be paid at the end of calendar month
+    /// <paramref name="month"/> (0 January).
+    /// </summary>
+    public int InsuranceOwed(int company, int month)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(company);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(company, 2);
+        ArgumentOutOfRangeException.ThrowIfNegative(month);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(month, 11);
+        return BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[(69 + (48 * company) + (4 * month))..]);
+    }
+
     /// <summary>Policy: stop diagnosis at this share of the normal procedure, in tenths of a percent (1000 = 100%).</summary>
     public int StopProcedure => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[535..]);
 
