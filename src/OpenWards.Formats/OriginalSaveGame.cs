@@ -538,8 +538,11 @@ public sealed record OriginalSaveDisease(int Index, ReadOnlyMemory<byte> Raw)
     /// <summary>Drug effectiveness in percent, the flask on the casebook page (0 for diseases not cured by drugs).</summary>
     public byte DrugEffectiveness => Raw.Span[27];
 
-    /// <summary>Byte 28: set for most entries of the level from the start; its exact meaning is not known.</summary>
-    public bool Known => Raw.Span[28] != 0;
+    /// <summary>
+    /// Byte 28: whether the disease can be treated now (per the maintainer's field map). It does not say whether the drug
+    /// is known: in the original every drug is there from the start.
+    /// </summary>
+    public bool CanTreatNow => Raw.Span[28] != 0;
 
     /// <summary>Whether the disease has been discovered (the "new condition" fax), so the casebook shows it.</summary>
     public bool Discovered => Raw.Span[29] != 0;

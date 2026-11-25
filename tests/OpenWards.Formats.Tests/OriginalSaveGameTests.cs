@@ -188,14 +188,14 @@ public class OriginalSaveGameTests
         Assert.Equal((74131, 193), (parsed.PlayerSalary, parsed.VisitorsAtYearStart));
         Assert.Equal((500, 29, 3, 3, 75), (parsed.EmergencyBonus, parsed.EmergencyDisease, parsed.EmergencyCured, parsed.EmergencyPatients, parsed.EmergencyPassPercent));
         var disease = parsed.Disease(1);
-        Assert.Equal((168, 10000, 9180, true), (disease.Charge, disease.ChargePercent, disease.MoneyEarned, disease.Known));
+        Assert.Equal((168, 10000, 9180, true), (disease.Charge, disease.ChargePercent, disease.MoneyEarned, disease.CanTreatNow));
         Assert.Equal((3, 2, 1), (disease.Recoveries, disease.Fatalities, disease.TurnedAway));
         Assert.Equal(100, disease.DrugEffectiveness);
         Assert.True(disease.Discovered);
         Assert.Equal((611, 44, 36), (disease.Reputation, disease.ReputationPoints, disease.ReputationVisits));
         Assert.Equal(3450, parsed.ResearchPoints);
         Assert.Equal(21345, parsed.ExpertiseResearch(39));
-        Assert.False(parsed.Disease(2).Known);
+        Assert.False(parsed.Disease(2).CanTreatNow);
     }
 
     [Fact]

@@ -447,15 +447,18 @@ public class ResearchTests
     }
 
     [Fact]
-    public void AnImportedDrugWithoutEffectivenessKeepsTheLevelsAvailability()
+    public void EveryImportedDrugIsAvailableAndTakesTheSavesEffectiveness()
     {
         var simulation = NewSimulation(drugDisease: true);
         var drug = DrugDisease(simulation);
         var book = simulation.Hospitals[0].CaseOf(drug, simulation.Rules.Diseases);
         book.DrugAvailable = false;
+        var effectiveness = book.CureEffectiveness;
 
+        // In the original every drug is there from the start; 0 says nothing about it.
         Import.GameImport.Apply(simulation, new Import.ImportedGame { Month = 3, Day = 1, Casebook = [new Import.ImportedCase(drug.Id, true, 0, 0, 0, 0, 0)] });
-        Assert.False(book.DrugAvailable);
+        Assert.True(book.DrugAvailable);
+        Assert.Equal(effectiveness, book.CureEffectiveness);
 
         Import.GameImport.Apply(simulation, new Import.ImportedGame { Month = 3, Day = 1, Casebook = [new Import.ImportedCase(drug.Id, true, 90, 0, 0, 0, 0, DrugCost: 95)] });
         Assert.True(book.DrugAvailable);

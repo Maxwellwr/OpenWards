@@ -158,7 +158,7 @@ public static class OriginalSaveFields
     {
         (int Offset, int Length, string Name)[] fields =
         [
-            (0, 4, "reputation"), (4, 4, "reputation points"), (8, 4, "reputation visits"), (12, 4, "charge"), (16, 4, "charge percent"), (20, 4, "money earned"), (24, 2, "drug cost"), (27, 1, "drug effectiveness"), (28, 1, "known?"), (29, 1, "discovered"),
+            (0, 4, "reputation"), (4, 4, "reputation points"), (8, 4, "reputation visits"), (12, 4, "charge"), (16, 4, "charge percent"), (20, 4, "money earned"), (24, 2, "drug cost"), (27, 1, "drug effectiveness"), (28, 1, "can treat now"), (29, 1, "discovered"),
             (30, 2, "recoveries"), (32, 2, "fatalities"), (36, 2, "turned away"),
         ];
         for (var disease = 0; disease < OriginalSaveHospital.DiseaseCount; disease++)
