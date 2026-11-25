@@ -444,16 +444,20 @@ public sealed record OriginalSaveHospital(
     }
 
     /// <summary>
-    /// Computer player: the action it waits to carry out at <see cref="CompetitorNextTick"/>: what (0 none, it decides
-    /// afresh; 1 hire, 2 build, 3 buy, 4 loan) and two arguments.
+    /// Computer player: the action it waits to carry out at <see cref="CompetitorNextTick"/>: what (+4604: 0 none, it
+    /// decides afresh; 1 hire, 2 build, 3 buy, 4 loan, which does nothing), the staff class (0 nurse, 1 doctor, 2 handyman,
+    /// 3 receptionist), room type or object type (+4606), the qualification bits a hire needs or how many objects are left
+    /// to buy (+4608), and whether it came from the queue (+4610; its place there is the first of its type). While it is to
+    /// decide the arguments are left over from before.
     /// </summary>
-    public (int Kind, int Argument, int Second) CompetitorPending =>
-        (BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4604..]), BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4606..]), BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4608..]));
+    public (int Kind, int Argument, int Second, bool FromQueue) CompetitorPending =>
+        (BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4604..]), BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4606..]),
+            BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4608..]), BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4610..]) != 0);
 
     /// <summary>
     /// Computer player: its queue of eight places, each a type (0 a free place, whose arguments are left over; 1 a hire)
-    /// and two arguments (for a hire 1 for a doctor, 0 for others, and the qualification bits of
-    /// <see cref="OriginalSaveEntity"/>: 1 receptionist, 2 handyman, 4 nurse, 16 doctor, 32 surgeon, 64 psychiatrist).
+    /// and two arguments (for a hire the staff class, 0 nurse, 1 doctor, 2 handyman, 3 receptionist, and the qualification
+    /// bits it needs: 32 surgeon, 64 psychiatrist).
     /// </summary>
     public IReadOnlyList<(int Type, int Argument, int Qualification)> CompetitorQueue
     {

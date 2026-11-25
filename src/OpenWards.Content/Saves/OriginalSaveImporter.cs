@@ -435,39 +435,54 @@ public static class OriginalSaveImporter
             rooms,
             objects,
             [.. h.CompetitorQueue.Select(CompetitorHire)],
-            CompetitorPending(h.CompetitorPending, content));
+            CompetitorPending(h, content));
     }
 
-    /// <summary>A place of a computer player's queue: type 1 a hire, by its qualification bits; type 0 is a free place.</summary>
-    private static ImportedCompetitorHire? CompetitorHire((int Type, int Argument, int Qualification) task) =>
-        task.Type == 1 && HireOf(task.Qualification) is var (staffClass, ability) ? new ImportedCompetitorHire(staffClass, ability) : null;
-
-    /// <summary>The class and specialism of a hire by the qualification bits: 1 receptionist, 2 handyman, 4 nurse, 16 doctor, 32 surgeon, 64 psychiatrist.</summary>
-    private static (StaffClass, Specialism?)? HireOf(int qualification) => qualification switch
+    /// <summary>
+    /// A place of a computer player's queue: type 1 a hire of a staff class (0 nurse, 1 doctor, 2 handyman,
+    /// 3 receptionist) with the qualification bits it needs; type 0 is a free place, its arguments left over from a hire
+    /// carried out.
+    /// </summary>
+    private static ImportedCompetitorHire? CompetitorHire((int Type, int Argument, int Qualification) task) => task switch
     {
-        1 => (StaffClass.Receptionist, null),
-        2 => (StaffClass.Handyman, null),
-        4 => (StaffClass.Nurse, null),
-        16 => (StaffClass.Doctor, null),
-        32 => (StaffClass.Doctor, Specialism.Surgeon),
-        64 => (StaffClass.Doctor, Specialism.Psychiatrist),
+        (1, >= 0 and <= 3, var bits) => new ImportedCompetitorHire((StaffClass)task.Argument, AbilityOf(bits)),
         _ => null,
     };
+
+    /// <summary>The specialism a hire needs by its qualification bits: 32 surgeon, 64 psychiatrist.</summary>
+    private static Specialism? AbilityOf(int bits) =>
+        (bits & 32) != 0 ? Specialism.Surgeon : (bits & 64) != 0 ? Specialism.Psychiatrist : null;
 
     /// <summary>
-    /// The action a computer player waits to carry out: 1 a hire (the second argument its qualification bits), 2 a room
-    /// (the first its type), 3 objects (the first their type, the second how many), 4 a loan request; 0 or what is not
-    /// known is none, and it decides afresh.
+    /// The action a computer player waits to carry out: 1 a hire of a staff class (needing a specialism only when it came
+    /// from the queue), 2 a room of a type, 3 objects of a type (how many are left), 4 a loan request; 0 or what is not
+    /// known is none, and it decides afresh. One from the queue keeps its place there, the first of its type, so that it
+    /// leaves the queue when carried out; an action of the start (scenario position up to 10) waits as the start's do.
     /// </summary>
-    private static CompetitorAction? CompetitorPending((int Kind, int Argument, int Second) pending, GameContent content) => pending.Kind switch
+    private static CompetitorAction? CompetitorPending(OriginalSaveHospital h, GameContent content)
     {
-        1 when HireOf(pending.Second) is var (staffClass, ability) => CompetitorAction.HireOf(staffClass, ability),
-        2 when content.Rooms.FirstOrDefault(r => r.LevelConfigId == pending.Argument) is { } room => new CompetitorAction(CompetitorActionKind.Build, room.Id),
-        3 when content.Objects.FirstOrDefault(o => o.ObjectType == pending.Argument && !o.Id.EndsWith("_b", StringComparison.Ordinal)) is { } obj =>
-            new CompetitorAction(CompetitorActionKind.Buy, obj.Id, Math.Max(1, pending.Second)),
-        4 => new CompetitorAction(CompetitorActionKind.Loan),
-        _ => null,
-    };
+        var (kind, argument, second, fromQueue) = h.CompetitorPending;
+        var fromStart = h.CompetitorScenarioPosition <= 10;
+        var slot = -1;
+        if (fromQueue)
+        {
+            var queue = h.CompetitorQueue;
+            for (var i = 0; i < queue.Count && slot < 0; i++)
+            {
+                slot = queue[i].Type == kind ? i : -1;
+            }
+        }
+
+        return kind switch
+        {
+            1 when argument <= 3 => CompetitorAction.HireOf((StaffClass)argument, fromQueue ? AbilityOf(second) : null) with { Slot = slot, FromStart = fromStart },
+            2 when content.Rooms.FirstOrDefault(r => r.LevelConfigId == argument) is { } room => new CompetitorAction(CompetitorActionKind.Build, room.Id, FromStart: fromStart),
+            3 when content.Objects.FirstOrDefault(o => o.ObjectType == argument && !o.Id.EndsWith("_b", StringComparison.Ordinal)) is { } item =>
+                new CompetitorAction(CompetitorActionKind.Buy, item.Id, Math.Max(1, second), FromStart: fromStart),
+            4 => new CompetitorAction(CompetitorActionKind.Loan, Slot: slot, FromStart: fromStart),
+            _ => null,
+        };
+    }
 
     private static DoorPlacement DoorOf(OriginalSaveRoom room)
     {

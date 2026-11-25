@@ -414,8 +414,9 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   blocks (by name, else in order), and their scenarios too: whether open, the scenario position (the number of the next
   record: start step = position − 1, 12–15 the cycle), the tick of the next action and the action waiting for it (+4604:
   0 none, 1 hire, 2 build, 3 buy, 4 loan), staff by class with summed skills and total wages, the patients in the
-  hospital, the counts of rooms and objects from the players' lists at 0x616B8 and the queue (type 1 a hire by its
-  qualification bits, type 0 a free place). Each `Hospital` runs CorsixTH's opening
+  hospital, the counts of rooms and objects from the players' lists at 0x616B8 and the queue (type 1 a hire of a staff
+  class with the qualification bits it needs, type 0 a free place); an action taken from the queue (+4610) keeps its place
+  there, the first of its type. Each `Hospital` runs CorsixTH's opening
   watch (`UIWatch` "initial_opening"), 13 segments of 385 hours, and opens an hour after it has run
   down, 5006 hours (about 100 days) into the game. `OpenHospitalCommand` opens it early, as the watch's button does; the client's O
   key stands in for that button and the date box shows the days left. `--demo` opens at once.

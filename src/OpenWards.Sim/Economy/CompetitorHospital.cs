@@ -1045,7 +1045,7 @@ public sealed class CompetitorHospital
     {
         IsOpen = scenario.IsOpen;
         ScenarioStep = ScenarioStepOf(scenario.Position);
-        Pending = scenario.Pending is { } pending ? pending with { Slot = -1, FromStart = ScenarioStep < StartSteps } : null;
+        Pending = scenario.Pending;
         NextActionTick = simulation.Tick + Math.Max(0, scenario.TicksToAction);
         if (scenario.PatientsInHospital is { } patients)
         {
@@ -1097,6 +1097,17 @@ public sealed class CompetitorHospital
             _queue[i] = i < scenario.Queue.Count && scenario.Queue[i] is { } hire
                 ? CompetitorAction.HireOf(hire.Class, hire.Ability)
                 : null;
+        }
+
+        // A hire from the queue keeps its place until carried out; a loan request leaves the queue when taken.
+        if (Pending is { } pending && (pending.Slot is < 0 or >= QueuePlaces || pending.Kind != CompetitorActionKind.Hire))
+        {
+            if (pending is { Kind: CompetitorActionKind.Loan, Slot: >= 0 and < QueuePlaces })
+            {
+                _queue[pending.Slot] = null;
+            }
+
+            Pending = pending with { Slot = -1 };
         }
     }
 

@@ -315,6 +315,39 @@ public class CompetitorScenarioTests
     }
 
     [Fact]
+    public void AnImportedHireFromTheQueueLeavesItWhenCarriedOut()
+    {
+        var simulation = NewSimulation(startCash: 0);
+        var opponent = simulation.Competitors[0];
+        var surgeon = CompetitorAction.HireOf(StaffClass.Doctor, Specialism.Surgeon);
+        var scenario = new ImportedCompetitorScenario(
+            true, 12, 0, [], 0, 0, ["gp"], [], [new ImportedCompetitorHire(StaffClass.Doctor, Specialism.Surgeon), null, null, new ImportedCompetitorHire(StaffClass.Nurse, null)],
+            surgeon with { Slot = 0 });
+
+        opponent.Import(new ImportedCompetitor(opponent.Name, 500, 10, Money: 0, Scenario: scenario), simulation);
+
+        // It keeps its place; without money the hire fails and moves to the free place furthest back.
+        Assert.Equal(surgeon with { Slot = 0 }, opponent.Pending);
+        Assert.False(opponent.Carry(simulation, opponent.Pending!.Value));
+        Assert.Null(opponent.Queue[0]);
+        Assert.Equal(surgeon, opponent.Queue[CompetitorHospital.QueuePlaces - 1]);
+        Assert.Equal(CompetitorAction.HireOf(StaffClass.Nurse), opponent.Queue[3]);
+    }
+
+    [Fact]
+    public void AnImportedLoanRequestFromTheQueueHasLeftIt()
+    {
+        var simulation = NewSimulation(startCash: 0);
+        var opponent = simulation.Competitors[0];
+        var scenario = new ImportedCompetitorScenario(true, 15, 0, [], 0, 0, [], [], [], new CompetitorAction(CompetitorActionKind.Loan, Slot: 2));
+
+        opponent.Import(new ImportedCompetitor(opponent.Name, 500, 10, Scenario: scenario), simulation);
+
+        Assert.Equal(new CompetitorAction(CompetitorActionKind.Loan), opponent.Pending);
+        Assert.All(opponent.Queue, Assert.Null);
+    }
+
+    [Fact]
     public void AnImportedOpponentInTheStartDecidesWhenItsActionIsDue()
     {
         var simulation = NewSimulation(startCash: 0);
