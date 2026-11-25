@@ -195,7 +195,8 @@ public sealed class ResearchDepartment
     }
 
     /// <summary>
-    /// The day's research: each area in turn takes its slider's percent of what is left in the pool for its cheapest item.
+    /// The day's research: each area in turn takes its slider's percent of what is left in the pool for its cheapest item;
+    /// an area whose slider is off or whose share comes to less than a point is passed over.
     /// With nothing to work on, the cure and diagnosis areas leave their points in the pool and their sliders go off; the
     /// drugs and improvements areas leave their points in the pool and keep their sliders; and with no disease to
     /// concentrate on, the specialisation area still takes its share, which is lost. Every share taken and not given
@@ -206,14 +207,20 @@ public sealed class ResearchDepartment
         foreach (var category in Order)
         {
             var area = Area(category);
-            area.Current = FindTarget(simulation, hospital, category);
             var taken = (int)((long)area.Share * Pool / 100);
+            if (area.Share <= 0 || taken <= 0)
+            {
+                // Not looked at: no target sought, the slider kept, nothing for the adviser.
+                continue;
+            }
+
+            area.Current = FindTarget(simulation, hospital, category);
             if (area.Current.IsNone)
             {
                 switch (category)
                 {
                     case ResearchCategory.Cure or ResearchCategory.Diagnosis:
-                        if (category == ResearchCategory.Diagnosis && area.Share > 0)
+                        if (category == ResearchCategory.Diagnosis)
                         {
                             DiagnosisSwitchedOff++;
                         }
@@ -230,12 +237,9 @@ public sealed class ResearchDepartment
                 continue;
             }
 
-            if (taken > 0)
-            {
-                Pool -= taken;
-                hospital.ResearchDistributedThisYear += taken;
-                Progress(simulation, hospital, area.Current, taken);
-            }
+            Pool -= taken;
+            hospital.ResearchDistributedThisYear += taken;
+            Progress(simulation, hospital, area.Current, taken);
         }
 
         RefreshTargets(simulation, hospital);

@@ -140,13 +140,6 @@ public class AdviserTests
         Assert.Equal(AdviserChecks.DoctorCrazyOverwork.Fallback, host.Adviser.Current);
     }
 
-    /// <summary>
-    /// The test level has nothing to discover in diagnosis: its slider is put off beforehand, so the first day's research
-    /// does not announce it over the advice a test looks for.
-    /// </summary>
-    private static void NothingToDiscoverInDiagnosis(WindowTestHost host) =>
-        host.Simulation.Hospitals[0].Research.AdjustShare(ResearchCategory.Diagnosis, -100);
-
     [Fact]
     public void TheDiagnosisSliderSwitchedOffIsAnnouncedOnce()
     {
@@ -159,13 +152,16 @@ public class AdviserTests
         var checks = new AdviserChecks(host.Adviser, new Random(1));
         checks.Observe(simulation, 0, null, 0);
 
-        // Cure and drugs have nothing to do either, but only the diagnosis area's slider going off is announced.
+        // Cure and drugs have nothing to do either, but only the diagnosis area's slider going off is announced, at the
+        // end of a day the research department brought points.
+        research.AddPoints(ResearchDepartment.DeskPoints);
         research.OnEndDay(simulation, hospital);
         Assert.Equal(1, research.DiagnosisSwitchedOff);
         checks.Observe(simulation, 0, null, 0);
         Assert.Equal(AdviserChecks.DrugFullyResearched.Fallback.Replace("%s", "Diagnosis", StringComparison.Ordinal), host.Adviser.Current);
 
         // The slider stays off: no second time.
+        research.AddPoints(ResearchDepartment.DeskPoints);
         research.OnEndDay(simulation, hospital);
         Assert.Equal(1, research.DiagnosisSwitchedOff);
     }
@@ -395,7 +391,6 @@ public class AdviserTests
         var host = new WindowTestHost();
         var checks = new AdviserChecks(host.Adviser, new Random(1));
         host.Simulation.Hospitals[0].Open();
-        NothingToDiscoverInDiagnosis(host);
         checks.Observe(host.Simulation, 0, null, 0);
 
         host.Simulation.SkipToLastHour(new GameDate(1, 2, 5, 0));
@@ -418,7 +413,6 @@ public class AdviserTests
         var host = new WindowTestHost(freeBuild ? rules.WithFreeBuild() : rules);
         var checks = new AdviserChecks(host.Adviser, new Random(1));
         host.Simulation.Hospitals[0].Open();
-        NothingToDiscoverInDiagnosis(host);
         checks.Observe(host.Simulation, 0, null, 0);
 
         host.Simulation.SkipToLastHour(new GameDate(1, 6, 1, 0));

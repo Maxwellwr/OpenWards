@@ -1,3 +1,4 @@
+using OpenWards.Sim.Calendar;
 using OpenWards.Sim.Commands;
 using OpenWards.Sim.Definitions;
 using OpenWards.Sim.Diseases;
@@ -69,6 +70,40 @@ public class ResearchTests
         // The shares taken count towards the year's award, the lost one too; those given back do not.
         Assert.Equal(200 + 160 + 128, hospital.ResearchDistributedThisYear);
         Assert.Equal(0, research.DiagnosisSwitchedOff);
+    }
+
+    [Fact]
+    public void WithAnEmptyPoolNoAreaIsLookedAtSoTheSlidersStayUntilTheFirstPoints()
+    {
+        var simulation = NewSimulation();
+        var hospital = simulation.Hospitals[0];
+        var research = hospital.Research;
+        research.DiscoverAll(simulation, hospital);
+
+        // No research department: days pass with an empty pool, and diagnosis, with nothing left to discover, keeps
+        // its 20 % and says nothing.
+        for (var day = 2; day <= 5; day++)
+        {
+            EndDayBefore(simulation, day);
+        }
+
+        Assert.Equal(20, research.Area(ResearchCategory.Diagnosis).Share);
+        Assert.Equal(20, research.Area(ResearchCategory.Cure).Share);
+        Assert.Equal(0, research.DiagnosisSwitchedOff);
+
+        // A researcher's first action (at least 50 points): at the end of that day the sliders go off, from 20 %.
+        research.AddPoints(ResearchDepartment.DeskPoints);
+        EndDayBefore(simulation, 6);
+        Assert.Equal(0, research.Area(ResearchCategory.Diagnosis).Share);
+        Assert.Equal(0, research.Area(ResearchCategory.Cure).Share);
+        Assert.Equal(1, research.DiagnosisSwitchedOff);
+    }
+
+    /// <summary>Runs the simulation to the end of the day before <paramref name="day"/> of January, year 1.</summary>
+    private static void EndDayBefore(Simulation simulation, int day)
+    {
+        simulation.SkipToLastHour(new GameDate(1, 1, day, 0));
+        simulation.Step();
     }
 
     [Fact]
