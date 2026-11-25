@@ -133,16 +133,20 @@ public static class OriginalSaveImporter
                 continue;
             }
 
-            // The newest recorded point of the health graph (values above 100 are points not recorded yet).
-            var health = entity.HealthHistory.ToArray().Where(v => v <= 100).Select(v => (int)v).LastOrDefault(90);
             patients.Add(new ImportedPatient(
                 disease.Id,
                 new TilePosition(entity.TileX, entity.TileY),
-                health / 100m,
+                Math.Clamp(entity.Health, 1, 1000) / 1000m,
                 entity.Happiness / 100m,
                 1m - (entity.Thirst / 100m),
                 entity.Warmth / 100m,
-                entity.DiagnosisProgress));
+                entity.DiagnosisProgress,
+                entity.Wallet,
+                entity.InsurerBit switch { 1 => 1, 2 => 2, 4 => 3, _ => 0 },
+                entity.DiagnosisDifficulty,
+                entity.Bowel,
+                entity.Nausea,
+                entity.ContagiousStrength));
         }
 
         var casebook = new List<ImportedCase>();

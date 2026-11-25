@@ -304,7 +304,7 @@ public class OriginalSaveGameTests
     }
 
     [Fact]
-    public void ReadsPatientHealthHistory()
+    public void ReadsPatientFields()
     {
         var data = new byte[OriginalSaveGame.Length];
         var entity = OriginalSaveGame.EntityOffset + (189 * OriginalSaveGame.EntityLength);
@@ -316,6 +316,13 @@ public class OriginalSaveGameTests
         data[entity + 83] = 31;
         data[entity + 168] = 16;
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(entity + 146), 1922);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(entity + 130), 605);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(entity + 112), 78828);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(entity + 144), 35);
+        BinaryPrimitives.WriteInt16LittleEndian(data.AsSpan(entity + 136), 15);
+        BinaryPrimitives.WriteInt16LittleEndian(data.AsSpan(entity + 138), 225);
+        data[entity + 173] = 4;
+        data[entity + 174] = 3;
 
         var patient = Assert.Single(OriginalSaveGame.Parse(data).Entities);
 
@@ -325,6 +332,9 @@ public class OriginalSaveGameTests
         Assert.Equal(31, patient.Warmth);
         Assert.Equal(16, patient.Disease);
         Assert.Equal(1922, patient.DiagnosisProgress);
+        Assert.Equal((605, 78828, 35), (patient.Health, patient.Wallet, patient.DiagnosisDifficulty));
+        Assert.Equal((15, 225), (patient.Bowel, patient.Nausea));
+        Assert.Equal(((byte)4, (byte)3), (patient.InsurerBit, patient.ContagiousStrength));
     }
 
     [Fact]

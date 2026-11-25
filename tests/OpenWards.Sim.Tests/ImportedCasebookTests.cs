@@ -76,6 +76,28 @@ public class ImportedCasebookTests
         Assert.Equal(102, hospital.PriceLevel);
     }
 
+    [Fact]
+    public void PatientsKeepTheirMoneyInsurerAndNeeds()
+    {
+        var simulation = NewSimulation();
+
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 3,
+            Day = 1,
+            Patients =
+            [
+                new ImportedPatient("broken_wind", new TilePosition(2, 2), 0.472m, 0.9m, 0.6m, 0.5m, 1522, Wallet: 38710, InsuranceCompany: 2, DiagnosisDifficulty: 83, Bowel: 42, Nausea: 38, ContagiousStrength: 4),
+            ],
+        });
+
+        var patient = simulation.Entities.OfType<Entities.Humanoid>().Select(h => h.Behaviour).OfType<People.PatientBehaviour>().Single();
+        Assert.Equal(472, patient.Health);
+        Assert.Equal((38710, 2, 83), (patient.Wallet, patient.InsuranceCompany, patient.DiagnosisDifficulty));
+        Assert.Equal((42, 38, 4), (patient.Bowel, patient.Nausea, patient.ContagiousStrength));
+        Assert.Equal(1000, patient.DiagnosisProgress);
+    }
+
     private static Simulation NewSimulation()
     {
         var map = new LevelMap(6, 6, 1);

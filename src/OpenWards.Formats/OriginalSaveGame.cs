@@ -118,6 +118,27 @@ public sealed record OriginalSaveEntity(int Slot, ReadOnlyMemory<byte> Raw)
     /// </summary>
     public int DiagnosisProgress => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[146..]);
 
+    /// <summary>Patients only: health from 0 to 1000.</summary>
+    public int Health => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[130..]);
+
+    /// <summary>Patients only: the money they brought.</summary>
+    public int Wallet => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[112..]);
+
+    /// <summary>Patients only: the insurance company paying for them as a bit (1, 2 or 4), or 0 when they pay themselves.</summary>
+    public byte InsurerBit => Raw.Span[173];
+
+    /// <summary>Patients only: how hard their diagnosis is.</summary>
+    public int DiagnosisDifficulty => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[144..]);
+
+    /// <summary>Patients only: how much they need the toilet.</summary>
+    public int Bowel => BinaryPrimitives.ReadInt16LittleEndian(Raw.Span[136..]);
+
+    /// <summary>Patients only: how sick they feel.</summary>
+    public int Nausea => BinaryPrimitives.ReadInt16LittleEndian(Raw.Span[138..]);
+
+    /// <summary>Patients only: how contagious they are; 255 once vaccinated.</summary>
+    public byte ContagiousStrength => Raw.Span[174];
+
     /// <summary>Patients only: happiness from 0 to 100, the first bar of the patient window.</summary>
     public byte Happiness => Raw.Span[81];
 

@@ -37,7 +37,26 @@ public sealed record ImportedStaff(StaffProfile Profile, TilePosition Tile, deci
 /// <param name="Thirst">From 0 (not thirsty) to 1.</param>
 /// <param name="Warmth">From 0 to 1.</param>
 /// <param name="DiagnosisProgress">How certain the diagnosis is, in thousandths.</param>
-public sealed record ImportedPatient(string DiseaseId, TilePosition Tile, decimal Health, decimal Happiness, decimal Thirst, decimal Warmth, int DiagnosisProgress);
+/// <param name="Wallet">The money they brought, if known.</param>
+/// <param name="InsuranceCompany">The insurance company (1 to 3) that pays for them, 0 for none, or null to draw one.</param>
+/// <param name="DiagnosisDifficulty">How hard their diagnosis is, if known.</param>
+/// <param name="Bowel">How much they need the toilet, if known.</param>
+/// <param name="Nausea">How sick they feel, if known.</param>
+/// <param name="ContagiousStrength">How contagious they are, if known.</param>
+public sealed record ImportedPatient(
+    string DiseaseId,
+    TilePosition Tile,
+    decimal Health,
+    decimal Happiness,
+    decimal Thirst,
+    decimal Warmth,
+    int DiagnosisProgress,
+    int? Wallet = null,
+    int? InsuranceCompany = null,
+    int? DiagnosisDifficulty = null,
+    int? Bowel = null,
+    int? Nausea = null,
+    int? ContagiousStrength = null);
 
 /// <summary>A casebook entry of an imported save.</summary>
 /// <param name="DiseaseId">The disease.</param>
@@ -322,8 +341,30 @@ public static class GameImport
 
             var patient = simulation.AddEntity(id => Humanoid.CreatePatient(id, tile, simulation.Random, disease.Look, player));
             var behaviour = new People.PatientBehaviour { Health = (int)(Math.Clamp(imported.Health, 0.001m, 1m) * People.PatientNeeds.MaxHealth) };
-            behaviour.SetDisease(disease, People.PatientCare.ChooseInsuranceCompany(simulation), simulation.Rules.Needs);
-            behaviour.Wallet = People.PatientCare.NewPatientMoney(simulation);
+            var insurer = imported.InsuranceCompany is { } company && company is >= 0 and <= Hospital.InsuranceCompanies
+                ? company
+                : People.PatientCare.ChooseInsuranceCompany(simulation);
+            behaviour.SetDisease(disease, insurer, simulation.Rules.Needs);
+            behaviour.Wallet = imported.Wallet is >= 0 and var wallet ? wallet : People.PatientCare.NewPatientMoney(simulation);
+            if (imported.DiagnosisDifficulty is > 0 and var difficulty)
+            {
+                behaviour.DiagnosisDifficulty = difficulty;
+            }
+
+            if (imported.Bowel is >= 0 and var bowel)
+            {
+                behaviour.Bowel = bowel;
+            }
+
+            if (imported.Nausea is >= 0 and var nausea)
+            {
+                behaviour.Nausea = nausea;
+            }
+
+            if (imported.ContagiousStrength is > 0 and < 255 and var contagious)
+            {
+                behaviour.ContagiousStrength = contagious;
+            }
             behaviour.DiagnosisProgress = Math.Clamp(imported.DiagnosisProgress, 0, 1000);
 
             // The save's visitors, which the reputation is weighed against, count them already.
