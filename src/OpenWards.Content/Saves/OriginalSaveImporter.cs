@@ -434,18 +434,19 @@ public static class OriginalSaveImporter
             h.CompetitorPatients,
             rooms,
             objects,
-            [.. h.CompetitorQueue.Select(CompetitorHire)],
+            [.. h.CompetitorQueue.Select(CompetitorTask)],
             CompetitorPending(h, content));
     }
 
     /// <summary>
     /// A place of a computer player's queue: type 1 a hire of a staff class (0 nurse, 1 doctor, 2 handyman,
-    /// 3 receptionist) with the qualification bits it needs; type 0 is a free place, its arguments left over from a hire
-    /// carried out.
+    /// 3 receptionist) with the qualification bits it needs, type 4 a loan request; type 0 is a free place, its arguments
+    /// left over from a task carried out.
     /// </summary>
-    private static ImportedCompetitorHire? CompetitorHire((int Type, int Argument, int Qualification) task) => task switch
+    private static CompetitorAction? CompetitorTask((int Type, int Argument, int Qualification) task) => task switch
     {
-        (1, >= 0 and <= 3, var bits) => new ImportedCompetitorHire((StaffClass)task.Argument, AbilityOf(bits)),
+        (1, >= 0 and <= 3, var bits) => CompetitorAction.HireOf((StaffClass)task.Argument, AbilityOf(bits)),
+        (4, _, _) => new CompetitorAction(CompetitorActionKind.Loan),
         _ => null,
     };
 
@@ -479,7 +480,7 @@ public static class OriginalSaveImporter
             2 when content.Rooms.FirstOrDefault(r => r.LevelConfigId == argument) is { } room => new CompetitorAction(CompetitorActionKind.Build, room.Id, FromStart: fromStart),
             3 when content.Objects.FirstOrDefault(o => o.ObjectType == argument && !o.Id.EndsWith("_b", StringComparison.Ordinal)) is { } item =>
                 new CompetitorAction(CompetitorActionKind.Buy, item.Id, Math.Max(1, second), FromStart: fromStart),
-            4 => new CompetitorAction(CompetitorActionKind.Loan, Slot: slot, FromStart: fromStart),
+            4 => new CompetitorAction(CompetitorActionKind.Loan, FromStart: fromStart),
             _ => null,
         };
     }

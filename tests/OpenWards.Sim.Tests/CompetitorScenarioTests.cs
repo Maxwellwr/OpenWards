@@ -125,28 +125,49 @@ public class CompetitorScenarioTests
     }
 
     [Fact]
-    public void TreatmentRoomsWaitTillNoDiagnosisRoomIsLeftToBuildAndADearRoomAsksForALoan()
+    public void TreatmentRoomsComeWhenDiagnosisChoseNothingAndADearRoomAsksForALoan()
     {
         var simulation = NewSimulation(startCash: 0);
         simulation.Hospitals[0].DiscoverRoom("pharmacy");
         var opponent = new CompetitorHospital(1, "ORAC", balance: 1_000);
 
-        // Psychiatry is too dear: a loan request goes into the queue, and the pharmacy waits.
+        // Psychiatry is too dear: a loan request goes into the queue, and in the same step the pharmacy, which wants a nurse.
         opponent.SetScenarioStep(Cycle + 1);
-        Assert.Null(opponent.Decide(simulation));
+        Assert.Equal(new CompetitorAction(CompetitorActionKind.Build, "pharmacy"), opponent.Decide(simulation));
         Assert.Equal(new CompetitorAction(CompetitorActionKind.Loan), opponent.Queue[0]);
+        Assert.Equal(CompetitorAction.HireOf(StaffClass.Nurse), opponent.Queue[1]);
 
         // The loan step takes the request, which only takes its time.
         opponent.SetScenarioStep(Cycle + 3);
         Assert.Equal(new CompetitorAction(CompetitorActionKind.Loan), opponent.Decide(simulation));
-        Assert.All(opponent.Queue, Assert.Null);
+        Assert.Null(opponent.Queue[0]);
         Assert.Equal(1_000, opponent.Balance);
+    }
 
-        // With psychiatry built, the pharmacy, which wants a nurse.
-        opponent.AddRoom("psych");
+    [Fact]
+    public void WhenEveryRoomIsTooDearBothListsAskForALoan()
+    {
+        var simulation = NewSimulation(startCash: 0);
+        simulation.Hospitals[0].DiscoverRoom("pharmacy");
+        var opponent = new CompetitorHospital(1, "ORAC", balance: 100);
+
         opponent.SetScenarioStep(Cycle + 1);
-        Assert.Equal(new CompetitorAction(CompetitorActionKind.Build, "pharmacy"), opponent.Decide(simulation));
-        Assert.Equal(CompetitorAction.HireOf(StaffClass.Nurse), opponent.Queue[0]);
+        Assert.Null(opponent.Decide(simulation));
+        Assert.Equal(new CompetitorAction(CompetitorActionKind.Loan), opponent.Queue[0]);
+        Assert.Equal(new CompetitorAction(CompetitorActionKind.Loan), opponent.Queue[1]);
+    }
+
+    [Fact]
+    public void TheStartsFirstDiagnosisRoomAsksForALoanWhenTooDear()
+    {
+        var simulation = NewSimulation(startCash: 0);
+        var opponent = new CompetitorHospital(1, "ORAC", balance: 100);
+
+        // The start's room asks for no hire, but a loan if it cannot pay.
+        opponent.SetScenarioStep(7);
+        Assert.Null(opponent.Decide(simulation));
+        Assert.Equal(new CompetitorAction(CompetitorActionKind.Loan), opponent.Queue[0]);
+        Assert.All(opponent.Queue.Skip(1), Assert.Null);
     }
 
     [Fact]
@@ -288,7 +309,7 @@ public class CompetitorScenarioTests
             PatientsInHospital: 12,
             Rooms: ["gp", "psych"],
             Objects: [("reception_desk", 1), ("bench", 6)],
-            Queue: [null, new ImportedCompetitorHire(StaffClass.Doctor, Specialism.Surgeon)],
+            Queue: [null, CompetitorAction.HireOf(StaffClass.Doctor, Specialism.Surgeon)],
             Pending: new CompetitorAction(CompetitorActionKind.Buy, "bench", 2));
 
         opponent.Import(new ImportedCompetitor(opponent.Name, 500, 40, Money: 20_000, Scenario: scenario), simulation);
@@ -321,7 +342,7 @@ public class CompetitorScenarioTests
         var opponent = simulation.Competitors[0];
         var surgeon = CompetitorAction.HireOf(StaffClass.Doctor, Specialism.Surgeon);
         var scenario = new ImportedCompetitorScenario(
-            true, 12, 0, [], 0, 0, ["gp"], [], [new ImportedCompetitorHire(StaffClass.Doctor, Specialism.Surgeon), null, null, new ImportedCompetitorHire(StaffClass.Nurse, null)],
+            true, 12, 0, [], 0, 0, ["gp"], [], [CompetitorAction.HireOf(StaffClass.Doctor, Specialism.Surgeon), null, null, CompetitorAction.HireOf(StaffClass.Nurse, null)],
             surgeon with { Slot = 0 });
 
         opponent.Import(new ImportedCompetitor(opponent.Name, 500, 10, Money: 0, Scenario: scenario), simulation);
@@ -335,15 +356,21 @@ public class CompetitorScenarioTests
     }
 
     [Fact]
-    public void AnImportedLoanRequestFromTheQueueHasLeftIt()
+    public void AnImportedLoanRequestInTheQueueTakesItsTime()
     {
         var simulation = NewSimulation(startCash: 0);
         var opponent = simulation.Competitors[0];
-        var scenario = new ImportedCompetitorScenario(true, 15, 0, [], 0, 0, [], [], [], new CompetitorAction(CompetitorActionKind.Loan, Slot: 2));
+        var loan = new CompetitorAction(CompetitorActionKind.Loan);
+        var scenario = new ImportedCompetitorScenario(true, 15, 0, [], 0, 0, [], [], [null, loan], loan with { Slot = 3 });
 
         opponent.Import(new ImportedCompetitor(opponent.Name, 500, 10, Scenario: scenario), simulation);
 
-        Assert.Equal(new CompetitorAction(CompetitorActionKind.Loan), opponent.Pending);
+        Assert.Equal(loan, opponent.Pending);
+        Assert.Equal(loan, opponent.Queue[1]);
+
+        // The loan step takes it out of the queue as an action of its own.
+        opponent.SetScenarioStep(Cycle + 3);
+        Assert.Equal(loan, opponent.Decide(simulation));
         Assert.All(opponent.Queue, Assert.Null);
     }
 

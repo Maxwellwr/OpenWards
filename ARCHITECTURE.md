@@ -402,10 +402,13 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   hospital not yet open is lost. The level's computer opponents (`computer[n].Playing`, CorsixTH's
   `AIHospital`) are `Simulation.Competitors` (`CompetitorHospital`): not on the map, they play a scenario as the
   logic specification describes the original. Once every 25 ticks, when its time has come, an opponent decides on an
-  action or carries it out (hire a receptionist, desk, 4 benches, GP's office, open, hire a doctor; then over and over
-  staff, a room, comfort objects and land, the loan), with ⌊clamp(Speed − rng % Skill, 1, 100) × delay / 10⌋ ticks
-  between; failed actions wait in 8 places to be tried again. It hires the most skilled candidate it can pay for from
-  the shared candidates, builds the rooms research has made available to the player, and borrows by the player's rules.
+  action or carries it out (hire a receptionist, desk, 4 benches, GP's office, open, hire a doctor, the first diagnosis
+  room; then over and over staff, a room, comfort objects one at a time, the loan), with ⌊clamp(Speed − rng % Skill, 1,
+  100) × delay / 10⌋ ticks between. The queue of 8 places holds only hires for its rooms and loan requests, which take
+  their time but lend nothing. It hires the first fitting candidate from the shared candidates and builds the rooms
+  research has made available to the player: a diagnosis room if it can, else a treatment room; a list whose rooms are
+  all too dear puts a loan request in the queue, so one step may ask for a loan and build a treatment room, or ask twice.
+  It buys no land.
   Its patients live through their stay at once (`Admit`): a room every five days, diagnosis by its staff's average
   skill, leaving and dying by chance, guessing above its `GuessAt`; the outcomes reach it every five days.
   Reputation (points × 500 / visits), value and the year's raise go by the player's rules. Its traits (`Skill`,

@@ -149,7 +149,7 @@ public sealed class CompetitorHospital
     public static readonly IReadOnlyList<string> DiagnosisRooms =
         ["general_diag", "x_ray", "cardiogram", "scanner", "psych", "blood_machine", "ultrascan", "ward"];
 
-    /// <summary>The treatment rooms it builds, in order, once there is no diagnosis room left to build.</summary>
+    /// <summary>The treatment rooms it builds, in order, whenever the diagnosis rooms gave it nothing to build (none left, or all too dear).</summary>
     public static readonly IReadOnlyList<string> TreatmentRooms =
     [
         "pharmacy", "psych", "ward", "operating_theatre", "inflation", "electrolysis", "slack_tongue", "fracture_clinic",
@@ -428,8 +428,9 @@ public sealed class CompetitorHospital
         Carry(simulation, action);
         if (action is { Kind: CompetitorActionKind.Buy, Count: > 1 })
         {
-            Pending = action with { Count = action.Count - 1 };
-            NextActionTick = simulation.Tick + Delay(random, ActionDelay(action.Kind), action.FromStart);
+            // The start's extra rng % 5 comes only when the action is given, not before each further object.
+            Pending = action with { Count = action.Count - 1, FromStart = false };
+            NextActionTick = simulation.Tick + Delay(random, ActionDelay(action.Kind), fromStart: false);
             return;
         }
 
@@ -471,7 +472,7 @@ public sealed class CompetitorHospital
         return (step - StartSteps) switch
         {
             0 => ChooseStaff(),
-            1 => ChooseRoom(simulation, DiagnosisRooms, forTheCycle: true) ?? (NothingToBuild(simulation, DiagnosisRooms) ? ChooseRoom(simulation, TreatmentRooms, forTheCycle: true) : null),
+            1 => ChooseRoom(simulation, DiagnosisRooms, forTheCycle: true) ?? ChooseRoom(simulation, TreatmentRooms, forTheCycle: true),
             2 => ChooseObjects(),
             _ => TakeQueued(CompetitorActionKind.Loan),
         };
@@ -560,12 +561,11 @@ public sealed class CompetitorHospital
     private IEnumerable<string> Buildable(Simulation simulation, IReadOnlyList<string> rooms) =>
         rooms.Where(room => !HasRoom(room) && simulation.Hospitals.Count > 0 && simulation.Hospitals[0].IsRoomDiscovered(room));
 
-    private bool NothingToBuild(Simulation simulation, IReadOnlyList<string> rooms) => !Buildable(simulation, rooms).Any();
-
     /// <summary>
     /// The first room of the list it has not got, can build and can pay for. In the cycle the hire for it goes into the
     /// queue (a nurse for the pharmacy, ward and fracture clinic, a psychiatrist for psychiatry, a surgeon for the operating
-    /// theatre, any doctor for the rest); and when there were rooms to build but all too dear, a loan request does.
+    /// theatre, any doctor for the rest). When there were rooms to build but all too dear, a loan request goes into the
+    /// queue, at the start too.
     /// </summary>
     private CompetitorAction? ChooseRoom(Simulation simulation, IReadOnlyList<string> rooms, bool forTheCycle)
     {
@@ -592,7 +592,7 @@ public sealed class CompetitorHospital
             return new CompetitorAction(CompetitorActionKind.Build, room);
         }
 
-        if (any && forTheCycle)
+        if (any)
         {
             Enqueue(new CompetitorAction(CompetitorActionKind.Loan));
         }
@@ -1094,19 +1094,14 @@ public sealed class CompetitorHospital
 
         for (var i = 0; i < QueuePlaces; i++)
         {
-            _queue[i] = i < scenario.Queue.Count && scenario.Queue[i] is { } hire
-                ? CompetitorAction.HireOf(hire.Class, hire.Ability)
+            _queue[i] = i < scenario.Queue.Count && scenario.Queue[i] is { Kind: CompetitorActionKind.Hire or CompetitorActionKind.Loan } task
+                ? task with { Slot = -1, FromStart = false }
                 : null;
         }
 
-        // A hire from the queue keeps its place until carried out; a loan request leaves the queue when taken.
+        // A hire from the queue keeps its place until carried out; anything else has none.
         if (Pending is { } pending && (pending.Slot is < 0 or >= QueuePlaces || pending.Kind != CompetitorActionKind.Hire))
         {
-            if (pending is { Kind: CompetitorActionKind.Loan, Slot: >= 0 and < QueuePlaces })
-            {
-                _queue[pending.Slot] = null;
-            }
-
             Pending = pending with { Slot = -1 };
         }
     }
