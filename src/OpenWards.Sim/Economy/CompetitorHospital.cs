@@ -1001,9 +1001,12 @@ public sealed class CompetitorHospital
 
     /// <summary>
     /// An opponent of an imported save of the original: its reputation over its patients, its money and what the year's
-    /// charts show of it. Where it had got in its scenario is not imported yet, so its scenario starts afresh.
+    /// charts show of it, and, when the save gives it, where it had got in its scenario: whether it is open, its staff
+    /// (as many as it had of each class, each with the average skill and an even share of the wages), its rooms, the
+    /// objects it bought, its queue of hires and when it acts next. The action it was waiting to carry out is not known,
+    /// so it decides afresh at that time.
     /// </summary>
-    internal void Import(ImportedCompetitor state)
+    internal void Import(ImportedCompetitor state, Simulation? simulation = null)
     {
         Visitors = Math.Max(0, state.Visitors);
         ReputationVisits = Hospital.StartReputationVisits + Visitors;
@@ -1018,6 +1021,81 @@ public sealed class CompetitorHospital
         if (state.Tiles is > 0 and var tiles)
         {
             Tiles = tiles;
+        }
+
+        if (state.Scenario is { } scenario && simulation is not null)
+        {
+            ImportScenario(simulation, scenario);
+        }
+    }
+
+    /// <summary>
+    /// The scenario step for the original's scenario position: 0 to 8 are the same steps of the start, 12 to 15 the
+    /// four steps of the cycle (staff, room, objects, loan); anything else starts the cycle.
+    /// </summary>
+    internal static int ScenarioStepOf(int position) => position switch
+    {
+        >= 0 and < StartSteps => position,
+        >= 12 => StartSteps + ((position - 12) % CycleSteps),
+        _ => StartSteps,
+    };
+
+    private void ImportScenario(Simulation simulation, ImportedCompetitorScenario scenario)
+    {
+        IsOpen = scenario.IsOpen;
+        ScenarioStep = ScenarioStepOf(scenario.Position);
+        Pending = null;
+        NextActionTick = simulation.Tick + Math.Max(0, scenario.TicksToAction);
+        if (scenario.PatientsInHospital is { } patients)
+        {
+            PatientsInHospital = Math.Clamp(patients, 0, Math.Max(0, Visitors));
+        }
+
+        _staff.Clear();
+        var members = scenario.Staff.Sum(s => Math.Max(0, s.Count));
+        var wages = Math.Max(0, scenario.Wages);
+        var paid = 0L;
+        foreach (var (staffClass, count, skillSum) in scenario.Staff)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                var wage = members == 0 ? 0 : wages / members;
+                paid += wage;
+                _staff.Add(new CompetitorStaff(staffClass, Math.Clamp(skillSum / count, 0, PatientCare.FullDiagnosis), (int)Math.Min(wage, int.MaxValue)));
+            }
+        }
+
+        // What the even shares leave over goes to the first.
+        if (_staff.Count > 0 && wages > paid)
+        {
+            _staff[0] = _staff[0] with { Wage = (int)Math.Min(_staff[0].Wage + wages - paid, int.MaxValue) };
+        }
+
+        _rooms.Clear();
+        _equipmentValue = 0;
+        foreach (var room in scenario.Rooms)
+        {
+            if (!HasRoom(room))
+            {
+                _rooms.Add(room);
+                _equipmentValue += RoomPrice(simulation, room).Equipment;
+            }
+        }
+
+        _objects.Clear();
+        foreach (var (objectType, count) in scenario.Objects)
+        {
+            if (count > 0)
+            {
+                _objects[objectType] = ObjectCount(objectType) + count;
+            }
+        }
+
+        for (var i = 0; i < QueuePlaces; i++)
+        {
+            _queue[i] = i < scenario.Queue.Count && scenario.Queue[i] is { } hire
+                ? CompetitorAction.HireOf(hire.Class, hire.Ability)
+                : null;
         }
     }
 

@@ -2,6 +2,7 @@ using OpenWards.Content.Levels;
 using OpenWards.Formats;
 using OpenWards.Sim;
 using OpenWards.Sim.Calendar;
+using OpenWards.Sim.Definitions;
 using OpenWards.Sim.Diseases;
 using OpenWards.Sim.Economy;
 using OpenWards.Sim.Entities;
@@ -196,17 +197,18 @@ public static class OriginalSaveImporter
             // The computer players' blocks (kind 2), for the opponents' reputations and the year's charts.
             Competitors =
             [
-                .. save.Hospitals.Where(h => h.Kind == 2).Select(h => new ImportedCompetitor(
-                    h.Name,
-                    h.Reputation,
-                    h.Visitors,
-                    VisitorsThisYear: h.Visitors - h.VisitorsAtYearStart,
-                    Money: (long)h.Money - h.Loan,
-                    Value: h.Value,
-                    Cured: h.PeopleCured,
-                    Deaths: h.Deaths,
-                    Salary: h.PlayerSalary,
-                    Tiles: h.Size)),
+                .. save.Hospitals.Select((h, player) => (h, player)).Where(p => p.h.Kind == 2).Select(p => new ImportedCompetitor(
+                    p.h.Name,
+                    p.h.Reputation,
+                    p.h.Visitors,
+                    VisitorsThisYear: p.h.Visitors - p.h.VisitorsAtYearStart,
+                    Money: (long)p.h.Money - p.h.Loan,
+                    Value: p.h.Value,
+                    Cured: p.h.PeopleCured,
+                    Deaths: p.h.Deaths,
+                    Salary: p.h.PlayerSalary,
+                    Tiles: p.h.Size,
+                    Scenario: CompetitorScenario(save, p.player, content))),
             ],
             Months = Months(save),
             Statement = Statement(save, hospital.Money),
@@ -318,6 +320,63 @@ public static class OriginalSaveImporter
     /// The door as a room plan wants it: on the north or west edge of the door's tile when the outside lies north or
     /// west, otherwise on the edge of the tile outside.
     /// </summary>
+    /// <summary>The objects a computer player keeps count of outside its rooms.</summary>
+    private static readonly string[] CompetitorObjects = ["reception_desk", "bench", "drinks_machine", "plant", "extinguisher"];
+
+    /// <summary>
+    /// Where a computer player had got in its scenario: its scenario position, when it acts next, whether it is open,
+    /// its staff by class with their skills and wages, the rooms and objects of its lists and its queue of hires.
+    /// </summary>
+    private static ImportedCompetitorScenario CompetitorScenario(OriginalSaveGame save, int player, GameContent content)
+    {
+        var h = save.Hospitals[player];
+        int[] counts = [h.Nurses, h.Doctors, h.Handymen, h.Receptionists];
+        var staff = new List<(StaffClass, int, int)>();
+        for (var i = 0; i < counts.Length; i++)
+        {
+            staff.Add(((StaffClass)i, counts[i], h.CompetitorSkillSum(i)));
+        }
+
+        var rooms = new List<string>();
+        for (var type = 0; type < OriginalSaveGame.HospitalRoomTypes; type++)
+        {
+            if (save.HospitalRooms(player, type) > 0 && content.Rooms.FirstOrDefault(r => r.LevelConfigId == type) is { } room)
+            {
+                rooms.Add(room.Id);
+            }
+        }
+
+        var objects = new List<(string, int)>();
+        foreach (var id in CompetitorObjects)
+        {
+            if (content.FindObject(id) is { ObjectType: var type } && type < OriginalSaveGame.HospitalObjectTypes && save.HospitalObjects(player, type) is > 0 and var count)
+            {
+                objects.Add((id, count));
+            }
+        }
+
+        return new ImportedCompetitorScenario(
+            h.IsOpen,
+            h.CompetitorScenarioPosition,
+            (long)h.CompetitorNextTick - save.Tick,
+            staff,
+            h.CompetitorWages,
+            h.CompetitorPatients,
+            rooms,
+            objects,
+            [.. h.CompetitorQueue.Select(CompetitorHire)]);
+    }
+
+    /// <summary>A place of a computer player's queue: type 0 a hire, by the qualification bits (4 nurse, 16 doctor, 32 surgeon, 64 psychiatrist); others are not known.</summary>
+    private static ImportedCompetitorHire? CompetitorHire((int Type, int Argument, int Qualification) task) => task switch
+    {
+        (0, _, 4) => new ImportedCompetitorHire(StaffClass.Nurse, null),
+        (0, _, 16) => new ImportedCompetitorHire(StaffClass.Doctor, null),
+        (0, _, 32) => new ImportedCompetitorHire(StaffClass.Doctor, Specialism.Surgeon),
+        (0, _, 64) => new ImportedCompetitorHire(StaffClass.Doctor, Specialism.Psychiatrist),
+        _ => null,
+    };
+
     private static DoorPlacement DoorOf(OriginalSaveRoom room)
     {
         var (dx, dy) = (room.Outside.X - room.Door.X, room.Outside.Y - room.Door.Y);

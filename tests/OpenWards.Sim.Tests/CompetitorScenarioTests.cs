@@ -1,5 +1,6 @@
 using OpenWards.Sim.Diseases;
 using OpenWards.Sim.Economy;
+using OpenWards.Sim.Import;
 using OpenWards.Sim.Maps;
 using OpenWards.Sim.Staff;
 
@@ -256,6 +257,71 @@ public class CompetitorScenarioTests
         Assert.True(opponent.Reputation > 700, $"reputation {opponent.Reputation}");
         Assert.True(opponent.Balance > opponent.Cured * simulation.Rules.Diseases.CurePrice(disease), $"balance {opponent.Balance}");
         Assert.Equal(0, opponent.PatientsInHospital);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(6, 6)]
+    [InlineData(8, 8)]
+    [InlineData(12, Cycle)]
+    [InlineData(13, Cycle + 1)]
+    [InlineData(15, Cycle + 3)]
+    [InlineData(10, Cycle)]
+    public void TheOriginalsScenarioPositionIsAStep(int position, int step)
+    {
+        Assert.Equal(step, CompetitorHospital.ScenarioStepOf(position));
+    }
+
+    [Fact]
+    public void AnImportedOpponentGoesOnWhereItWas()
+    {
+        var simulation = NewSimulation(startCash: 0);
+        var opponent = simulation.Competitors[0];
+        var scenario = new ImportedCompetitorScenario(
+            IsOpen: true,
+            Position: 13,
+            TicksToAction: 97,
+            Staff: [(StaffClass.Nurse, 0, 0), (StaffClass.Doctor, 2, 1500), (StaffClass.Handyman, 1, 400), (StaffClass.Receptionist, 1, 300)],
+            Wages: 1001,
+            PatientsInHospital: 12,
+            Rooms: ["gp", "psych"],
+            Objects: [("reception_desk", 1), ("bench", 6)],
+            Queue: [null, new ImportedCompetitorHire(StaffClass.Doctor, Specialism.Surgeon)]);
+
+        opponent.Import(new ImportedCompetitor(opponent.Name, 500, 40, Money: 20_000, Scenario: scenario), simulation);
+
+        Assert.True(opponent.IsOpen);
+        Assert.Equal(Cycle + 1, opponent.ScenarioStep);
+        Assert.Null(opponent.Pending);
+        Assert.Equal(simulation.Tick + 97, opponent.NextActionTick);
+        Assert.Equal(12, opponent.PatientsInHospital);
+        Assert.Equal(2, opponent.StaffCount(StaffClass.Doctor));
+        Assert.Equal(750, opponent.AverageSkill(StaffClass.Doctor));
+        Assert.Equal(1, opponent.StaffCount(StaffClass.Handyman));
+        Assert.Equal(0, opponent.StaffCount(StaffClass.Nurse));
+        Assert.Equal(1001, opponent.Wages);
+        Assert.Equal(["gp", "psych"], opponent.Rooms);
+        Assert.Equal(6, opponent.ObjectCount("bench"));
+        Assert.Null(opponent.Queue[0]);
+        Assert.Equal(CompetitorAction.HireOf(StaffClass.Doctor, Specialism.Surgeon), opponent.Queue[1]);
+        Assert.Equal(20_000, opponent.Balance);
+    }
+
+    [Fact]
+    public void AnImportedOpponentInTheStartDecidesWhenItsActionIsDue()
+    {
+        var simulation = NewSimulation(startCash: 0);
+        var opponent = simulation.Competitors[0];
+        var scenario = new ImportedCompetitorScenario(false, 3, -500, [(StaffClass.Receptionist, 1, 300)], 400, null, [], [("reception_desk", 1), ("bench", 4)], []);
+
+        opponent.Import(new ImportedCompetitor(opponent.Name, 500, 0, Money: 20_000, Scenario: scenario), simulation);
+
+        // Overdue: it decides at once, and with its receptionist it skips the start's second try.
+        Assert.False(opponent.IsOpen);
+        Assert.Equal(simulation.Tick, opponent.NextActionTick);
+        opponent.Think(simulation);
+        Assert.Equal(4, opponent.ScenarioStep);
+        Assert.Null(opponent.Pending);
     }
 
     [Fact]

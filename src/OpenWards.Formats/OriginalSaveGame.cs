@@ -326,6 +326,57 @@ public sealed record OriginalSaveHospital(
     /// <summary>Policy: guess at cure above this diagnosis certainty, in percent.</summary>
     public int GuessCurePercent => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[537..]);
 
+    /// <summary>Computer player: the absolute tick (as <see cref="OriginalSaveGame"/>'s game tick) of its next action; may lie in the past.</summary>
+    public int CompetitorNextTick => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[4600..]);
+
+    /// <summary>Computer player: the total of its staff's wages.</summary>
+    public int CompetitorWages => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[4660..]);
+
+    /// <summary>Computer player: its rooms.</summary>
+    public int CompetitorRooms => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[4664..]);
+
+    /// <summary>Computer player: its patients in the hospital (a reading of the field, not confirmed).</summary>
+    public int CompetitorPatients => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[4668..]);
+
+    /// <summary>
+    /// Computer player: where it is in its scenario. 0 to 8 are the steps of the start (seen 2 to 6 early in a level),
+    /// 12 to 15 the four steps of the cycle.
+    /// </summary>
+    public int CompetitorScenarioPosition => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4672..]);
+
+    /// <summary>Computer player: the number of its name in the base list (0 ORAC, 1 HAL, 2 COLOSSUS…).</summary>
+    public int CompetitorNameNumber => Raw.Span[4677];
+
+    /// <summary>Whether the hospital has opened (0 before, 1 after).</summary>
+    public bool IsOpen => Raw.Span[4694] != 0;
+
+    /// <summary>Computer player: the sum of the skills (thousandths) of its staff of a class, ordered like the staff counts (nurses, doctors, handymen, receptionists).</summary>
+    public int CompetitorSkillSum(int staffClass)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(staffClass);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(staffClass, 3);
+        return BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[(4678 + (2 * staffClass))..]);
+    }
+
+    /// <summary>
+    /// Computer player: its queue of eight places, each a type (0 a hire) and two arguments (1 for a doctor, 0 for others;
+    /// the qualification bits: 4 nurse, 16 doctor, 32 surgeon, 64 psychiatrist). Empty places are all zero.
+    /// </summary>
+    public IReadOnlyList<(int Type, int Argument, int Qualification)> CompetitorQueue
+    {
+        get
+        {
+            var queue = new (int, int, int)[8];
+            for (var i = 0; i < queue.Length; i++)
+            {
+                var at = Raw.Span[(4612 + (6 * i))..];
+                queue[i] = (BinaryPrimitives.ReadUInt16LittleEndian(at), BinaryPrimitives.ReadUInt16LittleEndian(at[2..]), BinaryPrimitives.ReadUInt16LittleEndian(at[4..]));
+            }
+
+            return queue;
+        }
+    }
+
     /// <summary>Policy: send patients home below this diagnosis certainty, in percent.</summary>
     public int SendHomePercent => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[539..]);
 
@@ -487,6 +538,21 @@ public sealed class OriginalSaveGame
     /// <summary>Number of object types with a list.</summary>
     public const int ObjectTypes = 64;
 
+    /// <summary>Size of one player's lists (objects, qualifications, rooms and faxes) from <see cref="ObjectListOffset"/>.</summary>
+    public const int HospitalListLength = 234;
+
+    /// <summary>Object types in one player's lists.</summary>
+    public const int HospitalObjectTypes = 62;
+
+    /// <summary>Room types in one player's lists.</summary>
+    public const int HospitalRoomTypes = 31;
+
+    /// <summary>Offset of the rooms in one player's lists.</summary>
+    public const int HospitalRoomListOffset = 156;
+
+    /// <summary>Offset of the game tick.</summary>
+    public const int TickOffset = 0x666F0;
+
     /// <summary>Offset of the day of the month (1-based); the month follows.</summary>
     public const int DateOffset = 399030;
 
@@ -517,6 +583,9 @@ public sealed class OriginalSaveGame
 
     /// <summary>The whole file.</summary>
     public ReadOnlyMemory<byte> Data { get; }
+
+    /// <summary>Game tick: 50 a day, 1500 a month.</summary>
+    public int Tick => BinaryPrimitives.ReadInt32LittleEndian(Data.Span[TickOffset..]);
 
     /// <summary>Level number (1–12 in the campaign).</summary>
     public int Level => Data.Span[2];
@@ -556,6 +625,31 @@ public sealed class OriginalSaveGame
         ArgumentOutOfRangeException.ThrowIfNegative(type);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(type, ObjectTypes);
         return BinaryPrimitives.ReadUInt16LittleEndian(Data.Span[(ObjectListOffset + (2 * type))..]);
+    }
+
+    /// <summary>
+    /// For a computer player, how many objects of a type it has bought; for the local player the slot of the first
+    /// object of the type. From the player's lists of <see cref="HospitalListLength"/> bytes at <see cref="ObjectListOffset"/>.
+    /// </summary>
+    public int HospitalObjects(int player, int type)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(type, HospitalObjectTypes);
+        return HospitalList(player, 2 * type);
+    }
+
+    /// <summary>For a computer player, how many rooms of a type (as <see cref="OriginalSaveRoom.Type"/>) it has built; for the local player the slot of the last.</summary>
+    public int HospitalRooms(int player, int type)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(type, HospitalRoomTypes);
+        return HospitalList(player, HospitalRoomListOffset + (2 * type));
+    }
+
+    private int HospitalList(int player, int offset)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(player);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(player, MaxPlayers);
+        ArgumentOutOfRangeException.ThrowIfNegative(offset);
+        return BinaryPrimitives.ReadUInt16LittleEndian(Data.Span[(ObjectListOffset + (player * HospitalListLength) + offset)..]);
     }
 
     /// <summary>The 12 most recent values of a chart series, oldest first, from the first of its three copies.</summary>

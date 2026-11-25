@@ -408,9 +408,13 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   the shared candidates, builds the rooms research has made available to the player, and borrows by the player's rules.
   Its patients live through their stay at once (`Admit`): a room every five days, diagnosis by its staff's average
   skill, leaving and dying by chance, guessing above its `GuessAt`; the outcomes reach it every five days.
-  Reputation (points × 500 / visits), value and the year's raise go by the player's rules. Its traits are drawn at
-  the start (the level files only name it), and it draws from a random stream of its own (`CompetitorRandom`). Importing a save of the
-  original takes their reputations and patients from its computer players' blocks (by name, else in order). Each `Hospital` runs CorsixTH's opening
+  Reputation (points × 500 / visits), value and the year's raise go by the player's rules. Its traits (`Skill`,
+  `StaffLevels`, `Speed`, `Comfort`, `GuessAt`) come from the level files, and it draws from a random stream of its own
+  (`CompetitorRandom`). Importing a save of the original takes their reputations and patients from its computer players'
+  blocks (by name, else in order), and their scenarios too: whether open, the scenario position (0–8 the start, 12–15
+  the cycle), the tick of the next action, staff by class with summed skills and total wages, the counts of rooms and
+  objects from the players' lists at 0x616B8 and the queue of hires (qualification bits 4, 16, 32, 64). The action an
+  opponent was waiting to carry out is not known, so it decides afresh when its time comes. Each `Hospital` runs CorsixTH's opening
   watch (`UIWatch` "initial_opening"), 13 segments of 385 hours, and opens an hour after it has run
   down, 5006 hours (about 100 days) into the game. `OpenHospitalCommand` opens it early, as the watch's button does; the client's O
   key stands in for that button and the date box shows the days left. `--demo` opens at once.

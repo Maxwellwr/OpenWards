@@ -60,6 +60,7 @@ public sealed record ImportedCase(string DiseaseId, bool Discovered, int Effecti
 /// <param name="Deaths">Its patients who died so far, if known.</param>
 /// <param name="Salary">Its owner's salary, if known.</param>
 /// <param name="Tiles">The tiles of its plot, if known.</param>
+/// <param name="Scenario">Where it had got in its scenario and what it has, if known; else its scenario starts afresh.</param>
 public sealed record ImportedCompetitor(
     string Name,
     int Reputation,
@@ -70,7 +71,32 @@ public sealed record ImportedCompetitor(
     int? Cured = null,
     int? Deaths = null,
     long? Salary = null,
-    int? Tiles = null);
+    int? Tiles = null,
+    ImportedCompetitorScenario? Scenario = null);
+
+/// <summary>A computer player's place in its scenario and what it has, from a save of the original.</summary>
+/// <param name="IsOpen">Whether its hospital has opened.</param>
+/// <param name="Position">Its scenario position as the original stores it: 0 to 8 the start, 12 to 15 the cycle.</param>
+/// <param name="TicksToAction">Ticks until its next action; 0 or less when it is due.</param>
+/// <param name="Staff">For each class, how many it employs and the sum of their skills (thousandths).</param>
+/// <param name="Wages">The total of its staff's wages.</param>
+/// <param name="PatientsInHospital">Its patients in the hospital, if known.</param>
+/// <param name="Rooms">The room types it has built.</param>
+/// <param name="Objects">Objects it has bought outside its rooms, by type.</param>
+/// <param name="Queue">Its queue: for each of the eight places a hire of a class (with a specialism) or nothing.</param>
+public sealed record ImportedCompetitorScenario(
+    bool IsOpen,
+    int Position,
+    long TicksToAction,
+    IReadOnlyList<(StaffClass Class, int Count, int SkillSum)> Staff,
+    long Wages,
+    int? PatientsInHospital,
+    IReadOnlyList<string> Rooms,
+    IReadOnlyList<(string ObjectType, int Count)> Objects,
+    IReadOnlyList<ImportedCompetitorHire?> Queue);
+
+/// <summary>A hire waiting in a computer player's queue.</summary>
+public readonly record struct ImportedCompetitorHire(StaffClass Class, Specialism? Ability);
 
 /// <summary>
 /// The state of a hospital taken from a save of another game (the original Theme Hospital), to be rebuilt on a
@@ -357,13 +383,13 @@ public static class GameImport
                 continue;
             }
 
-            match.Import(competitor);
+            match.Import(competitor, simulation);
             left.Remove(match);
         }
 
         for (var i = 0; i < unmatched.Count && i < left.Count; i++)
         {
-            left[i].Import(unmatched[i]);
+            left[i].Import(unmatched[i], simulation);
         }
     }
 

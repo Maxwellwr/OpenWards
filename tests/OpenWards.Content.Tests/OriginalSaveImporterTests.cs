@@ -59,6 +59,19 @@ public sealed class OriginalSaveImporterTests(ITestOutputHelper output)
             // The computer players' reputations go to the level's opponents.
             var rivals = save.Hospitals.Where(h => h.Kind == 2).Select(h => h.Reputation).Order();
             Assert.Equal(rivals.Take(simulation.Competitors.Count), simulation.Competitors.Select(c => c.Reputation).Order().Take(rivals.Count()));
+
+            // They go on with their scenario: open or not, their staff and the step they had got to.
+            foreach (var rival in save.Hospitals.Where(h => h.Kind == 2))
+            {
+                if (simulation.Competitors.FirstOrDefault(c => string.Equals(c.Name, rival.Name, StringComparison.OrdinalIgnoreCase)) is { } opponent)
+                {
+                    output.WriteLine($"   {rival.Name}: position {rival.CompetitorScenarioPosition} → step {opponent.ScenarioStep}, open {opponent.IsOpen}, staff {opponent.Staff.Count}, rooms {string.Join(",", opponent.Rooms)}, wages {opponent.Wages}, patients {opponent.PatientsInHospital}");
+                    Assert.Equal(rival.IsOpen, opponent.IsOpen);
+                    Assert.Equal(rival.Nurses + rival.Doctors + rival.Handymen + rival.Receptionists, opponent.Staff.Count);
+                    Assert.Equal(OpenWards.Sim.Economy.CompetitorHospital.ScenarioStepOf(rival.CompetitorScenarioPosition), opponent.ScenarioStep);
+                }
+            }
+
             output.WriteLine($"   statement {hospital.Transactions.Count}, months {hospital.Statistics.Count}, discovered {hospital.Casebook.Values.Count(c => c.Discovered)}");
             if (hospital.Transactions.Count > 0)
             {
