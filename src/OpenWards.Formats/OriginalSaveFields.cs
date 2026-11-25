@@ -123,6 +123,7 @@ public static class OriginalSaveFields
         new(OriginalSaveArea.Hospital, 507, 1, "vip score?", false),
         new(OriginalSaveArea.Hospital, 515, 18, "epidemic/disaster?", false),
         new(OriginalSaveArea.Hospital, 535, 9, "policy", true),
+        .. ObjectTypeFields(),
         new(OriginalSaveArea.Hospital, 3198, 4, "reputation", true),
         new(OriginalSaveArea.Hospital, 3220, 1, "heating level", true),
         new(OriginalSaveArea.Hospital, 3228, 10, "staff counts", true),
@@ -136,7 +137,7 @@ public static class OriginalSaveFields
     {
         (int Offset, int Length, string Name)[] fields =
         [
-            (0, 4, "reputation"), (4, 4, "reputation points"), (8, 4, "reputation visits"), (12, 4, "charge"), (16, 4, "charge percent"), (20, 4, "money earned"), (27, 1, "drug effectiveness"), (28, 1, "known?"), (29, 1, "discovered"),
+            (0, 4, "reputation"), (4, 4, "reputation points"), (8, 4, "reputation visits"), (12, 4, "charge"), (16, 4, "charge percent"), (20, 4, "money earned"), (24, 2, "drug cost"), (27, 1, "drug effectiveness"), (28, 1, "known?"), (29, 1, "discovered"),
             (30, 2, "recoveries"), (32, 2, "fatalities"), (36, 2, "turned away"),
         ];
         for (var disease = 0; disease < OriginalSaveHospital.DiseaseCount; disease++)
@@ -144,6 +145,18 @@ public static class OriginalSaveFields
             foreach (var (offset, length, name) in fields)
             {
                 yield return new(OriginalSaveArea.Hospital, OriginalSaveHospital.DiseaseOffset + (disease * OriginalSaveHospital.DiseaseLength) + offset, length, $"disease {disease} {name}", true);
+            }
+        }
+    }
+
+    private static IEnumerable<OriginalSaveField> ObjectTypeFields()
+    {
+        (int Offset, int Length, string Name)[] fields = [(0, 4, "cost"), (8, 2, "start strength"), (10, 2, "bought"), (12, 1, "available"), (13, 1, "improvements x2")];
+        for (var type = 0; type < OriginalSaveHospital.ObjectTypeCount; type++)
+        {
+            foreach (var (offset, length, name) in fields)
+            {
+                yield return new(OriginalSaveArea.Hospital, OriginalSaveHospital.ObjectTypeOffset + (type * OriginalSaveHospital.ObjectTypeLength) + offset, length, $"object type {type} {name}", true);
             }
         }
     }

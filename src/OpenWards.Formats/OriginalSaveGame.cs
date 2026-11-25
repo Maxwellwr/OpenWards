@@ -371,6 +371,23 @@ public sealed record OriginalSaveHospital(
         return BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[(225 + (4 * index))..]);
     }
 
+    /// <summary>Offset of the object type table in the block.</summary>
+    public const int ObjectTypeOffset = 2330;
+
+    /// <summary>Size of one object type record.</summary>
+    public const int ObjectTypeLength = 14;
+
+    /// <summary>Number of object type records, indexed by object type (<c>thob</c>).</summary>
+    public const int ObjectTypeCount = 62;
+
+    /// <summary>The object type record of an object type (<c>thob</c>).</summary>
+    public OriginalSaveObjectType ObjectType(int type)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(type);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(type, ObjectTypeCount);
+        return new OriginalSaveObjectType(type, Raw.Slice(ObjectTypeOffset + (type * ObjectTypeLength), ObjectTypeLength));
+    }
+
     /// <summary>The disease (expertise) record with an index.</summary>
     public OriginalSaveDisease Disease(int index)
     {
@@ -378,6 +395,27 @@ public sealed record OriginalSaveHospital(
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, DiseaseCount);
         return new OriginalSaveDisease(index, Raw.Slice(DiseaseOffset + (index * DiseaseLength), DiseaseLength));
     }
+}
+
+/// <summary>One 14-byte record of a hospital's object type table: what research has made of the type.</summary>
+/// <param name="Type">The object type (<c>thob</c>).</param>
+/// <param name="Raw">The stored bytes.</param>
+public sealed record OriginalSaveObjectType(int Type, ReadOnlyMemory<byte> Raw)
+{
+    /// <summary>What a new one costs now; research lowers it for machines.</summary>
+    public int Cost => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span);
+
+    /// <summary>The strength of new ones; research raises it for machines.</summary>
+    public int StartStrength => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[8..]);
+
+    /// <summary>How many the hospital has bought.</summary>
+    public int Bought => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[10..]);
+
+    /// <summary>Whether it can be bought (discovered, for researched objects).</summary>
+    public bool Available => Raw.Span[12] != 0;
+
+    /// <summary>Improvements research has made to it (stored doubled).</summary>
+    public int Improvements => Raw.Span[13] / 2;
 }
 
 /// <summary>One 38-byte disease (expertise) record of a hospital: casebook figures and treatment price.</summary>
@@ -405,6 +443,9 @@ public sealed record OriginalSaveDisease(int Index, ReadOnlyMemory<byte> Raw)
 
     /// <summary>Money earned from it.</summary>
     public int MoneyEarned => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[20..]);
+
+    /// <summary>What one dose of its drug costs the hospital.</summary>
+    public int DrugCost => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[24..]);
 
     /// <summary>Drug effectiveness in percent, the flask on the casebook page (0 for diseases not cured by drugs).</summary>
     public byte DrugEffectiveness => Raw.Span[27];

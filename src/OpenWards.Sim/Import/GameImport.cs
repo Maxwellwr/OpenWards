@@ -47,7 +47,16 @@ public sealed record ImportedPatient(string DiseaseId, TilePosition Tile, decima
 /// <param name="Fatalities">Patients who died of it.</param>
 /// <param name="TurnedAway">Patients turned away.</param>
 /// <param name="MoneyEarned">Money it brought in.</param>
-public sealed record ImportedCase(string DiseaseId, bool Discovered, int Effectiveness, int Recoveries, int Fatalities, int TurnedAway, long MoneyEarned);
+/// <param name="DrugCost">What one dose of its drug costs, if known.</param>
+public sealed record ImportedCase(string DiseaseId, bool Discovered, int Effectiveness, int Recoveries, int Fatalities, int TurnedAway, long MoneyEarned, int? DrugCost = null);
+
+/// <summary>Research on an object type of an imported save.</summary>
+/// <param name="ObjectType">The object's number in the level files (<c>thob</c>).</param>
+/// <param name="Discovered">Whether it can be bought.</param>
+/// <param name="Improvements">Improvements research has made to it.</param>
+/// <param name="StartStrength">The strength of new ones.</param>
+/// <param name="Cost">What a new one costs now.</param>
+public sealed record ImportedObjectResearch(int ObjectType, bool Discovered, int Improvements, int StartStrength, int Cost);
 
 /// <summary>A computer opponent of an imported save.</summary>
 /// <param name="Name">Its name, which picks the level's opponent of that name.</param>
@@ -154,6 +163,15 @@ public sealed record ImportedGame
 
     /// <summary>Research shares in percent, by area; missing areas are left as they are.</summary>
     public IReadOnlyList<(Research.ResearchCategory Category, int Share)> ResearchShares { get; init; } = [];
+
+    /// <summary>Research on object types: what is discovered and how far machines are improved.</summary>
+    public IReadOnlyList<ImportedObjectResearch> ObjectResearch { get; init; } = [];
+
+    /// <summary>Research points put into each expertise (<c>#expertise[n]</c>) towards its next step.</summary>
+    public IReadOnlyList<(int Expertise, int Points)> ExpertiseResearch { get; init; } = [];
+
+    /// <summary>Research points not yet shared out among the areas, or null to keep none.</summary>
+    public int? ResearchPool { get; init; }
 
     /// <summary>The computer opponents, matched to the level's by name, else in order.</summary>
     public IReadOnlyList<ImportedCompetitor> Competitors { get; init; } = [];
@@ -298,13 +316,16 @@ public static class GameImport
             {
                 var book = hospital.CaseOf(disease, simulation.Rules.Diseases);
                 book.Discovered |= entry.Discovered;
-                if (Research.ResearchDepartment.IsDrugDisease(disease))
+                if (Research.ResearchDepartment.IsDrugDisease(disease) && entry.Effectiveness > 0)
                 {
-                    // The original's saves do not tell which drugs research has found; an imported game keeps them all.
+                    // A drug with an effectiveness is one the pharmacy has; the original keeps 0 for the others and for
+                    // diseases not cured by drugs, which are always fully effective.
                     book.DrugAvailable = true;
-
-                    // The original keeps 0 here for diseases not cured by drugs, which are always fully effective.
-                    book.CureEffectiveness = Math.Clamp(entry.Effectiveness, 0, DiseaseCase.FullEffectiveness);
+                    book.CureEffectiveness = Math.Min(entry.Effectiveness, DiseaseCase.FullEffectiveness);
+                    if (entry.DrugCost is > 0 and var cost)
+                    {
+                        book.DrugCost = cost;
+                    }
                 }
 
                 book.Recoveries = entry.Recoveries;
@@ -314,6 +335,7 @@ public static class GameImport
             }
         }
 
+        hospital.Research.Import(simulation, hospital, game.ObjectResearch, game.ExpertiseResearch, game.ResearchPool);
         foreach (var (category, share) in game.ResearchShares)
         {
             hospital.Research.Area(category).Share = Math.Clamp(share, 0, 100);

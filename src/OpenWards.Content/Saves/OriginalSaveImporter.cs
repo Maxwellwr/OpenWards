@@ -151,7 +151,7 @@ public static class OriginalSaveImporter
             var record = hospital.Disease(index);
             foreach (var disease in DiseaseCatalog.All.Where(d => d.ExpertiseId == index))
             {
-                casebook.Add(new ImportedCase(disease.Id, record.Discovered, record.DrugEffectiveness, record.Recoveries, record.Fatalities, record.TurnedAway, record.MoneyEarned));
+                casebook.Add(new ImportedCase(disease.Id, record.Discovered, record.DrugEffectiveness, record.Recoveries, record.Fatalities, record.TurnedAway, record.MoneyEarned, record.DrugCost));
             }
         }
 
@@ -212,6 +212,13 @@ public static class OriginalSaveImporter
             Statement = Statement(save, hospital.Money),
             Casebook = casebook,
             ResearchShares = shares,
+            ObjectResearch =
+            [
+                .. Enumerable.Range(0, OriginalSaveHospital.ObjectTypeCount).Select(hospital.ObjectType)
+                    .Select(o => new ImportedObjectResearch(o.Type, o.Available, o.Improvements, o.StartStrength, o.Cost)),
+            ],
+            ExpertiseResearch = [.. Enumerable.Range(1, OriginalSaveHospital.DiseaseCount - 1).Select(i => (i, hospital.ExpertiseResearch(i)))],
+            ResearchPool = hospital.ResearchPoints,
             Year = save.Year + 1,
             Month = save.Month + 1,
             Day = Math.Max(1, save.Day),

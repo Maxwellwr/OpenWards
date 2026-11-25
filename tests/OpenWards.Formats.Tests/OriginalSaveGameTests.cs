@@ -199,6 +199,29 @@ public class OriginalSaveGameTests
     }
 
     [Fact]
+    public void ReadsObjectTypesAndDrugCost()
+    {
+        var data = new byte[OriginalSaveGame.Length];
+        var hospital = OriginalSaveGame.HospitalOffset;
+        data[hospital + 42] = 1;
+        var xRay = hospital + OriginalSaveHospital.ObjectTypeOffset + (27 * OriginalSaveHospital.ObjectTypeLength);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(xRay), 3340);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(xRay + 8), 18);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(xRay + 10), 1);
+        data[xRay + 12] = 1;
+        data[xRay + 13] = 18;
+        var disease = hospital + OriginalSaveHospital.DiseaseOffset + (5 * OriginalSaveHospital.DiseaseLength);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(disease + 24), 95);
+
+        var parsed = OriginalSaveGame.Parse(data).Hospitals[0];
+
+        var type = parsed.ObjectType(27);
+        Assert.Equal((3340, 18, 1, true, 9), (type.Cost, type.StartStrength, type.Bought, type.Available, type.Improvements));
+        Assert.False(parsed.ObjectType(13).Available);
+        Assert.Equal(95, parsed.Disease(5).DrugCost);
+    }
+
+    [Fact]
     public void ReadsChartHistory()
     {
         var data = new byte[OriginalSaveGame.Length];
