@@ -38,6 +38,7 @@ public static class OriginalSaveFields
     [
         new(OriginalSaveArea.File, 2, 1, "level", true),
         new(OriginalSaveArea.File, 3, 10, "difficulty", true),
+        new(OriginalSaveArea.File, OriginalSaveGame.TickOffset, 4, "game clock (ticks)", true),
         new(OriginalSaveArea.File, OriginalSaveGame.PlotOffset, OriginalSaveGame.MaxPlots, "plot owners", true),
         new(OriginalSaveArea.File, OriginalSaveGame.ChartOffset, 8 * 3 * 12 * 4, "chart history", true),
         new(OriginalSaveArea.File, OriginalSaveGame.StatementOffset, OriginalSaveGame.StatementCount * 8, "bank statement", true),
@@ -88,6 +89,10 @@ public static class OriginalSaveFields
         new(OriginalSaveArea.Entity, 75, 2, "next object of the same type", true),
         new(OriginalSaveArea.Entity, 81, 1, "morale / happiness", true),
         new(OriginalSaveArea.Entity, 120, 2, "staff tiredness", true),
+        new(OriginalSaveArea.Entity, 128, 2, "staff discontent", true),
+        new(OriginalSaveArea.Entity, 130, 2, "staff hire or last raise tick (low 16 bits)", true),
+        new(OriginalSaveArea.Entity, 143, 1, "staff raise requests", true),
+        new(OriginalSaveArea.Entity, 158, 3, "handyman shares (cleaning, watering, repairs?)", false),
         new(OriginalSaveArea.Entity, 83, 1, "patient warmth", true),
         new(OriginalSaveArea.Entity, 134, 1, "name end / patient thirst", true),
 

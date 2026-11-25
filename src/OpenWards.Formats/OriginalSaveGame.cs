@@ -178,6 +178,26 @@ public sealed record OriginalSaveEntity(int Slot, ReadOnlyMemory<byte> Raw)
     /// <summary>Staff only: monthly salary.</summary>
     public int Salary => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[108..]);
 
+    /// <summary>
+    /// Staff only: how long they have been unhappy, the counter that makes them ask for money (0 for most, a few
+    /// dozen to over a hundred for the unhappy).
+    /// </summary>
+    public int Discontent => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[128..]);
+
+    /// <summary>
+    /// Staff only: the low 16 bits of the tick (<see cref="OriginalSaveGame.Tick"/>) they were hired or last given a raise.
+    /// </summary>
+    public int HiredTick16 => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[130..]);
+
+    /// <summary>Staff only: how many times they have asked for money (0 to 5; receptionists and new staff hold 0).</summary>
+    public byte RaiseRequests => Raw.Span[143];
+
+    /// <summary>
+    /// Handymen only: the shares of their time for cleaning, watering and repairs, in percent (33, 33 and 34 unless
+    /// the player moved the sliders).
+    /// </summary>
+    public (byte Cleaning, byte Watering, byte Repairing) HandymanShares => (Raw.Span[158], Raw.Span[159], Raw.Span[160]);
+
     /// <summary>Staff only: first letter of the name (the initial).</summary>
     public char Initial => (char)Raw.Span[132];
 
@@ -577,6 +597,9 @@ public sealed class OriginalSaveGame
     /// <summary>Offset of the year of the level (0-based).</summary>
     public const int YearOffset = DateOffset - 7;
 
+    /// <summary>Offset of the game clock (<see cref="Tick"/>).</summary>
+    public const int TickOffset = 0x666F0;
+
     /// <summary>Offset of the first hospital block.</summary>
     public const int HospitalOffset = 399968;
 
@@ -619,6 +642,9 @@ public sealed class OriginalSaveGame
     /// 1 January (MAXWELL.H3 and MAXWELL.H4).
     /// </summary>
     public int Year => Data.Span[YearOffset];
+
+    /// <summary>The game clock in ticks, 50 a day, counted from the start of the level.</summary>
+    public int Tick => BinaryPrimitives.ReadInt32LittleEndian(Data.Span[TickOffset..]);
 
     /// <summary>
     /// Owner of a land parcel (numbered as in the level's <c>LEVEL.L*</c> map): 0 for sale, 1 bought by the

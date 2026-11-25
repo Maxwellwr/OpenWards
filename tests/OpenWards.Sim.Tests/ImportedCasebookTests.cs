@@ -2,6 +2,7 @@ using OpenWards.Sim.Diseases;
 using OpenWards.Sim.Economy;
 using OpenWards.Sim.Import;
 using OpenWards.Sim.Maps;
+using OpenWards.Sim.Staff;
 
 namespace OpenWards.Sim.Tests;
 
@@ -96,6 +97,26 @@ public class ImportedCasebookTests
         Assert.Equal((38710, 2, 83), (patient.Wallet, patient.InsuranceCompany, patient.DiagnosisDifficulty));
         Assert.Equal((42, 38, 4), (patient.Bowel, patient.Nausea, patient.ContagiousStrength));
         Assert.Equal(1000, patient.DiagnosisProgress);
+    }
+
+    [Fact]
+    public void StaffKeepTheirDiscontentRaiseRequestsServiceAndShares()
+    {
+        var simulation = NewSimulation();
+        var handyman = StaffProfile.CreateRandom(StaffClass.Handyman, 3, simulation.Rules.Staff, simulation.Random);
+
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 3,
+            Day = 1,
+            Staff = [new ImportedStaff(handyman, new TilePosition(2, 2), 0.5m, 0.2m, Discontent: 53, RaiseRequests: 4, HiredHoursAgo: 1000, HandymanShares: (20, 30, 50))],
+        });
+
+        var staff = simulation.Entities.OfType<Entities.Humanoid>().Single(h => h.Profile is not null);
+        Assert.Equal((53, 4), (staff.Discontent, staff.RaiseRequestCount));
+        Assert.Equal(simulation.Hours - 1000, staff.HiredAt);
+        var behaviour = Assert.IsType<People.HandymanBehaviour>(staff.Behaviour);
+        Assert.Equal((200, 300, 500), (behaviour.CleaningPriority, behaviour.WateringPriority, behaviour.RepairingPriority));
     }
 
     private static Simulation NewSimulation()

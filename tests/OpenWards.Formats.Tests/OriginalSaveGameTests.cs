@@ -338,6 +338,29 @@ public class OriginalSaveGameTests
     }
 
     [Fact]
+    public void ReadsStaffDiscontentRaisesAndHiringTick()
+    {
+        var data = new byte[OriginalSaveGame.Length];
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.TickOffset), 76780);
+        var entity = OriginalSaveGame.EntityOffset + (40 * OriginalSaveGame.EntityLength);
+        data[entity + 12] = 4;
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(entity + 124), 2);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(entity + 128), 53);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(entity + 130), 11222);
+        data[entity + 143] = 4;
+        data[entity + 158] = 20;
+        data[entity + 159] = 30;
+        data[entity + 160] = 50;
+
+        var save = OriginalSaveGame.Parse(data);
+        var handyman = Assert.Single(save.Entities);
+
+        Assert.Equal(76780, save.Tick);
+        Assert.Equal((53, 11222, (byte)4), (handyman.Discontent, handyman.HiredTick16, handyman.RaiseRequests));
+        Assert.Equal(((byte)20, (byte)30, (byte)50), handyman.HandymanShares);
+    }
+
+    [Fact]
     public void ReceptionistsAreNeverTired()
     {
         var install = RealGameData.Require();

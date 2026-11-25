@@ -122,7 +122,18 @@ public static class OriginalSaveImporter
                 name,
                 simulation.Rules.Staff,
                 simulation.Random);
-            staff.Add(new ImportedStaff(profile, new TilePosition(entity.TileX, entity.TileY), entity.Morale / 100m, entity.Fatigue / 1000m));
+            // Only the low 16 bits of the hiring tick are kept: the most recent tick that fits.
+            var hiredAgo = (save.Tick - entity.HiredTick16) & 0xFFFF;
+            var (cleaning, watering, repairing) = entity.HandymanShares;
+            staff.Add(new ImportedStaff(
+                profile,
+                new TilePosition(entity.TileX, entity.TileY),
+                entity.Morale / 100m,
+                entity.Fatigue / 1000m,
+                entity.Discontent,
+                entity.RaiseRequests,
+                Math.Min(hiredAgo, Math.Max(0, save.Tick)),
+                (flags & 2) != 0 ? (cleaning, watering, repairing) : null));
         }
 
         var patients = new List<ImportedPatient>();

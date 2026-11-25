@@ -27,7 +27,19 @@ public sealed record ImportedObject(string ObjectType, TilePosition Tile, Direct
 /// <param name="Tile">Where they stand.</param>
 /// <param name="Happiness">Morale, from 0 to 1.</param>
 /// <param name="Fatigue">Tiredness, from 0 to 1.</param>
-public sealed record ImportedStaff(StaffProfile Profile, TilePosition Tile, decimal Happiness, decimal Fatigue);
+/// <param name="Discontent">How long they have been unhappy (<see cref="Humanoid.Discontent"/>), if known.</param>
+/// <param name="RaiseRequests">How many times they have asked for money, if known.</param>
+/// <param name="HiredHoursAgo">How many hours ago they were hired or last given a raise, if known.</param>
+/// <param name="HandymanShares">A handyman's shares of cleaning, watering and repairs in percent, if known.</param>
+public sealed record ImportedStaff(
+    StaffProfile Profile,
+    TilePosition Tile,
+    decimal Happiness,
+    decimal Fatigue,
+    int? Discontent = null,
+    int? RaiseRequests = null,
+    long? HiredHoursAgo = null,
+    (int Cleaning, int Watering, int Repairing)? HandymanShares = null);
 
 /// <summary>A patient of an imported save; they start again from reception with what they have.</summary>
 /// <param name="DiseaseId">Their disease.</param>
@@ -308,11 +320,31 @@ public static class GameImport
             simulation.RemoveEntity(starter.Id);
         }
 
+        var hired = new List<(Humanoid Staff, long HoursAgo)>();
         foreach (var member in game.Staff)
         {
             var staff = StaffHiring.Place(simulation, member.Profile, member.Tile, player);
             staff.Happiness = Math.Clamp(member.Happiness, 0m, 1m);
             staff.Fatigue = Math.Clamp(member.Fatigue, 0m, 1m);
+            if (member.Discontent is >= 0 and var discontent)
+            {
+                staff.Discontent = discontent;
+            }
+
+            if (member.RaiseRequests is >= 0 and var requests)
+            {
+                staff.RaiseRequestCount = Math.Min(requests, StaffEmployment.DefiniteQuitRequest - 1);
+            }
+
+            if (member.HiredHoursAgo is >= 0 and var ago)
+            {
+                hired.Add((staff, ago));
+            }
+
+            if (member.HandymanShares is { } shares && staff.Behaviour is People.HandymanBehaviour handyman)
+            {
+                handyman.ImportShares(shares.Cleaning, shares.Watering, shares.Repairing);
+            }
         }
 
         foreach (var (kind, value) in game.Policies)
@@ -446,6 +478,12 @@ public static class GameImport
         {
             simulation.SkipTo(new GameDate(Math.Max(1, game.Year), game.Month, game.Day, 0));
             simulation.Arrivals.CatchUp(simulation);
+        }
+
+        // The calendar has moved on: hiring dates count back from the save's day.
+        foreach (var (staff, ago) in hired)
+        {
+            staff.HiredAt = Math.Max(0, simulation.Hours - ago);
         }
 
         ImportCompetitors(simulation, game.Competitors);
