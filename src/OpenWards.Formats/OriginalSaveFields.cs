@@ -38,6 +38,9 @@ public static class OriginalSaveFields
     [
         new(OriginalSaveArea.File, 2, 1, "level", true),
         new(OriginalSaveArea.File, 3, 10, "difficulty", true),
+        new(OriginalSaveArea.File, OriginalSaveGame.TickOffset, 4, "game clock (ticks)", true),
+        new(OriginalSaveArea.File, OriginalSaveGame.AwardCounterOffset + 2, 5, "vip score sum and visits this year", true),
+        new(OriginalSaveArea.File, OriginalSaveGame.AwardCounterOffset + 21, 8, "rats killed and shots this year", true),
         new(OriginalSaveArea.File, OriginalSaveGame.PlotOffset, OriginalSaveGame.MaxPlots, "plot owners", true),
         new(OriginalSaveArea.File, OriginalSaveGame.ChartOffset, 8 * 3 * 12 * 4, "chart history", true),
         new(OriginalSaveArea.File, OriginalSaveGame.StatementOffset, OriginalSaveGame.StatementCount * 8, "bank statement", true),
@@ -74,6 +77,13 @@ public static class OriginalSaveFields
         new(OriginalSaveArea.Entity, 146, 2, "patient diagnosis progress (thousandths)", true),
         new(OriginalSaveArea.Entity, 148, 10, "patient procedures done (expertise)?", false),
         new(OriginalSaveArea.Entity, 168, 1, "patient disease", true),
+        new(OriginalSaveArea.Entity, 112, 4, "patient wallet", true),
+        new(OriginalSaveArea.Entity, 130, 2, "patient health (0..1000)", true),
+        new(OriginalSaveArea.Entity, 136, 2, "patient bowel", false),
+        new(OriginalSaveArea.Entity, 138, 2, "patient nausea", false),
+        new(OriginalSaveArea.Entity, 144, 2, "patient diagnosis difficulty", true),
+        new(OriginalSaveArea.Entity, 173, 1, "patient insurer bit", true),
+        new(OriginalSaveArea.Entity, 174, 1, "patient contagious strength", false),
         new(OriginalSaveArea.Entity, 169, 1, "patient diagnosis so far? (1 = none)", false),
         new(OriginalSaveArea.Entity, 171, 1, "patient next room purpose?", false),
         new(OriginalSaveArea.Entity, 55, 4, "times used (objects) / room + 1 (people)", true),
@@ -81,6 +91,10 @@ public static class OriginalSaveFields
         new(OriginalSaveArea.Entity, 75, 2, "next object of the same type", true),
         new(OriginalSaveArea.Entity, 81, 1, "morale / happiness", true),
         new(OriginalSaveArea.Entity, 120, 2, "staff tiredness", true),
+        new(OriginalSaveArea.Entity, 128, 2, "staff discontent", true),
+        new(OriginalSaveArea.Entity, 130, 2, "staff hire or last raise tick (low 16 bits)", true),
+        new(OriginalSaveArea.Entity, 143, 1, "staff raise requests", true),
+        new(OriginalSaveArea.Entity, 158, 3, "handyman shares (cleaning, watering, repairs?)", false),
         new(OriginalSaveArea.Entity, 83, 1, "patient warmth", true),
         new(OriginalSaveArea.Entity, 134, 1, "name end / patient thirst", true),
 
@@ -103,7 +117,7 @@ public static class OriginalSaveFields
         new(OriginalSaveArea.Hospital, 53, 4, "money", true),
         new(OriginalSaveArea.Hospital, 61, 4, "loan", true),
         new(OriginalSaveArea.Hospital, 65, 4, "max loan?", false),
-        new(OriginalSaveArea.Hospital, 69, 144, "insurance owed: 3 insurers × 12 months?", false),
+        new(OriginalSaveArea.Hospital, 69, 144, "insurance owed: 3 insurers × 12 calendar months of payment", true),
         new(OriginalSaveArea.Hospital, 221, 4, "research points", true),
         new(OriginalSaveArea.Hospital, 225, 188, "expertise research", true),
         new(OriginalSaveArea.Hospital, 433, 10, "research distribution", true),
@@ -116,6 +130,10 @@ public static class OriginalSaveFields
         new(OriginalSaveArea.Hospital, 484, 3, "emergency disease, cured, patients", true),
         new(OriginalSaveArea.Hospital, 487, 1, "emergency patients left?", false),
         new(OriginalSaveArea.Hospital, 488, 1, "emergency pass percent", true),
+        new(OriginalSaveArea.Hospital, 499, 4, "vip arrival tick", true),
+        new(OriginalSaveArea.Hospital, 3242, 2, "littered tiles", true),
+        new(OriginalSaveArea.Hospital, 3246, 1, "rat holes", true),
+        new(OriginalSaveArea.Hospital, 3247, 40 * 3, "rat hole tiles and walls", true),
         new(OriginalSaveArea.Hospital, 489, 2, "cured", true),
         new(OriginalSaveArea.Hospital, 491, 2, "deaths", true),
         new(OriginalSaveArea.Hospital, 493, 2, "visitors", true),
@@ -123,7 +141,11 @@ public static class OriginalSaveFields
         new(OriginalSaveArea.Hospital, 507, 1, "vip score?", false),
         new(OriginalSaveArea.Hospital, 515, 18, "epidemic/disaster?", false),
         new(OriginalSaveArea.Hospital, 535, 9, "policy", true),
+        .. ObjectTypeFields(),
         new(OriginalSaveArea.Hospital, 3198, 4, "reputation", true),
+        new(OriginalSaveArea.Hospital, 3202, 4, "reputation points", true),
+        new(OriginalSaveArea.Hospital, 3206, 4, "reputation visits", true),
+        new(OriginalSaveArea.Hospital, 3214, 2, "price level", true),
         new(OriginalSaveArea.Hospital, 3220, 1, "heating level", true),
         new(OriginalSaveArea.Hospital, 3228, 10, "staff counts", true),
         .. DiseaseFields(),
@@ -142,7 +164,7 @@ public static class OriginalSaveFields
     {
         (int Offset, int Length, string Name)[] fields =
         [
-            (0, 4, "reputation"), (4, 4, "reputation points"), (8, 4, "reputation visits"), (12, 4, "charge"), (16, 4, "charge percent"), (20, 4, "money earned"), (27, 1, "drug effectiveness"), (28, 1, "known?"), (29, 1, "discovered"),
+            (0, 4, "reputation"), (4, 4, "reputation points"), (8, 4, "reputation visits"), (12, 4, "charge"), (16, 4, "charge percent"), (20, 4, "money earned"), (24, 2, "drug cost"), (27, 1, "drug effectiveness"), (28, 1, "can treat now"), (29, 1, "discovered"),
             (30, 2, "recoveries"), (32, 2, "fatalities"), (36, 2, "turned away"),
         ];
         for (var disease = 0; disease < OriginalSaveHospital.DiseaseCount; disease++)
@@ -150,6 +172,18 @@ public static class OriginalSaveFields
             foreach (var (offset, length, name) in fields)
             {
                 yield return new(OriginalSaveArea.Hospital, OriginalSaveHospital.DiseaseOffset + (disease * OriginalSaveHospital.DiseaseLength) + offset, length, $"disease {disease} {name}", true);
+            }
+        }
+    }
+
+    private static IEnumerable<OriginalSaveField> ObjectTypeFields()
+    {
+        (int Offset, int Length, string Name)[] fields = [(0, 4, "cost"), (8, 2, "start strength"), (10, 2, "bought"), (12, 1, "available"), (13, 1, "improvements x2")];
+        for (var type = 0; type < OriginalSaveHospital.ObjectTypeCount; type++)
+        {
+            foreach (var (offset, length, name) in fields)
+            {
+                yield return new(OriginalSaveArea.Hospital, OriginalSaveHospital.ObjectTypeOffset + (type * OriginalSaveHospital.ObjectTypeLength) + offset, length, $"object type {type} {name}", true);
             }
         }
     }

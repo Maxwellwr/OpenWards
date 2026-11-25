@@ -159,6 +159,19 @@ public sealed class HandymanBehaviour : HumanoidBehaviour
         }
     }
 
+    /// <summary>An imported save's shares of cleaning, watering and repairs, in percent; nothing changes when they are not usable.</summary>
+    internal void ImportShares(int cleaning, int watering, int repairing)
+    {
+        if (cleaning < 0 || watering < 0 || repairing < 0 || cleaning + watering + repairing is < 1 or > 100)
+        {
+            return;
+        }
+
+        CleaningPriority = cleaning * FullPriority / 100;
+        WateringPriority = watering * FullPriority / 100;
+        RepairingPriority = repairing * FullPriority / 100;
+    }
+
     private void SetPriority(HandymanTaskType type, int value)
     {
         switch (type)

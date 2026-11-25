@@ -68,7 +68,7 @@ public static class OriginalSaveImporter
             if (content.Rooms.FirstOrDefault(r => r.LevelConfigId == room.Type) is { } definition)
             {
                 var area = new TileRect(room.Origin.X, room.Origin.Y, room.Width, room.Height);
-                rooms.Add(new ImportedRoom(definition.Id, area, DoorOf(room)));
+                rooms.Add(new ImportedRoom(definition.Id, area, DoorOf(room), room.MaxQueueSize));
             }
         }
 
@@ -123,7 +123,18 @@ public static class OriginalSaveImporter
                 name,
                 simulation.Rules.Staff,
                 simulation.Random);
-            staff.Add(new ImportedStaff(profile, new TilePosition(entity.TileX, entity.TileY), entity.Morale / 100m, entity.Fatigue / 1000m));
+            // Only the low 16 bits of the hiring tick are kept: the most recent tick that fits.
+            var hiredAgo = (save.Tick - entity.HiredTick16) & 0xFFFF;
+            var (cleaning, watering, repairing) = entity.HandymanShares;
+            staff.Add(new ImportedStaff(
+                profile,
+                new TilePosition(entity.TileX, entity.TileY),
+                entity.Morale / 100m,
+                entity.Fatigue / 1000m,
+                entity.Discontent,
+                entity.RaiseRequests,
+                Math.Min(hiredAgo, Math.Max(0, save.Tick)),
+                (flags & 2) != 0 ? (cleaning, watering, repairing) : null));
         }
 
         var patients = new List<ImportedPatient>();
@@ -134,16 +145,20 @@ public static class OriginalSaveImporter
                 continue;
             }
 
-            // The newest recorded point of the health graph (values above 100 are points not recorded yet).
-            var health = entity.HealthHistory.ToArray().Where(v => v <= 100).Select(v => (int)v).LastOrDefault(90);
             patients.Add(new ImportedPatient(
                 disease.Id,
                 new TilePosition(entity.TileX, entity.TileY),
-                health / 100m,
+                Math.Clamp(entity.Health, 1, 1000) / 1000m,
                 entity.Happiness / 100m,
                 1m - (entity.Thirst / 100m),
                 entity.Warmth / 100m,
-                entity.DiagnosisProgress));
+                entity.DiagnosisProgress,
+                entity.Wallet,
+                entity.InsurerBit switch { 1 => 1, 2 => 2, 4 => 3, _ => 0 },
+                entity.DiagnosisDifficulty,
+                entity.Bowel,
+                entity.Nausea,
+                entity.ContagiousStrength));
         }
 
         var casebook = new List<ImportedCase>();
@@ -152,7 +167,7 @@ public static class OriginalSaveImporter
             var record = hospital.Disease(index);
             foreach (var disease in DiseaseCatalog.All.Where(d => d.ExpertiseId == index))
             {
-                casebook.Add(new ImportedCase(disease.Id, record.Discovered, record.DrugEffectiveness, record.Recoveries, record.Fatalities, record.TurnedAway, record.MoneyEarned));
+                casebook.Add(new ImportedCase(disease.Id, record.Discovered, record.DrugEffectiveness, record.Recoveries, record.Fatalities, record.TurnedAway, record.MoneyEarned, record.DrugCost, record.ReputationPoints, record.ReputationVisits));
             }
         }
 
@@ -192,6 +207,26 @@ public static class OriginalSaveImporter
             NotCuredThisYear = notCuredThisYear,
             LowestReputationThisYear = lowestReputation,
             Reputation = hospital.Reputation,
+            ReputationRecord = hospital.ReputationVisits > 0 ? (hospital.ReputationPoints, hospital.ReputationVisits) : null,
+            PriceLevel = hospital.PriceLevel,
+            VipsThisYear = save.VipsThisYear,
+            DaysSinceVip = hospital.VipArrivalTick is > 0 and var vip && vip <= save.Tick ? (save.Tick - vip) / 50 : null,
+            RatsThisYear = save.RatsThisYear,
+            Litter = LitterOf(save),
+            Ratholes = Enumerable.Range(0, Math.Min(hospital.RatholeCount, OriginalSaveHospital.MaxRatholes))
+                .Select(hospital.Rathole)
+                .Select(hole => (new TilePosition(hole.X, hole.Y), (Direction)(hole.Wall & 3)))
+                .ToList(),
+
+            // The save keeps each company's debt by the calendar month it is paid in; OpenWards by months from now.
+            InsuranceOwed =
+            [
+                .. from company in Enumerable.Range(0, 3)
+                   from month in Enumerable.Range(0, 12)
+                   let amount = hospital.InsuranceOwed(company, month)
+                   where amount > 0
+                   select (company + 1, (month - Math.Clamp(save.Month, 0, 11) + 12) % 12, (long)amount),
+            ],
             Value = hospital.Value,
 
             // The computer players' blocks (kind 2), for the opponents' reputations and the year's charts.
@@ -214,6 +249,13 @@ public static class OriginalSaveImporter
             Statement = Statement(save, hospital.Money),
             Casebook = casebook,
             ResearchShares = shares,
+            ObjectResearch =
+            [
+                .. Enumerable.Range(0, OriginalSaveHospital.ObjectTypeCount).Select(hospital.ObjectType)
+                    .Select(o => new ImportedObjectResearch(o.Type, o.Available, o.Improvements, o.StartStrength, o.Cost)),
+            ],
+            ExpertiseResearch = [.. Enumerable.Range(1, OriginalSaveHospital.DiseaseCount - 1).Select(i => (i, hospital.ExpertiseResearch(i)))],
+            ResearchPool = hospital.ResearchPoints,
             Year = save.Year + 1,
             Month = save.Month + 1,
             Day = Math.Max(1, save.Day),
@@ -320,6 +362,34 @@ public static class OriginalSaveImporter
     /// The door as a room plan wants it: on the north or west edge of the door's tile when the outside lies north or
     /// west, otherwise on the edge of the tile outside.
     /// </summary>
+    /// <summary>
+    /// The litter of the low nibble of each tile's extra byte: 1 to 4 are the rubbish patients drop, as OpenWards numbers
+    /// it; 5 and 6 are taken for puke and pee (unchecked against the original's sprites); 7 and 8 mark rat holes.
+    /// </summary>
+    private static List<(TilePosition Tile, LitterType Type)> LitterOf(OriginalSaveGame save)
+    {
+        var litter = new List<(TilePosition, LitterType)>();
+        for (var y = 0; y < OriginalSaveGame.MapSize; y++)
+        {
+            for (var x = 0; x < OriginalSaveGame.MapSize; x++)
+            {
+                LitterType? type = (save[x, y].Extra & 0x0F) switch
+                {
+                    >= 1 and <= 4 and var rubbish => (LitterType)rubbish,
+                    5 => LitterType.Puke,
+                    6 => LitterType.Pee,
+                    _ => null,
+                };
+                if (type is { } found)
+                {
+                    litter.Add((new TilePosition(x, y), found));
+                }
+            }
+        }
+
+        return litter;
+    }
+
     /// <summary>The objects a computer player keeps count of outside its rooms.</summary>
     private static readonly string[] CompetitorObjects = ["reception_desk", "bench", "drinks_machine", "plant", "extinguisher"];
 

@@ -188,14 +188,45 @@ public class OriginalSaveGameTests
         Assert.Equal((74131, 193), (parsed.PlayerSalary, parsed.VisitorsAtYearStart));
         Assert.Equal((500, 29, 3, 3, 75), (parsed.EmergencyBonus, parsed.EmergencyDisease, parsed.EmergencyCured, parsed.EmergencyPatients, parsed.EmergencyPassPercent));
         var disease = parsed.Disease(1);
-        Assert.Equal((168, 10000, 9180, true), (disease.Charge, disease.ChargePercent, disease.MoneyEarned, disease.Known));
+        Assert.Equal((168, 10000, 9180, true), (disease.Charge, disease.ChargePercent, disease.MoneyEarned, disease.CanTreatNow));
         Assert.Equal((3, 2, 1), (disease.Recoveries, disease.Fatalities, disease.TurnedAway));
         Assert.Equal(100, disease.DrugEffectiveness);
         Assert.True(disease.Discovered);
         Assert.Equal((611, 44, 36), (disease.Reputation, disease.ReputationPoints, disease.ReputationVisits));
         Assert.Equal(3450, parsed.ResearchPoints);
         Assert.Equal(21345, parsed.ExpertiseResearch(39));
-        Assert.False(parsed.Disease(2).Known);
+        Assert.False(parsed.Disease(2).CanTreatNow);
+    }
+
+    [Fact]
+    public void ReadsObjectTypesDrugCostReputationAndInsurance()
+    {
+        var data = new byte[OriginalSaveGame.Length];
+        var hospital = OriginalSaveGame.HospitalOffset;
+        data[hospital + 42] = 1;
+        var xRay = hospital + OriginalSaveHospital.ObjectTypeOffset + (27 * OriginalSaveHospital.ObjectTypeLength);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(xRay), 3340);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(xRay + 8), 18);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(xRay + 10), 1);
+        data[xRay + 12] = 1;
+        data[xRay + 13] = 18;
+        var disease = hospital + OriginalSaveHospital.DiseaseOffset + (5 * OriginalSaveHospital.DiseaseLength);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(disease + 24), 95);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 3202), 239);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 3206), 257);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 3214), 102);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 69 + 8), 1332);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(hospital + 69 + 96 + 40), 589);
+
+        var parsed = OriginalSaveGame.Parse(data).Hospitals[0];
+
+        var type = parsed.ObjectType(27);
+        Assert.Equal((3340, 18, 1, true, 9), (type.Cost, type.StartStrength, type.Bought, type.Available, type.Improvements));
+        Assert.False(parsed.ObjectType(13).Available);
+        Assert.Equal(95, parsed.Disease(5).DrugCost);
+        Assert.Equal((239, 257, 102), (parsed.ReputationPoints, parsed.ReputationVisits, parsed.PriceLevel));
+        Assert.Equal(1332, parsed.InsuranceOwed(0, 2));
+        Assert.Equal(589, parsed.InsuranceOwed(2, 10));
     }
 
     [Fact]
@@ -273,7 +304,7 @@ public class OriginalSaveGameTests
     }
 
     [Fact]
-    public void ReadsPatientHealthHistory()
+    public void ReadsPatientFields()
     {
         var data = new byte[OriginalSaveGame.Length];
         var entity = OriginalSaveGame.EntityOffset + (189 * OriginalSaveGame.EntityLength);
@@ -285,6 +316,13 @@ public class OriginalSaveGameTests
         data[entity + 83] = 31;
         data[entity + 168] = 16;
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(entity + 146), 1922);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(entity + 130), 605);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(entity + 112), 78828);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(entity + 144), 35);
+        BinaryPrimitives.WriteInt16LittleEndian(data.AsSpan(entity + 136), 15);
+        BinaryPrimitives.WriteInt16LittleEndian(data.AsSpan(entity + 138), 225);
+        data[entity + 173] = 4;
+        data[entity + 174] = 3;
 
         var patient = Assert.Single(OriginalSaveGame.Parse(data).Entities);
 
@@ -294,6 +332,68 @@ public class OriginalSaveGameTests
         Assert.Equal(31, patient.Warmth);
         Assert.Equal(16, patient.Disease);
         Assert.Equal(1922, patient.DiagnosisProgress);
+        Assert.Equal((605, 78828, 35), (patient.Health, patient.Wallet, patient.DiagnosisDifficulty));
+        Assert.Equal((15, 225), (patient.Bowel, patient.Nausea));
+        Assert.Equal(((byte)4, (byte)3), (patient.InsurerBit, patient.ContagiousStrength));
+    }
+
+    [Fact]
+    public void ReadsStaffDiscontentRaisesAndHiringTick()
+    {
+        var data = new byte[OriginalSaveGame.Length];
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.TickOffset), 76780);
+        var entity = OriginalSaveGame.EntityOffset + (40 * OriginalSaveGame.EntityLength);
+        data[entity + 12] = 4;
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(entity + 124), 2);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(entity + 128), 53);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(entity + 130), 11222);
+        data[entity + 143] = 4;
+        data[entity + 158] = 20;
+        data[entity + 159] = 30;
+        data[entity + 160] = 50;
+
+        var save = OriginalSaveGame.Parse(data);
+        var handyman = Assert.Single(save.Entities);
+
+        Assert.Equal(76780, save.Tick);
+        Assert.Equal((53, 11222, (byte)4), (handyman.Discontent, handyman.HiredTick16, handyman.RaiseRequests));
+        Assert.Equal(((byte)20, (byte)30, (byte)50), handyman.HandymanShares);
+    }
+
+    [Fact]
+    public void ReadsTheYearsVipsRatsAndTheLastVip()
+    {
+        var data = new byte[OriginalSaveGame.Length];
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.AwardCounterOffset + 2), -2);
+        data[OriginalSaveGame.AwardCounterOffset + 6] = 1;
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.AwardCounterOffset + 21), 7);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.AwardCounterOffset + 25), 12);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.HospitalOffset + 499), 51237);
+
+        var save = OriginalSaveGame.Parse(data);
+
+        Assert.Equal((1, -2), save.VipsThisYear);
+        Assert.Equal((7, 12), save.RatsThisYear);
+        Assert.Equal(51237, save.Hospitals[0].VipArrivalTick);
+    }
+
+    [Fact]
+    public void ReadsRatholesAndLitteredTiles()
+    {
+        var data = new byte[OriginalSaveGame.Length];
+        var hospital = OriginalSaveGame.HospitalOffset;
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 3242), 117);
+        data[hospital + 3246] = 2;
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 3247), (42 * 128) + 46);
+        data[hospital + 3249] = 2;
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(hospital + 3250), (36 * 128) + 27);
+        data[hospital + 3252] = 3;
+
+        var read = OriginalSaveGame.Parse(data).Hospitals[0];
+
+        Assert.Equal((117, 2), (read.LitteredTiles, read.RatholeCount));
+        Assert.Equal((46, 42, 2), read.Rathole(0));
+        Assert.Equal((27, 36, 3), read.Rathole(1));
     }
 
     [Fact]
