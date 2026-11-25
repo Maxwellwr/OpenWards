@@ -208,6 +208,9 @@ public static class OriginalSaveImporter
             Reputation = hospital.Reputation,
             ReputationRecord = hospital.ReputationVisits > 0 ? (hospital.ReputationPoints, hospital.ReputationVisits) : null,
             PriceLevel = hospital.PriceLevel,
+            VipsThisYear = save.VipsThisYear,
+            DaysSinceVip = hospital.VipArrivalTick is > 0 and var vip && vip <= save.Tick ? (save.Tick - vip) / 50 : null,
+            RatsThisYear = save.RatsThisYear,
 
             // The save keeps each company's debt by the calendar month it is paid in; OpenWards by months from now.
             InsuranceOwed =

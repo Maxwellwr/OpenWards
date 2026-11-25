@@ -201,6 +201,15 @@ public sealed record ImportedGame
     /// <summary>The price level of the last month's end (100 = expected prices), or null to keep the level's.</summary>
     public int? PriceLevel { get; init; }
 
+    /// <summary>The VIPs who visited this year and the sum of their scores (lower is better), or null for none.</summary>
+    public (int Visits, int ScoreSum)? VipsThisYear { get; init; }
+
+    /// <summary>How many days ago the last VIP came, or null to count from the import.</summary>
+    public int? DaysSinceVip { get; init; }
+
+    /// <summary>The rats killed and shots fired this year, or null for none.</summary>
+    public (int Killed, int Shots)? RatsThisYear { get; init; }
+
     /// <summary>Hospital value, or null to keep what rebuilding cost.</summary>
     public long? Value { get; init; }
 
@@ -480,6 +489,8 @@ public static class GameImport
             simulation.Arrivals.CatchUp(simulation);
         }
 
+        ImportYearCounters(hospital, game);
+
         // The calendar has moved on: hiring dates count back from the save's day.
         foreach (var (staff, ago) in hired)
         {
@@ -488,6 +499,30 @@ public static class GameImport
 
         ImportCompetitors(simulation, game.Competitors);
         return new ImportReport(problems);
+    }
+
+    /// <summary>The year's VIP visits and rats for the awards, and the days since the last VIP for the next.</summary>
+    private static void ImportYearCounters(Hospital hospital, ImportedGame game)
+    {
+        if (game.VipsThisYear is { Visits: > 0 } vips)
+        {
+            hospital.Vips.ThisYear = vips.Visits;
+            hospital.Vips.ScoreSumThisYear = vips.ScoreSum;
+
+            // Only the sum is kept: everyone was pleased when it says so on average.
+            hospital.Vips.PleasedThisYear = vips.ScoreSum <= VipVisits.PleasedScore * vips.Visits ? vips.Visits : 0;
+        }
+
+        if (game.DaysSinceVip is >= 0 and var days)
+        {
+            hospital.Vips.DaysSinceLast = days;
+        }
+
+        if (game.RatsThisYear is { } rats)
+        {
+            hospital.RatsKilledThisYear = Math.Max(0, rats.Killed);
+            hospital.RatShotsThisYear = Math.Max(rats.Shots, hospital.RatsKilledThisYear);
+        }
     }
 
     /// <summary>The save's opponents (reputations, patients and the year's charts) for the level's opponents: by name, the rest in order.</summary>

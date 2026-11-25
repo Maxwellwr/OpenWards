@@ -119,6 +119,26 @@ public class ImportedCasebookTests
         Assert.Equal((200, 300, 500), (behaviour.CleaningPriority, behaviour.WateringPriority, behaviour.RepairingPriority));
     }
 
+    [Fact]
+    public void TakesTheYearsVipsAndRatsAndTheDaysSinceTheLastVip()
+    {
+        var simulation = NewSimulation();
+
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 3,
+            Day = 1,
+            VipsThisYear = (1, -2),
+            DaysSinceVip = 82,
+            RatsThisYear = (7, 12),
+        });
+
+        var hospital = simulation.Hospitals[0];
+        Assert.Equal((1, -2, 1), (hospital.Vips.ThisYear, hospital.Vips.ScoreSumThisYear, hospital.Vips.PleasedThisYear));
+        Assert.Equal(82, hospital.Vips.DaysSinceLast);
+        Assert.Equal((7, 12), (hospital.RatsKilledThisYear, hospital.RatShotsThisYear));
+    }
+
     private static Simulation NewSimulation()
     {
         var map = new LevelMap(6, 6, 1);

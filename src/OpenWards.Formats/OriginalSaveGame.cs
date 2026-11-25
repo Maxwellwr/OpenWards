@@ -409,6 +409,9 @@ public sealed record OriginalSaveHospital(
     /// <remarks>16 bits: the next two bytes hold the slot of the emergency's helicopter while it is on the map.</remarks>
     public int EmergencyBonus => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[477..]);
 
+    /// <summary>The tick the current or last VIP arrived, or 0 before the first.</summary>
+    public int VipArrivalTick => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[499..]);
+
     /// <summary>Current or last emergency: the disease (casebook index).</summary>
     public int EmergencyDisease => Raw.Span[484];
 
@@ -600,6 +603,12 @@ public sealed class OriginalSaveGame
     /// <summary>Offset of the game clock (<see cref="Tick"/>).</summary>
     public const int TickOffset = 0x666F0;
 
+    /// <summary>
+    /// Offset of the year's award counters: drinks sold (2 bytes), VIP score sum (4), VIP visits (1), two emergency
+    /// bytes, a machine explosion flag, research points earned and handed out (4 each), rats killed and shots (4 each).
+    /// </summary>
+    public const int AwardCounterOffset = 0x669A8;
+
     /// <summary>Offset of the first hospital block.</summary>
     public const int HospitalOffset = 399968;
 
@@ -645,6 +654,14 @@ public sealed class OriginalSaveGame
 
     /// <summary>The game clock in ticks, 50 a day, counted from the start of the level.</summary>
     public int Tick => BinaryPrimitives.ReadInt32LittleEndian(Data.Span[TickOffset..]);
+
+    /// <summary>The player's VIP visits this year and the sum of their scores (lower is better), for the year's awards.</summary>
+    public (int Visits, int ScoreSum) VipsThisYear =>
+        (Data.Span[AwardCounterOffset + 6], BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 2)..]));
+
+    /// <summary>The rats the player killed and the shots fired this year.</summary>
+    public (int Killed, int Shots) RatsThisYear =>
+        (BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 21)..]), BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 25)..]));
 
     /// <summary>
     /// Owner of a land parcel (numbered as in the level's <c>LEVEL.L*</c> map): 0 for sale, 1 bought by the

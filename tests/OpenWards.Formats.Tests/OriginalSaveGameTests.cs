@@ -361,6 +361,23 @@ public class OriginalSaveGameTests
     }
 
     [Fact]
+    public void ReadsTheYearsVipsRatsAndTheLastVip()
+    {
+        var data = new byte[OriginalSaveGame.Length];
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.AwardCounterOffset + 2), -2);
+        data[OriginalSaveGame.AwardCounterOffset + 6] = 1;
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.AwardCounterOffset + 21), 7);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.AwardCounterOffset + 25), 12);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.HospitalOffset + 499), 51237);
+
+        var save = OriginalSaveGame.Parse(data);
+
+        Assert.Equal((1, -2), save.VipsThisYear);
+        Assert.Equal((7, 12), save.RatsThisYear);
+        Assert.Equal(51237, save.Hospitals[0].VipArrivalTick);
+    }
+
+    [Fact]
     public void ReceptionistsAreNeverTired()
     {
         var install = RealGameData.Require();
