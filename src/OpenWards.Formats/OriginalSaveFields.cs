@@ -71,9 +71,8 @@ public static class OriginalSaveFields
         new(OriginalSaveArea.Entity, 141, 1, "attention to detail", true),
         new(OriginalSaveArea.Entity, 151, 3, "doctor training progress", true),
         new(OriginalSaveArea.Entity, 158, 10, "patient health history", true),
-        new(OriginalSaveArea.Entity, 146, 1, "patient diagnosis certainty", true),
-        new(OriginalSaveArea.Entity, 147, 1, "patient diagnosis steps?", false),
-        new(OriginalSaveArea.Entity, 148, 1, "patient diagnosis started?", false),
+        new(OriginalSaveArea.Entity, 146, 2, "patient diagnosis progress (thousandths)", true),
+        new(OriginalSaveArea.Entity, 148, 10, "patient procedures done (expertise)?", false),
         new(OriginalSaveArea.Entity, 168, 1, "patient disease", true),
         new(OriginalSaveArea.Entity, 169, 1, "patient diagnosis so far? (1 = none)", false),
         new(OriginalSaveArea.Entity, 171, 1, "patient next room purpose?", false),
@@ -81,7 +80,7 @@ public static class OriginalSaveFields
         new(OriginalSaveArea.Entity, 59, 4, "object strength", true),
         new(OriginalSaveArea.Entity, 75, 2, "next object of the same type", true),
         new(OriginalSaveArea.Entity, 81, 1, "morale / happiness", true),
-        new(OriginalSaveArea.Entity, 120, 2, "staff energy", true),
+        new(OriginalSaveArea.Entity, 120, 2, "staff tiredness", true),
         new(OriginalSaveArea.Entity, 83, 1, "patient warmth", true),
         new(OriginalSaveArea.Entity, 134, 1, "name end / patient thirst", true),
 
@@ -104,14 +103,15 @@ public static class OriginalSaveFields
         new(OriginalSaveArea.Hospital, 53, 4, "money", true),
         new(OriginalSaveArea.Hospital, 61, 4, "loan", true),
         new(OriginalSaveArea.Hospital, 65, 4, "max loan?", false),
-        new(OriginalSaveArea.Hospital, 161, 60, "insurance owed per insurer? (+205 held a SwanLeaf claim later paid in full; cleared on payment)", false),
+        new(OriginalSaveArea.Hospital, 69, 144, "insurance owed: 3 insurers × 12 months?", false),
         new(OriginalSaveArea.Hospital, 221, 4, "research points", true),
         new(OriginalSaveArea.Hospital, 225, 188, "expertise research", true),
         new(OriginalSaveArea.Hospital, 433, 10, "research distribution", true),
         new(OriginalSaveArea.Hospital, 443, 4, "value", true),
         new(OriginalSaveArea.Hospital, 455, 2, "visitors at the last 1 January", true),
         new(OriginalSaveArea.Hospital, 459, 2, "population share?", false),
-        new(OriginalSaveArea.Hospital, 477, 4, "emergency bonus per cure", true),
+        new(OriginalSaveArea.Hospital, 477, 2, "emergency bonus per cure", true),
+        new(OriginalSaveArea.Hospital, 479, 2, "emergency helicopter?", false),
         new(OriginalSaveArea.Hospital, 481, 3, "emergency timers?", false),
         new(OriginalSaveArea.Hospital, 484, 3, "emergency disease, cured, patients", true),
         new(OriginalSaveArea.Hospital, 487, 1, "emergency patients left?", false),
@@ -136,7 +136,7 @@ public static class OriginalSaveFields
     {
         (int Offset, int Length, string Name)[] fields =
         [
-            (0, 4, "drug research"), (12, 4, "charge"), (16, 4, "charge percent"), (20, 4, "money earned"), (27, 1, "drug effectiveness"), (28, 1, "known?"), (29, 1, "discovered"),
+            (0, 4, "reputation"), (4, 4, "reputation points"), (8, 4, "reputation visits"), (12, 4, "charge"), (16, 4, "charge percent"), (20, 4, "money earned"), (27, 1, "drug effectiveness"), (28, 1, "known?"), (29, 1, "discovered"),
             (30, 2, "recoveries"), (32, 2, "fatalities"), (36, 2, "turned away"),
         ];
         for (var disease = 0; disease < OriginalSaveHospital.DiseaseCount; disease++)
