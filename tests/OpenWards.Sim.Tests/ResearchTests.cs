@@ -221,7 +221,6 @@ public class ResearchTests
         var entry = hospital.CaseOf(disease, simulation.Rules.Diseases);
         entry.CureEffectiveness = 80;
         entry.DrugCost = 40;
-        entry.DrugAvailable = true;
         entry.Discovered = true;
         research.OnDiseaseDiscovered(simulation, hospital);
         var target = ResearchTarget.Drug(disease.Id);
@@ -255,32 +254,19 @@ public class ResearchTests
     }
 
     [Fact]
-    public void ADrugForADiseaseNotKnownAtTheStartIsFoundFirst()
+    public void ADrugIsThereFromTheStartAndResearchOnlyImprovesIt()
     {
+        // A disease the level does not mark Known: the pharmacy has its drug all the same.
         var simulation = NewSimulation(drugDisease: true);
         var hospital = simulation.Hospitals[0];
         var research = hospital.Research;
         var disease = DrugDisease(simulation);
-        var entry = hospital.CaseOf(disease, simulation.Rules.Diseases);
         Assert.False(simulation.Rules.Diseases.IsKnown(disease.ExpertiseId));
-        Assert.False(entry.DrugAvailable);
 
-        // A new drug takes the disease's RschReqd and comes before any improvement.
+        // Research improves it at once, at the improvement's cost: ⌊1,000 × (10 + 10 × ⌊50 / 25⌋) / 100⌋.
         var target = ResearchTarget.Drug(disease.Id);
         Assert.Equal(target, research.Area(ResearchCategory.Drugs).Current);
-        Assert.Equal(1_000, research.Required(simulation, hospital, target));
-        foreach (var category in Enum.GetValues<ResearchCategory>())
-        {
-            research.AdjustShare(category, -100);
-        }
-
-        research.AdjustShare(ResearchCategory.Drugs, 100);
-        research.AddPoints(1_000);
-        research.OnEndDay(simulation, hospital);
-
-        Assert.True(entry.DrugAvailable);
-        Assert.Equal(simulation.Rules.Diseases.DrugStartRating, entry.CureEffectiveness);
-        Assert.Equal(simulation.Rules.Diseases.DrugStartCost, entry.DrugCost);
+        Assert.Equal(300, research.Required(simulation, hospital, target));
     }
 
     [Fact]
@@ -447,21 +433,18 @@ public class ResearchTests
     }
 
     [Fact]
-    public void EveryImportedDrugIsAvailableAndTakesTheSavesEffectiveness()
+    public void EveryImportedDrugTakesTheSavesEffectiveness()
     {
         var simulation = NewSimulation(drugDisease: true);
         var drug = DrugDisease(simulation);
         var book = simulation.Hospitals[0].CaseOf(drug, simulation.Rules.Diseases);
-        book.DrugAvailable = false;
         var effectiveness = book.CureEffectiveness;
 
         // In the original every drug is there from the start; 0 says nothing about it.
         Import.GameImport.Apply(simulation, new Import.ImportedGame { Month = 3, Day = 1, Casebook = [new Import.ImportedCase(drug.Id, true, 0, 0, 0, 0, 0)] });
-        Assert.True(book.DrugAvailable);
         Assert.Equal(effectiveness, book.CureEffectiveness);
 
         Import.GameImport.Apply(simulation, new Import.ImportedGame { Month = 3, Day = 1, Casebook = [new Import.ImportedCase(drug.Id, true, 90, 0, 0, 0, 0, DrugCost: 95)] });
-        Assert.True(book.DrugAvailable);
         Assert.Equal((90, 95), (book.CureEffectiveness, book.DrugCost));
     }
 

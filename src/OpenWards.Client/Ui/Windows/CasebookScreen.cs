@@ -124,9 +124,8 @@ internal sealed class CasebookScreen
         Centred(entry.Fatalities.ToString(CultureInfo.InvariantCulture), 248, 269, 114);
         Centred(entry.TurnedAway.ToString(CultureInfo.InvariantCulture), 248, 313, 114);
 
-        // updateIcons: the cure's kind (unknown while a room of it is not discovered, or its drug not researched), and
-        // whether it can be cured now.
-        var discovered = disease.TreatmentRooms.All(hospital.IsRoomDiscovered) && entry.DrugAvailable;
+        // updateIcons: the cure's kind (unknown while a room of it is not discovered), and whether it can be cured now.
+        var discovered = disease.TreatmentRooms.All(hospital.IsRoomDiscovered);
         var kind = discovered ? CureSprite(disease) : 9;
         if (!disease.IsPseudo || kind != 6)
         {
@@ -246,7 +245,7 @@ internal sealed class CasebookScreen
         var hospital = host.Simulation.Hospitals[host.Player];
         if (new Rectangle(306, 352, 29, 29).Contains(local) && (!disease.IsPseudo || CureSprite(disease) != 6))
         {
-            return !disease.TreatmentRooms.All(hospital.IsRoomDiscovered) || !hospital.PeekCase(disease, host.Simulation.Rules.Diseases).DrugAvailable ? UiText.Get("tooltip.casebook.cure_type.unknown", "Unknown cure")
+            return !disease.TreatmentRooms.All(hospital.IsRoomDiscovered) ? UiText.Get("tooltip.casebook.cure_type.unknown", "Unknown cure")
                 : CureSprite(disease) switch
                 {
                     7 => Tip(149, "Drug, %d%% effective").Replace("%d", hospital.PeekCase(disease, host.Simulation.Rules.Diseases).CureEffectiveness.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal).Replace("%%", "%", StringComparison.Ordinal),

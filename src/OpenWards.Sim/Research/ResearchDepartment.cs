@@ -342,13 +342,7 @@ public sealed class ResearchDepartment
 
                 return obj.IsMachine && research.Improvements < MaxImprovements ? ImprovementCost(rules, points, research.Improvements) : null;
             case ResearchTargetKind.Drug when DiseaseCatalog.Find(target.Id) is { } disease && _drugs.ContainsKey(disease.Id):
-                var entry = hospital.PeekCase(disease, rules.Diseases);
-                if (!entry.DrugAvailable)
-                {
-                    return rules.Research.ExpertiseRequired(disease.ExpertiseId);
-                }
-
-                var effectiveness = entry.CureEffectiveness;
+                var effectiveness = hospital.PeekCase(disease, rules.Diseases).CureEffectiveness;
                 return effectiveness < DiseaseCase.FullEffectiveness
                     ? ImprovementCost(rules, rules.Research.ExpertiseRequired(disease.ExpertiseId), effectiveness / 25)
                     : null;
@@ -417,37 +411,10 @@ public sealed class ResearchDepartment
                 if (_drugs[target.Id] >= required)
                 {
                     _drugs[target.Id] = 0;
-                    if (hospital.CaseOf(DiseaseCatalog.Find(target.Id)!, simulation.Rules.Diseases).DrugAvailable)
-                    {
-                        ImproveDrug(simulation, hospital, target.Id);
-                    }
-                    else
-                    {
-                        DiscoverDrug(simulation, hospital, target.Id);
-                    }
+                    ImproveDrug(simulation, hospital, target.Id);
                 }
 
                 break;
-        }
-    }
-
-    /// <summary>
-    /// A new drug: the pharmacy can cure the disease now, with the level's <c>StartRating</c> and <c>StartCost</c>;
-    /// patients waiting for it go to the pharmacy.
-    /// </summary>
-    private static void DiscoverDrug(Simulation simulation, Hospital hospital, string diseaseId)
-    {
-        var entry = hospital.CaseOf(DiseaseCatalog.Find(diseaseId)!, simulation.Rules.Diseases);
-        entry.DrugAvailable = true;
-        entry.CureEffectiveness = simulation.Rules.Diseases.DrugStartRating;
-        entry.DrugCost = simulation.Rules.Diseases.DrugStartCost;
-        foreach (var entity in simulation.Entities)
-        {
-            if (entity is Entities.Humanoid { Behaviour: People.PatientBehaviour { DiseaseId: var disease } patient } humanoid
-                && humanoid.HospitalPlayer == hospital.Player && string.Equals(disease, diseaseId, StringComparison.Ordinal))
-            {
-                patient.OnRoomBuilt("pharmacy");
-            }
         }
     }
 
@@ -573,20 +540,12 @@ public sealed class ResearchDepartment
 
                 break;
             case ResearchCategory.Drugs:
-                // New drugs for known diseases first; improvements once there is none to find.
-                foreach (var findNew in new[] { true, false })
+                // Every drug is there from the start; research makes the drugs of known diseases better.
+                foreach (var disease in rules.Diseases.AvailableDiseases())
                 {
-                    foreach (var disease in rules.Diseases.AvailableDiseases())
+                    if (_drugs.ContainsKey(disease.Id) && hospital.PeekCase(disease, rules.Diseases) is { Discovered: true })
                     {
-                        if (_drugs.ContainsKey(disease.Id) && hospital.PeekCase(disease, rules.Diseases) is { Discovered: true } entry && entry.DrugAvailable != findNew)
-                        {
-                            Consider(ResearchTarget.Drug(disease.Id));
-                        }
-                    }
-
-                    if (!best.IsNone)
-                    {
-                        break;
+                        Consider(ResearchTarget.Drug(disease.Id));
                     }
                 }
 

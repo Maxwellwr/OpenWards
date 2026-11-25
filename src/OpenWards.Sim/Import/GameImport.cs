@@ -477,13 +477,8 @@ public static class GameImport
             {
                 var book = hospital.CaseOf(disease, simulation.Rules.Diseases);
                 book.Discovered |= entry.Discovered;
-                if (Research.ResearchDepartment.IsDrugDisease(disease))
-                {
-                    // In the original every drug is there from the start: a pharmacy and a nurse are all it takes.
-                    // (Disease byte +28 says whether the disease can be treated now, not whether its drug is known.)
-                    book.DrugAvailable = true;
-                }
-
+                // Every drug is there from the start; disease byte +28 says whether the disease can be treated now, not
+                // whether its drug is known.
                 if (Research.ResearchDepartment.IsDrugDisease(disease) && entry.Effectiveness > 0)
                 {
                     // The original keeps 0 for diseases not cured by drugs, which are always fully effective.

@@ -565,10 +565,18 @@ public class PatientFlowTests
         return simulation;
     }
 
-    /// <summary>A pharmacy east of the GP's office, with a nurse.</summary>
+    /// <summary>
+    /// A pharmacy east of the GP's office, with a nurse. People standing on the site, such as the end of a long reception
+    /// queue, are told to leave first, and the room is built once they have.
+    /// </summary>
     internal static void BuildPharmacy(Simulation simulation)
     {
         Run(simulation, new BuildRoomCommand(new RoomPlan("pharmacy", PharmacyArea, new DoorPlacement(new(13, PharmacyArea.Bottom), EdgeOrientation.North))));
+        for (var tick = 0; tick < GameDate.HoursPerDay && !simulation.Entities.OfType<Room>().Any(r => r.RoomType == "pharmacy"); tick++)
+        {
+            simulation.Step();
+        }
+
         var room = simulation.Entities.OfType<Room>().Single(r => r.RoomType == "pharmacy");
         PlaceAnywhere(simulation, "pharmacy_cabinet", PharmacyArea);
         Run(simulation, new ConfirmRoomCommand(room.Id));
