@@ -43,6 +43,12 @@ strings:
       bid: 'Přihodit $%1%'
       sold: 'Pozemek %1% prodán: %2% za $%3%'
       unsold: 'Pozemek %1% se neprodal: nikdo nepřihodil'
+    netmission:
+      fallback: 'Úkol %1%: zbývá měsíců: %2%'
+      all_failed: 'Úkol nesplnil nikdo. Hra pokračuje.'
+      passed: 'Splnili jste úkol.'
+      failed: 'Nesplnili jste úkol.'
+      who_failed: 'Úkol nesplnili: %1%'
     chat:
       caption: 'Chat'
       none: 'Zatím nikdo nic neřekl.'

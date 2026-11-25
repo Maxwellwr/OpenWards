@@ -2,6 +2,7 @@ using OpenWards.Sim.Diseases;
 using OpenWards.Sim.Economy;
 using OpenWards.Sim.Import;
 using OpenWards.Sim.Maps;
+using OpenWards.Sim.Staff;
 
 namespace OpenWards.Sim.Tests;
 
@@ -48,6 +49,113 @@ public class ImportedCasebookTests
 
         Assert.Equal(DiseaseCase.FullEffectiveness, loaded["fake_blood"].CureEffectiveness);
         Assert.Equal(40, loaded["broken_wind"].CureEffectiveness);
+    }
+
+    [Fact]
+    public void TakesTheSavesReputationRecordInsuranceDebtsAndPriceLevel()
+    {
+        var simulation = NewSimulation();
+
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 3,
+            Day = 17,
+            Visitors = 295,
+            Reputation = 464,
+            ReputationRecord = (239, 257),
+            Casebook = [new ImportedCase("broken_wind", true, 40, 2, 0, 0, 0, ReputationPoints: 44, ReputationVisits: 36)],
+            InsuranceOwed = [(1, 0, 1332), (3, 9, 589)],
+            PriceLevel = 102,
+        });
+
+        var hospital = simulation.Hospitals[0];
+        Assert.Equal((239L * Hospital.ReputationPerPoint, 257), (hospital.ReputationScore, hospital.ReputationVisits));
+        Assert.Equal(464, hospital.Reputation);
+        var wind = hospital.Casebook["broken_wind"];
+        Assert.Equal((44L * Hospital.ReputationPerPoint, 36), (wind.ReputationScore, wind.ReputationVisits));
+        Assert.Equal((1332, 0, 589), (hospital.InsuranceOwed(1), hospital.InsuranceOwed(2), hospital.InsuranceOwed(3)));
+        Assert.Equal(102, hospital.PriceLevel);
+    }
+
+    [Fact]
+    public void PatientsKeepTheirMoneyInsurerAndNeeds()
+    {
+        var simulation = NewSimulation();
+
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 3,
+            Day = 1,
+            Patients =
+            [
+                new ImportedPatient("broken_wind", new TilePosition(2, 2), 0.472m, 0.9m, 0.6m, 0.5m, 1522, Wallet: 38710, InsuranceCompany: 2, DiagnosisDifficulty: 83, Bowel: 42, Nausea: 38, ContagiousStrength: 4),
+            ],
+        });
+
+        var patient = simulation.Entities.OfType<Entities.Humanoid>().Select(h => h.Behaviour).OfType<People.PatientBehaviour>().Single();
+        Assert.Equal(472, patient.Health);
+        Assert.Equal((38710, 2, 83), (patient.Wallet, patient.InsuranceCompany, patient.DiagnosisDifficulty));
+        Assert.Equal((42, 38, 4), (patient.Bowel, patient.Nausea, patient.ContagiousStrength));
+        Assert.Equal(1000, patient.DiagnosisProgress);
+    }
+
+    [Fact]
+    public void StaffKeepTheirDiscontentRaiseRequestsServiceAndShares()
+    {
+        var simulation = NewSimulation();
+        var handyman = StaffProfile.CreateRandom(StaffClass.Handyman, 3, simulation.Rules.Staff, simulation.Random);
+
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 3,
+            Day = 1,
+            Staff = [new ImportedStaff(handyman, new TilePosition(2, 2), 0.5m, 0.2m, Discontent: 53, RaiseRequests: 4, HiredHoursAgo: 1000, HandymanShares: (20, 30, 50))],
+        });
+
+        var staff = simulation.Entities.OfType<Entities.Humanoid>().Single(h => h.Profile is not null);
+        Assert.Equal((53, 4), (staff.Discontent, staff.RaiseRequestCount));
+        Assert.Equal(simulation.Hours - 1000, staff.HiredAt);
+        var behaviour = Assert.IsType<People.HandymanBehaviour>(staff.Behaviour);
+        Assert.Equal((200, 300, 500), (behaviour.CleaningPriority, behaviour.WateringPriority, behaviour.RepairingPriority));
+    }
+
+    [Fact]
+    public void TakesTheYearsVipsAndRatsAndTheDaysSinceTheLastVip()
+    {
+        var simulation = NewSimulation();
+
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 3,
+            Day = 1,
+            VipsThisYear = (1, -2),
+            DaysSinceVip = 82,
+            RatsThisYear = (7, 12),
+        });
+
+        var hospital = simulation.Hospitals[0];
+        Assert.Equal((1, -2, 1), (hospital.Vips.ThisYear, hospital.Vips.ScoreSumThisYear, hospital.Vips.PleasedThisYear));
+        Assert.Equal(82, hospital.Vips.DaysSinceLast);
+        Assert.Equal((7, 12), (hospital.RatsKilledThisYear, hospital.RatShotsThisYear));
+    }
+
+    [Fact]
+    public void LitterAndRatholesComeBack()
+    {
+        var simulation = NewSimulation();
+
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 3,
+            Day = 1,
+            Litter = [(new TilePosition(1, 1), Entities.LitterType.Banana), (new TilePosition(2, 4), Entities.LitterType.Puke)],
+            Ratholes = [(new TilePosition(3, 3), Entities.Direction.West)],
+        });
+
+        var litter = simulation.Entities.OfType<Entities.Litter>().OrderBy(l => l.Tile.X).Select(l => (l.Tile, l.Type));
+        Assert.Equal([(new TilePosition(1, 1), Entities.LitterType.Banana), (new TilePosition(2, 4), Entities.LitterType.Puke)], litter);
+        var hole = Assert.Single(simulation.Hospitals[0].Ratholes);
+        Assert.Equal((new TilePosition(3, 3), Entities.Direction.West), (hole.Tile, hole.Wall));
     }
 
     private static Simulation NewSimulation()

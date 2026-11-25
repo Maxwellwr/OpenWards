@@ -368,6 +368,11 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
     /// <summary>The last auction's result already told, and whether the auctions have been watched since the game began.</summary>
     private AuctionResult? _lastAuctionSeen;
 
+    /// <summary>The player's network mission last seen (row and deadline), and whether anything has been seen yet.</summary>
+    private (int Index, int Deadline)? _netMissionSeen;
+    private bool _netMissionWatched;
+    private NetMissionResult? _lastNetMissionSeen;
+
     private bool _auctionWatched;
 
     /// <summary>How long the main menu has been left alone, for the demo movie (<c>App.idle_tick</c>), in milliseconds.</summary>
@@ -3466,6 +3471,31 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
         }
 
         _auctionWatched = true;
+
+        // The network game's missions: how the last one went, then the next one, each in an information window.
+        if (Simulation.LastNetMission is { } judged && !ReferenceEquals(judged, _lastNetMissionSeen))
+        {
+            if (_netMissionWatched)
+            {
+                _windows.Open(new InformationWindow(NetMissionTexts.Result(this, judged, _session.Player, i => ProgressReportScreen.HospitalName(this, i))));
+            }
+
+            _lastNetMissionSeen = judged;
+        }
+
+        var mission = Simulation.Hospitals[_session.Player].NetMission;
+        (int Index, int Deadline)? given = mission.Current is { } row ? (row.Index, mission.Deadline) : null;
+        if (given != _netMissionSeen)
+        {
+            if (_netMissionWatched && mission.Current is { } current)
+            {
+                _windows.Open(new InformationWindow(NetMissionTexts.Mission(this, current, mission.MonthsLeft(Simulation.Date.MonthOfGame))));
+            }
+
+            _netMissionSeen = given;
+        }
+
+        _netMissionWatched = true;
 
         // Poaching: the member of staff's answer, and whoever has joined from another hospital.
         if (Simulation.Hospitals[_session.Player].LastPoach is { } answer && !ReferenceEquals(answer, _lastPoachSeen))

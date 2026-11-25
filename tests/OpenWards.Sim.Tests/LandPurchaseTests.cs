@@ -8,16 +8,33 @@ namespace OpenWards.Sim.Tests;
 public class LandPurchaseTests
 {
     [Fact]
-    public void AParcelIsForSaleWhenItTouchesTheOutsideOrTheBuyersLand()
+    public void AParcelWithoutANeighbourListIsForSaleWhereverItLies()
     {
         var simulation = NewSimulation(10_000);
 
         Assert.False(simulation.IsParcelPurchasable(0, 0)); // the outside
         Assert.False(simulation.IsParcelPurchasable(1, 0)); // owned already
-        Assert.True(simulation.IsParcelPurchasable(2, 0)); // touches the outside
-        Assert.True(simulation.IsParcelPurchasable(3, 0)); // touches parcel 1 only
-        Assert.False(simulation.IsParcelPurchasable(4, 0)); // touches nothing by passable tiles
+        Assert.True(simulation.IsParcelPurchasable(2, 0));
+        Assert.True(simulation.IsParcelPurchasable(3, 0));
+        Assert.True(simulation.IsParcelPurchasable(4, 0)); // walled off, touching nothing: the map does not count
         Assert.False(simulation.IsParcelPurchasable(5, 0)); // no such parcel
+    }
+
+    [Fact]
+    public void AListedParcelIsForSaleOnlyToWhoeverOwnsOneOfItsNeighbours()
+    {
+        // Parcel 3 touches parcel 1 on the map, but its list names only parcel 2; parcel 4 touches nothing but lists 1.
+        var simulation = NewSimulation(10_000, players: 2, neighbours: [new ParcelNeighbours(3, [2]), new ParcelNeighbours(4, [1, 2])]);
+
+        Assert.False(simulation.IsParcelPurchasable(3, 0));
+        Assert.True(simulation.IsParcelPurchasable(4, 0));
+        Assert.False(simulation.IsParcelPurchasable(4, 1));
+        Assert.True(simulation.IsParcelPurchasable(2, 1));
+
+        simulation.SetParcelOwner(2, 2);
+        Assert.False(simulation.IsParcelPurchasable(3, 0));
+        Assert.True(simulation.IsParcelPurchasable(3, 1));
+        Assert.True(simulation.IsParcelPurchasable(4, 1));
     }
 
     [Fact]
@@ -44,29 +61,27 @@ public class LandPurchaseTests
         var simulation = NewSimulation(100);
 
         simulation.Schedule(0, new PurchaseParcelCommand(2));
-        simulation.Schedule(0, new PurchaseParcelCommand(4));
+        simulation.Schedule(0, new PurchaseParcelCommand(0));
         simulation.Step();
 
         Assert.Equal(0, simulation.Map.GetParcelOwner(2));
-        Assert.Equal(0, simulation.Map.GetParcelOwner(4));
+        Assert.Equal(0, simulation.Map.GetParcelOwner(0));
         Assert.Empty(simulation.Hospitals[0].Transactions);
     }
 
     [Fact]
-    public void SavesKeepWhichParcelsTouch()
+    public void SavesKeepTheNeighbourLists()
     {
-        var simulation = NewSimulation(10_000);
-
-        // Blocking the tiles afterwards does not change which parcels touch: that goes by the map as it began.
-        simulation.Map[2, 2].Set(TileFlags.Passable, false);
+        var simulation = NewSimulation(10_000, neighbours: [new ParcelNeighbours(3, [2])]);
         using var stream = new MemoryStream();
         simulation.Save(stream);
         stream.Position = 0;
         var restored = Simulation.Load(stream);
 
         Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
-        Assert.True(restored.IsParcelPurchasable(3, 0));
-        Assert.False(restored.IsParcelPurchasable(4, 0));
+        Assert.False(restored.IsParcelPurchasable(3, 0));
+        Assert.True(restored.IsParcelPurchasable(4, 0));
+        Assert.Equal([2], restored.Rules.NeighboursOf(3));
     }
 
     [Fact]
@@ -189,7 +204,7 @@ public class LandPurchaseTests
     /// Parcel 1 (the player's) in the middle, parcel 2 at the top touching the outside, parcel 3 enclosed by parcel 1,
     /// and parcel 4 cut off by walls (impassable tiles).
     /// </summary>
-    private static Simulation NewSimulation(int startCash, int players = 1)
+    private static Simulation NewSimulation(int startCash, int players = 1, ParcelNeighbours[]? neighbours = null)
     {
         var map = TestMaps.FromRows([.. Rows.Select(row => new string([.. row.Select(c => c == '#' ? '#' : '.')]))]);
         map.SetPlayerCount(players);
@@ -214,7 +229,7 @@ public class LandPurchaseTests
         // Parcel 4's tiles are walled off.
         map[3, 4].Set(TileFlags.Passable, false);
         map[4, 4].Set(TileFlags.Passable, false);
-        return new Simulation(map, seed: 1, rules: new LevelRules(startCash, [], [], landCostPerTile: 30));
+        return new Simulation(map, seed: 1, rules: new LevelRules(startCash, [], [], landCostPerTile: 30, parcelNeighbours: neighbours));
     }
 
     private static readonly string[] Rows =

@@ -242,6 +242,67 @@ public sealed class ResearchDepartment
         rules.FreeBuild ? 0 : _objects.TryGetValue(objectId, out var research) ? research.Cost : rules.ObjectCost(objectId);
 
     /// <summary>
+    /// Takes over an imported save's research: for each object type of the level what is discovered, its improvements,
+    /// the strength and cost of new ones; the points put into each expertise, for the drugs and for the objects that
+    /// research under an expertise (<see cref="ResearchObject.Fallback"/>); and the points not yet shared out. An object
+    /// that stands in the hospital stays discovered.
+    /// </summary>
+    internal void Import(
+        Simulation simulation,
+        Hospital hospital,
+        IReadOnlyList<Import.ImportedObjectResearch> objects,
+        IReadOnlyList<(int Expertise, int Points)> expertise,
+        int? pool)
+    {
+        var rules = simulation.Rules;
+        var points = expertise.Where(e => e.Points > 0).GroupBy(e => e.Expertise).ToDictionary(g => g.Key, g => g.Last().Points);
+        foreach (var obj in ResearchObjects.All)
+        {
+            if (!_objects.TryGetValue(obj.Id, out var research))
+            {
+                continue;
+            }
+
+            if (objects.LastOrDefault(o => o.ObjectType == obj.ObjectType) is { } imported)
+            {
+                if (obj.IsMachine)
+                {
+                    research.Improvements = Math.Clamp(imported.Improvements, 0, MaxImprovements);
+                    research.StartStrength = Math.Max(1, imported.StartStrength);
+                    research.Cost = rules.FreeBuild ? 0 : Math.Max(0, imported.Cost);
+                }
+
+                // Only the importing player builds on a freshly imported level.
+                var placed = simulation.Entities.OfType<Entities.RoomObject>().Any(o => string.Equals(o.ObjectType, obj.Id, StringComparison.Ordinal));
+                research.Discovered = imported.Discovered || placed;
+            }
+
+            research.Points = obj.Fallback > 0 && points.TryGetValue(obj.Fallback, out var objectPoints) ? objectPoints : 0;
+        }
+
+        foreach (var diseaseId in _drugs.Keys.ToList())
+        {
+            _drugs[diseaseId] = DiseaseCatalog.Find(diseaseId) is { } disease && points.TryGetValue(disease.ExpertiseId, out var drugPoints) ? drugPoints : 0;
+        }
+
+        if (pool is { } left)
+        {
+            Pool = Math.Max(0, left);
+        }
+
+        foreach (var room in simulation.Content.Rooms)
+        {
+            if (!hospital.IsRoomDiscovered(room.Id) && rules.IsRoomAvailable(room)
+                && !LevelRules.Needed(room).Any(needed => _objects.TryGetValue(needed.ObjectId, out var research) && !research.Discovered))
+            {
+                hospital.DiscoverRoom(room.Id);
+            }
+        }
+
+        RefreshTargets(simulation, hospital);
+    }
+
+    /// <summary>
     /// <c>ResearchDepartment:checkAutomaticDiscovery</c>, at the end of each month: equipment the level brings in this
     /// month of the game (<c>objects[n].WhenAvail</c>) is discovered by itself.
     /// </summary>

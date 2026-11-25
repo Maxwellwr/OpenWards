@@ -387,6 +387,67 @@ public class ResearchTests
 
     private static GameContent NewContent() => new([Ultrascan], [114], [Machine]);
 
+    [Fact]
+    public void AnImportedSaveBringsItsDiscoveriesImprovementsAndPoints()
+    {
+        var simulation = NewSimulation(drugDisease: true);
+        var hospital = simulation.Hospitals[0];
+        var drug = DrugDisease(simulation);
+
+        Import.GameImport.Apply(simulation, new Import.ImportedGame
+        {
+            Month = 3,
+            Day = 1,
+            ObjectResearch =
+            [
+                new Import.ImportedObjectResearch(Inflator, Discovered: true, Improvements: 3, StartStrength: 14, Cost: 2180),
+                new Import.ImportedObjectResearch(Ultrascanner, Discovered: true, Improvements: 0, StartStrength: 12, Cost: 6000),
+            ],
+            ExpertiseResearch = [(UltrascanExpertise, 2731), (drug.ExpertiseId, 148)],
+            ResearchPool = 1281,
+        });
+
+        var inflator = hospital.Research.Objects["inflator"];
+        Assert.Equal((3, 14, 2180), (inflator.Improvements, inflator.StartStrength, inflator.Cost));
+        var ultrascanner = hospital.Research.Objects["ultrascanner"];
+        Assert.True(ultrascanner.Discovered);
+        Assert.Equal(2731, ultrascanner.Points);
+        Assert.True(hospital.IsRoomDiscovered("ultrascan"));
+        Assert.Equal(148, hospital.Research.Drugs[drug.Id]);
+        Assert.Equal(1281, hospital.Research.Pool);
+    }
+
+    [Fact]
+    public void AnImportedObjectNotDiscoveredStaysUndiscovered()
+    {
+        var simulation = NewSimulation();
+
+        Import.GameImport.Apply(simulation, new Import.ImportedGame
+        {
+            Month = 3,
+            Day = 1,
+            ObjectResearch = [new Import.ImportedObjectResearch(Inflator, Discovered: false, Improvements: 0, StartStrength: 10, Cost: 5000)],
+        });
+
+        Assert.False(simulation.Hospitals[0].Research.Objects["inflator"].Discovered);
+    }
+
+    [Fact]
+    public void EveryImportedDrugTakesTheSavesEffectiveness()
+    {
+        var simulation = NewSimulation(drugDisease: true);
+        var drug = DrugDisease(simulation);
+        var book = simulation.Hospitals[0].CaseOf(drug, simulation.Rules.Diseases);
+        var effectiveness = book.CureEffectiveness;
+
+        // In the original every drug is there from the start; 0 says nothing about it.
+        Import.GameImport.Apply(simulation, new Import.ImportedGame { Month = 3, Day = 1, Casebook = [new Import.ImportedCase(drug.Id, true, 0, 0, 0, 0, 0)] });
+        Assert.Equal(effectiveness, book.CureEffectiveness);
+
+        Import.GameImport.Apply(simulation, new Import.ImportedGame { Month = 3, Day = 1, Casebook = [new Import.ImportedCase(drug.Id, true, 90, 0, 0, 0, 0, DrugCost: 95)] });
+        Assert.Equal((90, 95), (book.CureEffectiveness, book.DrugCost));
+    }
+
     private static Simulation NewSimulation(int whenAvail = 0, bool cureObjects = false, bool drugDisease = false)
     {
         var map = TestMaps.FromRows("........", "........", "........", "........", "........", "........", "........", "........");

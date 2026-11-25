@@ -118,6 +118,27 @@ public sealed record OriginalSaveEntity(int Slot, ReadOnlyMemory<byte> Raw)
     /// </summary>
     public int DiagnosisProgress => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[146..]);
 
+    /// <summary>Patients only: health from 0 to 1000.</summary>
+    public int Health => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[130..]);
+
+    /// <summary>Patients only: the money they brought.</summary>
+    public int Wallet => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[112..]);
+
+    /// <summary>Patients only: the insurance company paying for them as a bit (1, 2 or 4), or 0 when they pay themselves.</summary>
+    public byte InsurerBit => Raw.Span[173];
+
+    /// <summary>Patients only: how hard their diagnosis is.</summary>
+    public int DiagnosisDifficulty => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[144..]);
+
+    /// <summary>Patients only: how much they need the toilet.</summary>
+    public int Bowel => BinaryPrimitives.ReadInt16LittleEndian(Raw.Span[136..]);
+
+    /// <summary>Patients only: how sick they feel.</summary>
+    public int Nausea => BinaryPrimitives.ReadInt16LittleEndian(Raw.Span[138..]);
+
+    /// <summary>Patients only: how contagious they are; 255 once vaccinated.</summary>
+    public byte ContagiousStrength => Raw.Span[174];
+
     /// <summary>Patients only: happiness from 0 to 100, the first bar of the patient window.</summary>
     public byte Happiness => Raw.Span[81];
 
@@ -156,6 +177,26 @@ public sealed record OriginalSaveEntity(int Slot, ReadOnlyMemory<byte> Raw)
 
     /// <summary>Staff only: monthly salary.</summary>
     public int Salary => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[108..]);
+
+    /// <summary>
+    /// Staff only: how long they have been unhappy, the counter that makes them ask for money (0 for most, a few
+    /// dozen to over a hundred for the unhappy).
+    /// </summary>
+    public int Discontent => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[128..]);
+
+    /// <summary>
+    /// Staff only: the low 16 bits of the tick (<see cref="OriginalSaveGame.Tick"/>) they were hired or last given a raise.
+    /// </summary>
+    public int HiredTick16 => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[130..]);
+
+    /// <summary>Staff only: how many times they have asked for money (0 to 5; receptionists and new staff hold 0).</summary>
+    public byte RaiseRequests => Raw.Span[143];
+
+    /// <summary>
+    /// Handymen only: the shares of their time for cleaning, watering and repairs, in percent (33, 33 and 34 unless
+    /// the player moved the sliders).
+    /// </summary>
+    public (byte Cleaning, byte Watering, byte Repairing) HandymanShares => (Raw.Span[158], Raw.Span[159], Raw.Span[160]);
 
     /// <summary>Staff only: first letter of the name (the initial).</summary>
     public char Initial => (char)Raw.Span[132];
@@ -320,11 +361,114 @@ public sealed record OriginalSaveHospital(
     /// <summary>Reputation as shown in the casebook.</summary>
     public int Reputation => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[3198..]);
 
+    /// <summary>The points behind the reputation: reputation = 500 × points / <see cref="ReputationVisits"/>.</summary>
+    public int ReputationPoints => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[3202..]);
+
+    /// <summary>The visits behind the reputation.</summary>
+    public int ReputationVisits => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[3206..]);
+
+    /// <summary>The price level of the last month's end, in percent of the expected prices.</summary>
+    public int PriceLevel => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[3214..]);
+
+    /// <summary>The most rat holes the save keeps.</summary>
+    public const int MaxRatholes = 40;
+
+    /// <summary>How many tiles of the hospital have litter.</summary>
+    public int LitteredTiles => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[3242..]);
+
+    /// <summary>How many rat holes the hospital has (<see cref="Rathole"/>).</summary>
+    public int RatholeCount => Raw.Span[3246];
+
+    /// <summary>
+    /// A rat hole: the corridor tile it opens onto and the wall it is in (0 north, 1 east, 2 south, 3 west; holes in east
+    /// and south walls are in the neighbouring tile's west or north wall and are not drawn).
+    /// </summary>
+    public (int X, int Y, int Wall) Rathole(int index)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, MaxRatholes);
+        var offset = 3247 + (3 * index);
+        var tile = BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[offset..]);
+        return (tile % OriginalSaveGame.MapSize, tile / OriginalSaveGame.MapSize, Raw.Span[offset + 2]);
+    }
+
+    /// <summary>
+    /// What insurance company <paramref name="company"/> (0 to 2) owes, to be paid at the end of calendar month
+    /// <paramref name="month"/> (0 January).
+    /// </summary>
+    public int InsuranceOwed(int company, int month)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(company);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(company, 2);
+        ArgumentOutOfRangeException.ThrowIfNegative(month);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(month, 11);
+        return BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[(69 + (48 * company) + (4 * month))..]);
+    }
+
     /// <summary>Policy: stop diagnosis at this share of the normal procedure, in tenths of a percent (1000 = 100%).</summary>
     public int StopProcedure => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[535..]);
 
     /// <summary>Policy: guess at cure above this diagnosis certainty, in percent.</summary>
     public int GuessCurePercent => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[537..]);
+
+    /// <summary>Computer player: the absolute tick (as <see cref="OriginalSaveGame"/>'s game tick) of its next action; may lie in the past.</summary>
+    public int CompetitorNextTick => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[4600..]);
+
+    /// <summary>Computer player: the total of its staff's wages.</summary>
+    public int CompetitorWages => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[4660..]);
+
+    /// <summary>Computer player: its rooms.</summary>
+    public int CompetitorRooms => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[4664..]);
+
+    /// <summary>Computer player: its patients in the hospital (a reading of the field, not confirmed).</summary>
+    public int CompetitorPatients => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[4668..]);
+
+    /// <summary>
+    /// Computer player: the number of the next record of its scenario: 1 to 9 the steps of the start (step = position − 1),
+    /// 12 to 15 the four steps of the cycle.
+    /// </summary>
+    public int CompetitorScenarioPosition => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4672..]);
+
+    /// <summary>Computer player: the number of its name in the base list (0 ORAC, 1 HAL, 2 COLOSSUS…).</summary>
+    public int CompetitorNameNumber => Raw.Span[4677];
+
+    /// <summary>Whether the hospital has opened (0 before, 1 after).</summary>
+    public bool IsOpen => Raw.Span[4694] != 0;
+
+    /// <summary>Computer player: the sum of the skills (thousandths) of its staff of a class, ordered like the staff counts (nurses, doctors, handymen, receptionists).</summary>
+    public int CompetitorSkillSum(int staffClass)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(staffClass);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(staffClass, 3);
+        return BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[(4678 + (2 * staffClass))..]);
+    }
+
+    /// <summary>
+    /// Computer player: the action it waits to carry out at <see cref="CompetitorNextTick"/>: what (0 none, it decides
+    /// afresh; 1 hire, 2 build, 3 buy, 4 loan) and two arguments.
+    /// </summary>
+    public (int Kind, int Argument, int Second) CompetitorPending =>
+        (BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4604..]), BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4606..]), BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[4608..]));
+
+    /// <summary>
+    /// Computer player: its queue of eight places, each a type (0 a free place, whose arguments are left over; 1 a hire)
+    /// and two arguments (for a hire 1 for a doctor, 0 for others, and the qualification bits of
+    /// <see cref="OriginalSaveEntity"/>: 1 receptionist, 2 handyman, 4 nurse, 16 doctor, 32 surgeon, 64 psychiatrist).
+    /// </summary>
+    public IReadOnlyList<(int Type, int Argument, int Qualification)> CompetitorQueue
+    {
+        get
+        {
+            var queue = new (int, int, int)[8];
+            for (var i = 0; i < queue.Length; i++)
+            {
+                var at = Raw.Span[(4612 + (6 * i))..];
+                queue[i] = (BinaryPrimitives.ReadUInt16LittleEndian(at), BinaryPrimitives.ReadUInt16LittleEndian(at[2..]), BinaryPrimitives.ReadUInt16LittleEndian(at[4..]));
+            }
+
+            return queue;
+        }
+    }
 
     /// <summary>Policy: send patients home below this diagnosis certainty, in percent.</summary>
     public int SendHomePercent => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[539..]);
@@ -345,6 +489,9 @@ public sealed record OriginalSaveHospital(
     /// <summary>Current or last emergency: bonus paid per patient cured.</summary>
     /// <remarks>16 bits: the next two bytes hold the slot of the emergency's helicopter while it is on the map.</remarks>
     public int EmergencyBonus => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[477..]);
+
+    /// <summary>The tick the current or last VIP arrived, or 0 before the first.</summary>
+    public int VipArrivalTick => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[499..]);
 
     /// <summary>Current or last emergency: the disease (casebook index).</summary>
     public int EmergencyDisease => Raw.Span[484];
@@ -371,6 +518,23 @@ public sealed record OriginalSaveHospital(
         return BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[(225 + (4 * index))..]);
     }
 
+    /// <summary>Offset of the object type table in the block.</summary>
+    public const int ObjectTypeOffset = 2330;
+
+    /// <summary>Size of one object type record.</summary>
+    public const int ObjectTypeLength = 14;
+
+    /// <summary>Number of object type records, indexed by object type (<c>thob</c>).</summary>
+    public const int ObjectTypeCount = 62;
+
+    /// <summary>The object type record of an object type (<c>thob</c>).</summary>
+    public OriginalSaveObjectType ObjectType(int type)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(type);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(type, ObjectTypeCount);
+        return new OriginalSaveObjectType(type, Raw.Slice(ObjectTypeOffset + (type * ObjectTypeLength), ObjectTypeLength));
+    }
+
     /// <summary>The disease (expertise) record with an index.</summary>
     public OriginalSaveDisease Disease(int index)
     {
@@ -378,6 +542,27 @@ public sealed record OriginalSaveHospital(
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, DiseaseCount);
         return new OriginalSaveDisease(index, Raw.Slice(DiseaseOffset + (index * DiseaseLength), DiseaseLength));
     }
+}
+
+/// <summary>One 14-byte record of a hospital's object type table: what research has made of the type.</summary>
+/// <param name="Type">The object type (<c>thob</c>).</param>
+/// <param name="Raw">The stored bytes.</param>
+public sealed record OriginalSaveObjectType(int Type, ReadOnlyMemory<byte> Raw)
+{
+    /// <summary>What a new one costs now; research lowers it for machines.</summary>
+    public int Cost => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span);
+
+    /// <summary>The strength of new ones; research raises it for machines.</summary>
+    public int StartStrength => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[8..]);
+
+    /// <summary>How many the hospital has bought.</summary>
+    public int Bought => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[10..]);
+
+    /// <summary>Whether it can be bought (discovered, for researched objects).</summary>
+    public bool Available => Raw.Span[12] != 0;
+
+    /// <summary>Improvements research has made to it (stored doubled).</summary>
+    public int Improvements => Raw.Span[13] / 2;
 }
 
 /// <summary>One 38-byte disease (expertise) record of a hospital: casebook figures and treatment price.</summary>
@@ -406,11 +591,17 @@ public sealed record OriginalSaveDisease(int Index, ReadOnlyMemory<byte> Raw)
     /// <summary>Money earned from it.</summary>
     public int MoneyEarned => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[20..]);
 
+    /// <summary>What one dose of its drug costs the hospital.</summary>
+    public int DrugCost => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[24..]);
+
     /// <summary>Drug effectiveness in percent, the flask on the casebook page (0 for diseases not cured by drugs).</summary>
     public byte DrugEffectiveness => Raw.Span[27];
 
-    /// <summary>Byte 28: set for most entries of the level from the start; its exact meaning is not known.</summary>
-    public bool Known => Raw.Span[28] != 0;
+    /// <summary>
+    /// Byte 28: whether the disease can be treated now (per the maintainer's field map). It does not say whether the drug
+    /// is known: in the original every drug is there from the start.
+    /// </summary>
+    public bool CanTreatNow => Raw.Span[28] != 0;
 
     /// <summary>Whether the disease has been discovered (the "new condition" fax), so the casebook shows it.</summary>
     public bool Discovered => Raw.Span[29] != 0;
@@ -487,11 +678,32 @@ public sealed class OriginalSaveGame
     /// <summary>Number of object types with a list.</summary>
     public const int ObjectTypes = 64;
 
+    /// <summary>Size of one player's lists (objects, qualifications, rooms and faxes) from <see cref="ObjectListOffset"/>.</summary>
+    public const int HospitalListLength = 234;
+
+    /// <summary>Object types in one player's lists.</summary>
+    public const int HospitalObjectTypes = 62;
+
+    /// <summary>Room types in one player's lists.</summary>
+    public const int HospitalRoomTypes = 31;
+
+    /// <summary>Offset of the rooms in one player's lists.</summary>
+    public const int HospitalRoomListOffset = 156;
+
+    /// <summary>Offset of the game tick.</summary>
+    public const int TickOffset = 0x666F0;
+
     /// <summary>Offset of the day of the month (1-based); the month follows.</summary>
     public const int DateOffset = 399030;
 
     /// <summary>Offset of the year of the level (0-based).</summary>
     public const int YearOffset = DateOffset - 7;
+
+    /// <summary>
+    /// Offset of the year's award counters: drinks sold (2 bytes), VIP score sum (4), VIP visits (1), two emergency
+    /// bytes, a machine explosion flag, research points earned and handed out (4 each), rats killed and shots (4 each).
+    /// </summary>
+    public const int AwardCounterOffset = 0x669A8;
 
     /// <summary>Offset of the first hospital block.</summary>
     public const int HospitalOffset = 399968;
@@ -518,6 +730,9 @@ public sealed class OriginalSaveGame
     /// <summary>The whole file.</summary>
     public ReadOnlyMemory<byte> Data { get; }
 
+    /// <summary>Game tick: 50 a day, 1500 a month.</summary>
+    public int Tick => BinaryPrimitives.ReadInt32LittleEndian(Data.Span[TickOffset..]);
+
     /// <summary>Level number (1–12 in the campaign).</summary>
     public int Level => Data.Span[2];
 
@@ -535,6 +750,14 @@ public sealed class OriginalSaveGame
     /// 1 January (MAXWELL.H3 and MAXWELL.H4).
     /// </summary>
     public int Year => Data.Span[YearOffset];
+
+    /// <summary>The player's VIP visits this year and the sum of their scores (lower is better), for the year's awards.</summary>
+    public (int Visits, int ScoreSum) VipsThisYear =>
+        (Data.Span[AwardCounterOffset + 6], BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 2)..]));
+
+    /// <summary>The rats the player killed and the shots fired this year.</summary>
+    public (int Killed, int Shots) RatsThisYear =>
+        (BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 21)..]), BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 25)..]));
 
     /// <summary>
     /// Owner of a land parcel (numbered as in the level's <c>LEVEL.L*</c> map): 0 for sale, 1 bought by the
@@ -556,6 +779,31 @@ public sealed class OriginalSaveGame
         ArgumentOutOfRangeException.ThrowIfNegative(type);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(type, ObjectTypes);
         return BinaryPrimitives.ReadUInt16LittleEndian(Data.Span[(ObjectListOffset + (2 * type))..]);
+    }
+
+    /// <summary>
+    /// For a computer player, how many objects of a type it has bought; for the local player the slot of the first
+    /// object of the type. From the player's lists of <see cref="HospitalListLength"/> bytes at <see cref="ObjectListOffset"/>.
+    /// </summary>
+    public int HospitalObjects(int player, int type)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(type, HospitalObjectTypes);
+        return HospitalList(player, 2 * type);
+    }
+
+    /// <summary>For a computer player, how many rooms of a type (as <see cref="OriginalSaveRoom.Type"/>) it has built; for the local player the slot of the last.</summary>
+    public int HospitalRooms(int player, int type)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(type, HospitalRoomTypes);
+        return HospitalList(player, HospitalRoomListOffset + (2 * type));
+    }
+
+    private int HospitalList(int player, int offset)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(player);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(player, MaxPlayers);
+        ArgumentOutOfRangeException.ThrowIfNegative(offset);
+        return BinaryPrimitives.ReadUInt16LittleEndian(Data.Span[(ObjectListOffset + (player * HospitalListLength) + offset)..]);
     }
 
     /// <summary>The 12 most recent values of a chart series, oldest first, from the first of its three copies.</summary>

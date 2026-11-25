@@ -107,6 +107,12 @@ strings:
       bid: 'Offri $%1%'
       sold: 'Lotto %1% venduto a %2% per $%3%'
       unsold: 'Lotto %1% invenduto: nessuno ha offerto'
+    netmission:
+      fallback: 'Missione %1%: mancano %2% mesi'
+      all_failed: 'Nessuno ha completato la missione. La partita continua.'
+      passed: 'Hai completato la missione.'
+      failed: 'Non hai completato la missione.'
+      who_failed: 'Non hanno completato la missione: %1%'
     chat:
       caption: 'Chat'
       none: 'Nessuno ha ancora detto niente.'

@@ -228,6 +228,12 @@ strings:
       bid: '$%1% 입찰'
       sold: '구획 %1%: %2%에게 $%3%에 낙찰'
       unsold: '구획 %1%: 입찰이 없어 팔리지 않음'
+    netmission:
+      fallback: '임무 %1%: %2%개월 남음'
+      all_failed: '아무도 임무를 완수하지 못했습니다. 게임은 계속됩니다.'
+      passed: '임무를 완수했습니다.'
+      failed: '임무를 완수하지 못했습니다.'
+      who_failed: '임무 실패: %1%'
     chat:
       caption: '채팅'
       none: '아직 아무도 말하지 않았습니다.'

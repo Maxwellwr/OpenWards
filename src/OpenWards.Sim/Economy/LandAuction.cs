@@ -137,6 +137,7 @@ public sealed class LandAuction
         {
             simulation.SetParcelOwner(auction.Parcel, auction.Leader + 1);
             simulation.Hospitals[auction.Leader].Spend(simulation.Hours, checked((int)auction.Bid), TransactionKind.BuyLand, auction.Parcel.ToString(CultureInfo.InvariantCulture));
+            simulation.Hospitals[auction.Leader].NetMission.Happened(NetCriterion.BuyPlot);
         }
 
         simulation.LastAuction = new AuctionResult(auction.Parcel, auction.Leader, auction.Bid);

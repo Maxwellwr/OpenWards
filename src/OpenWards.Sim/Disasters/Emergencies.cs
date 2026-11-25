@@ -614,6 +614,7 @@ public static class Emergencies
         state.Report = new EmergencyReport(emergency.Cured, emergency.Victims, emergency.Bonus * emergency.Victims, earned, simulation.Tick + (HospitalEmergencies.ReportDays * GameDate.HoursPerDay));
         if (success)
         {
+            hospital.NetMission.Happened(NetCriterion.Emergency);
             hospital.ChangeReputationPercent(SuccessReputationPercent);
             if (earned != 0)
             {

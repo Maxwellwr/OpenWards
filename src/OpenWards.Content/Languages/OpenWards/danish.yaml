@@ -292,6 +292,12 @@ strings:
       bid: 'Byd $%1%'
       sold: 'Grund %1% solgt til %2% for $%3%'
       unsold: 'Grund %1% blev ikke solgt: ingen bød'
+    netmission:
+      fallback: 'Opgave %1%: %2% måneder tilbage'
+      all_failed: 'Ingen klarede opgaven. Spillet fortsætter.'
+      passed: 'Du klarede opgaven.'
+      failed: 'Du klarede ikke opgaven.'
+      who_failed: 'Klarede ikke opgaven: %1%'
     chat:
       caption: 'Chat'
       none: 'Ingen har sagt noget endnu.'
