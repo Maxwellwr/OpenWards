@@ -417,6 +417,7 @@ public class OriginalSaveGameTests
         data.AsSpan(OriginalSaveGame.UsedEmergencyOffset, 9).Fill(1);
         data.AsSpan(OriginalSaveGame.UsedEarthquakeOffset, 2).Fill(1);
         BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.AwardCounterOffset + 13), 25701);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.AwardCounterOffset + 17), 24427);
         var entity = OriginalSaveGame.EntityOffset + (30 * OriginalSaveGame.EntityLength);
         data[entity + 12] = 2;
         data[entity + 168] = 16;
@@ -432,7 +433,10 @@ public class OriginalSaveGameTests
         Assert.Equal((72700, 67, 10, 3, 4, 37), (read.VipArrivalTick, read.VipSlot, read.VipName, read.VipState, read.VipRoomsLeft, read.EmergencyTimer));
         Assert.Equal((8295, 500, true, 29, 3, 75), save.NextEmergency);
         Assert.Equal((9000, 4, true), save.NextEarthquake);
-        Assert.Equal((9, 2, 25701), (save.EmergenciesUsed, save.EarthquakesUsed, save.ResearchPointsThisYear));
+        Assert.Equal((9, 2), (save.EmergenciesUsed, save.EarthquakesUsed));
+
+        // Of the year's two research counters the award reads the points distributed, not those earned (MAXWELL.H2).
+        Assert.Equal((25701, 24427), (save.ResearchEarnedThisYear, save.ResearchDistributedThisYear));
         Assert.Equal(((byte)16, 2, 0x40), (patient.DiagnosedDisease, patient.ProceduresDone, patient.PatientFlags));
     }
 

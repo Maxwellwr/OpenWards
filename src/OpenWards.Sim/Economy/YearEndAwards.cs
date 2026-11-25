@@ -32,6 +32,9 @@ public static class YearEndAwards
     /// <summary>The emergencies a year needs for their award.</summary>
     private const int MinEmergencies = 2;
 
+    /// <summary>The research award and penalty are judged only when more points than this were distributed in the year.</summary>
+    private const int MinResearch = 100;
+
     /// <summary>Whether a prize is a trophy rather than an award or penalty.</summary>
     public static bool IsTrophy(YearEndAwardKind kind) => kind is YearEndAwardKind.ConsistentReputation or YearEndAwardKind.AllCuredTrophy
         or YearEndAwardKind.NoDeathsTrophy or YearEndAwardKind.ManyCuredTrophy or YearEndAwardKind.HappyVips or YearEndAwardKind.DrinksSoldTrophy
@@ -272,8 +275,8 @@ public static class YearEndAwards
                 YearEndAwardKind.EmergenciesSaved, YearEndAwardKind.EmergenciesLost, rules[AwardRules.EmergencyBonus], rules[AwardRules.EmergencyPenalty]);
         }
 
-        // Research: the year's points of research.
-        Plain(prizes, hospital.ResearchPointsThisYear, higherIsBetter: true, rules[AwardRules.NewTechAward], rules[AwardRules.NewTechPoor],
+        // Research: the points the day's distribution put into items this year, judged only above 100.
+        Plain(prizes, hospital.ResearchDistributedThisYear > MinResearch ? hospital.ResearchDistributedThisYear : null, higherIsBetter: true, rules[AwardRules.NewTechAward], rules[AwardRules.NewTechPoor],
             YearEndAwardKind.GoodResearch, YearEndAwardKind.PoorResearch, rules[AwardRules.ResearchBonus], rules[AwardRules.ResearchPenalty]);
 
         // The machines' mean wear.

@@ -190,7 +190,7 @@ public class ImportedCasebookTests
         {
             Month = 3,
             Day = 1,
-            ResearchPointsThisYear = 25701,
+            ResearchDistributedThisYear = 25701,
             Patients =
             [
                 new ImportedPatient("broken_wind", new TilePosition(1, 1), 0.5m, 0.5m, 0.5m, 0.5m, 1000, Diagnosed: true),
@@ -204,7 +204,7 @@ public class ImportedCasebookTests
         Assert.Equal((true, true, People.RoomSeek.Treatment), (patients[0].IsDiagnosed, patients[0].HasPassedReception, patients[0].Seeking));
         Assert.Equal((false, true, People.RoomSeek.Gp), (patients[1].IsDiagnosed, patients[1].HasPassedReception, patients[1].Seeking));
         Assert.False(patients[2].HasPassedReception);
-        Assert.Equal(25701, simulation.Hospitals[0].ResearchPointsThisYear);
+        Assert.Equal(25701, simulation.Hospitals[0].ResearchDistributedThisYear);
     }
 
     [Fact]

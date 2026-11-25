@@ -816,8 +816,14 @@ public sealed class OriginalSaveGame
     public (int Killed, int Shots) RatsThisYear =>
         (BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 21)..]), BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 25)..]));
 
-    /// <summary>The research points the player earned this year, for the year's award.</summary>
-    public int ResearchPointsThisYear => BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 13)..]);
+    /// <summary>The research points the player earned this year. The original game never reads it.</summary>
+    public int ResearchEarnedThisYear => BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 13)..]);
+
+    /// <summary>
+    /// The research points the day's distribution put into items this year: the year's award for research compares
+    /// it with <c>NewTechAward</c> and <c>NewTechPoor</c>.
+    /// </summary>
+    public int ResearchDistributedThisYear => BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 17)..]);
 
     /// <summary>
     /// The next emergency: its tick, bonus per patient, whether one is planned, disease (casebook index), patients and

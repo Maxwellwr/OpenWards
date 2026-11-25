@@ -67,8 +67,9 @@ public sealed class ResearchArea
 /// <summary>
 /// A hospital's research. Each action of a researcher in the research department adds points to a pool. Once a day the
 /// areas, in the research window's order, each take their slider's percent of what is left in the pool, and put it into
-/// the cheapest item they can work on; an item whose points reach its cost is discovered or improved. An area with
-/// nothing to work on gives its points back and its slider goes off. Research costs no money.
+/// the cheapest item they can work on; an item whose points reach its cost is discovered or improved. A cure or diagnosis
+/// area with nothing to work on gives its points back and its slider goes off; a drugs or improvements area gives them
+/// back and keeps its slider; the specialisation area without a disease loses its share. Research costs no money.
 /// </summary>
 /// <remarks>
 /// Where it departs from CorsixTH: CorsixTH gives each researcher points every day and for each use of a desk, computer
@@ -187,8 +188,11 @@ public sealed class ResearchDepartment
     }
 
     /// <summary>
-    /// The day's research: each area in turn takes its slider's percent of what is left in the pool for its cheapest item;
-    /// an area with nothing to work on leaves its points in the pool and its slider goes off.
+    /// The day's research: each area in turn takes its slider's percent of what is left in the pool for its cheapest item.
+    /// With nothing to work on, the cure and diagnosis areas leave their points in the pool and their sliders go off; the
+    /// drugs and improvements areas leave their points in the pool and keep their sliders; and with no disease to
+    /// concentrate on, the specialisation area still takes its share, which is lost. The points put into items count
+    /// towards the year's award for research.
     /// </summary>
     internal void OnEndDay(Simulation simulation, Hospital hospital)
     {
@@ -196,21 +200,27 @@ public sealed class ResearchDepartment
         {
             var area = Area(category);
             area.Current = FindTarget(simulation, hospital, category);
+            var taken = (int)((long)area.Share * Pool / 100);
             if (area.Current.IsNone)
             {
-                area.Share = 0;
-                if (category == ResearchCategory.Specialisation)
+                switch (category)
                 {
-                    Concentrated = string.Empty;
+                    case ResearchCategory.Cure or ResearchCategory.Diagnosis:
+                        area.Share = 0;
+                        break;
+                    case ResearchCategory.Specialisation:
+                        Concentrated = string.Empty;
+                        Pool -= taken;
+                        break;
                 }
 
                 continue;
             }
 
-            var taken = (int)((long)area.Share * Pool / 100);
             if (taken > 0)
             {
                 Pool -= taken;
+                hospital.ResearchDistributedThisYear += taken;
                 Progress(simulation, hospital, area.Current, taken);
             }
         }

@@ -763,9 +763,6 @@ public sealed class DoctorBehaviour : HumanoidBehaviour, IRoomStaff
                         {
                             var actionPoints = Research.ResearchDepartment.ActionPoints(simulation, points, humanoid.Profile?.Skill ?? 0, humanoid.Fatigue);
                             simulation.Hospitals[humanoid.Employer].Research.AddPoints(actionPoints);
-
-                            // For the year's award for research.
-                            simulation.Hospitals[humanoid.Employer].ResearchPointsThisYear += actionPoints;
                         }
 
                         _previousResearchObject = ResearchObjectId;

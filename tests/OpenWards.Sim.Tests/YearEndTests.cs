@@ -102,7 +102,7 @@ public class YearEndTests
         hospital.EmergenciesThisYear = 2;
         hospital.EmergencyVictimsThisYear = 10;
         hospital.EmergencySavedThisYear = 10;
-        hospital.ResearchPointsThisYear = 3000;
+        hospital.ResearchDistributedThisYear = 3000;
         for (var month = 0; month < 12; month++)
         {
             hospital.RecordAwardMonth(new AwardMonth(600, 90, 80, 90, 10));
@@ -133,7 +133,7 @@ public class YearEndTests
 
         // The year's counts start afresh.
         Assert.Equal((0, 0, 0, 0), (hospital.CuredThisYear, hospital.DeathsThisYear, hospital.NotCuredThisYear, hospital.VisitorsThisYear));
-        Assert.Equal((0, 0, 0, 0), (hospital.RatsKilledThisYear, hospital.EmergenciesThisYear, hospital.ResearchPointsThisYear, hospital.SodasSold));
+        Assert.Equal((0, 0, 0, 0), (hospital.RatsKilledThisYear, hospital.EmergenciesThisYear, hospital.ResearchDistributedThisYear, hospital.SodasSold));
         Assert.Empty(hospital.AwardMonths);
     }
 
@@ -210,6 +210,24 @@ public class YearEndTests
     }
 
     [Fact]
+    public void ResearchIsJudgedOnlyWhenMoreThanAHundredPointsWereDistributed()
+    {
+        var simulation = NewSimulation(players: 1, AwardRules.With([new(AwardRules.NewTechPoor, 500)]));
+        var hospital = simulation.Hospitals[0];
+        hospital.VisitorsThisYear = 10;
+
+        // No research handed out: neither award nor penalty, even below NewTechPoor.
+        hospital.ResearchDistributedThisYear = 100;
+        Assert.DoesNotContain(YearEndAwards.Judge(simulation, hospital), a => a.Kind is YearEndAwardKind.PoorResearch or YearEndAwardKind.GoodResearch);
+
+        hospital.ResearchDistributedThisYear = 101;
+        Assert.Contains(YearEndAwards.Judge(simulation, hospital), a => a.Kind == YearEndAwardKind.PoorResearch);
+
+        hospital.ResearchDistributedThisYear = 2001;
+        Assert.Contains(YearEndAwards.Judge(simulation, hospital), a => a.Kind == YearEndAwardKind.GoodResearch);
+    }
+
+    [Fact]
     public void AMonthMeasuresTheStaffPatientsPlantsAndWaiting()
     {
         var simulation = NewSimulation(players: 1);
@@ -261,7 +279,7 @@ public class YearEndTests
     }
 
     /// <summary>A level 2 town of 4 × 2 tiles, the first player's plot the top row (and the second's the bottom one).</summary>
-    private static Simulation NewSimulation(int players)
+    private static Simulation NewSimulation(int players, AwardRules? awards = null)
     {
         var map = new LevelMap(4, 2, players);
         map.ParcelCount = players + 1;
@@ -278,6 +296,6 @@ public class YearEndTests
             map[x, 1].Set(TileFlags.Passable | TileFlags.Hospital, true);
         }
 
-        return new Simulation(map, seed: 1, rules: new LevelRules(10_000, [], [], levelNumber: 2));
+        return new Simulation(map, seed: 1, rules: new LevelRules(10_000, [], [], levelNumber: 2, awards: awards));
     }
 }

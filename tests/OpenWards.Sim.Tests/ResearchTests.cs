@@ -56,14 +56,18 @@ public class ResearchTests
         research.OnEndDay(simulation, hospital);
 
         // Cure has nothing to discover: its points stay in the pool and its slider goes off. Diagnosis takes 20 % of
-        // 1,000, drugs have nothing, improvements take 20 % of the 800 left, specialisation has no disease chosen.
+        // 1,000; drugs have nothing to improve, so their points stay and their slider stays; improvements take 20 % of
+        // the 800 left; with no disease chosen, specialisation's 20 % of the 640 left is lost and its slider stays.
         Assert.Equal(200, research.Objects["ultrascanner"].Points);
         Assert.Equal(160, research.Objects["inflator"].Points);
-        Assert.Equal(640, research.Pool);
+        Assert.Equal(512, research.Pool);
         Assert.Equal(0, research.Area(ResearchCategory.Cure).Share);
-        Assert.Equal(0, research.Area(ResearchCategory.Drugs).Share);
-        Assert.Equal(0, research.Area(ResearchCategory.Specialisation).Share);
-        Assert.Equal(40, research.Total);
+        Assert.Equal(20, research.Area(ResearchCategory.Drugs).Share);
+        Assert.Equal(20, research.Area(ResearchCategory.Specialisation).Share);
+        Assert.Equal(80, research.Total);
+
+        // Only the points put into items count towards the year's award.
+        Assert.Equal(360, hospital.ResearchDistributedThisYear);
     }
 
     [Fact]

@@ -222,7 +222,7 @@ public static class OriginalSaveImporter
                 : null,
             NextEmergency = (save.EmergenciesUsed, save.NextEmergency is { Planned: true, Tick: var emergencyTick } ? Math.Max(0, emergencyTick - save.Tick) : null),
             NextEarthquake = (save.EarthquakesUsed, save.NextEarthquake is { Planned: true, Tick: var quakeTick } ? Math.Max(0, quakeTick - save.Tick) : null, save.NextEarthquake.Strength),
-            ResearchPointsThisYear = save.ResearchPointsThisYear,
+            ResearchDistributedThisYear = save.ResearchDistributedThisYear,
             RatsThisYear = save.RatsThisYear,
             Litter = LitterOf(save),
             Ratholes = Enumerable.Range(0, Math.Min(hospital.RatholeCount, OriginalSaveHospital.MaxRatholes))

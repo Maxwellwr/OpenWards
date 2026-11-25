@@ -266,8 +266,8 @@ public sealed record ImportedGame
     /// <summary>The rat holes: the corridor tile each opens onto and the wall it is in.</summary>
     public IReadOnlyList<(TilePosition Tile, Direction Wall)> Ratholes { get; init; } = [];
 
-    /// <summary>The research points earned this year, for the year's award, or null for none.</summary>
-    public int? ResearchPointsThisYear { get; init; }
+    /// <summary>The research points distributed to items this year, for the year's award, or null for none.</summary>
+    public int? ResearchDistributedThisYear { get; init; }
 
     /// <summary>Where the VIP visit stands, or null to keep the level's.</summary>
     public ImportedVip? Vip { get; init; }
@@ -722,9 +722,9 @@ public static class GameImport
             hospital.Vips.DaysSinceLast = days;
         }
 
-        if (game.ResearchPointsThisYear is > 0 and var research)
+        if (game.ResearchDistributedThisYear is > 0 and var research)
         {
-            hospital.ResearchPointsThisYear = research;
+            hospital.ResearchDistributedThisYear = research;
         }
 
         if (game.RatsThisYear is { } rats)

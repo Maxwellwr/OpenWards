@@ -222,10 +222,10 @@ public enum YearEndAwardKind : byte
     /// <summary>Penalty (in reputation): fewer than <c>EmergencyPoor</c> %.</summary>
     EmergenciesLost,
 
-    /// <summary>Award (in reputation): more research than <c>NewTechAward</c> points.</summary>
+    /// <summary>Award (in reputation): more points distributed to research this year than <c>NewTechAward</c>.</summary>
     GoodResearch,
 
-    /// <summary>Penalty (in reputation): less than <c>NewTechPoor</c> points.</summary>
+    /// <summary>Penalty (in reputation): fewer points distributed to research this year than <c>NewTechPoor</c>.</summary>
     PoorResearch,
 
     /// <summary>Award (in reputation): the machines worn less than <c>WellKeptTechAward</c> % on average.</summary>
@@ -666,8 +666,11 @@ public sealed class Hospital
     /// <summary>Of those, the ones cured in time.</summary>
     public int EmergencySavedThisYear { get; internal set; }
 
-    /// <summary>Points of research this year's researchers' actions brought.</summary>
-    public int ResearchPointsThisYear { get; internal set; }
+    /// <summary>
+    /// Points of research the day's distribution put into items this year (the original's second counter, not the points
+    /// earned), for the year's award for research.
+    /// </summary>
+    public int ResearchDistributedThisYear { get; internal set; }
 
     /// <summary>The player (0-based) the hospital belongs to.</summary>
     public int Player { get; }
@@ -1727,7 +1730,7 @@ public sealed class Hospital
         EmergenciesThisYear = 0;
         EmergencyVictimsThisYear = 0;
         EmergencySavedThisYear = 0;
-        ResearchPointsThisYear = 0;
+        ResearchDistributedThisYear = 0;
         _awardMonths.Clear();
         LowestReputationThisYear = Reputation;
         InflationYears++;
@@ -1942,7 +1945,7 @@ public sealed class Hospital
         writer.WriteInt32(EmergenciesThisYear);
         writer.WriteInt32(EmergencyVictimsThisYear);
         writer.WriteInt32(EmergencySavedThisYear);
-        writer.WriteInt32(ResearchPointsThisYear);
+        writer.WriteInt32(ResearchDistributedThisYear);
         writer.WriteInt32(_awardMonths.Count);
         foreach (var month in _awardMonths)
         {
@@ -2243,7 +2246,7 @@ public sealed class Hospital
             hospital.EmergenciesThisYear = reader.ReadInt32();
             hospital.EmergencyVictimsThisYear = reader.ReadInt32();
             hospital.EmergencySavedThisYear = reader.ReadInt32();
-            hospital.ResearchPointsThisYear = reader.ReadInt32();
+            hospital.ResearchDistributedThisYear = reader.ReadInt32();
             var awardMonths = reader.ReadCount(MaxAwardMonths);
             for (var i = 0; i < awardMonths; i++)
             {
