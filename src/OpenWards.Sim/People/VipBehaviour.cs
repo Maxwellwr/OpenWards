@@ -179,6 +179,18 @@ public sealed class VipBehaviour : HumanoidBehaviour, IQueueMember
         }
     }
 
+    /// <summary>
+    /// An imported VIP in the middle of a visit: reception is behind them and <paramref name="roomsLeft"/> rooms are
+    /// still to be seen; they stand about for the rest of the day first.
+    /// </summary>
+    internal void ResumeImportedVisit(int roomsLeft)
+    {
+        VisitedRooms = Math.Clamp(RoomsToVisit - roomsLeft, 0, RoomsToVisit);
+        Phase = VipPhase.Waiting;
+        DeskId = 0;
+        Waiting = 1;
+    }
+
     /// <summary><c>handleVIP</c>: reception has seen the VIP, who stands there for the rest of the day.</summary>
     internal void OnSeenAtReception()
     {

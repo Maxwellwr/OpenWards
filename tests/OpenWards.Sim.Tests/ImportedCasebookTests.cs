@@ -158,6 +158,88 @@ public class ImportedCasebookTests
         Assert.Equal((new TilePosition(3, 3), Entities.Direction.West), (hole.Tile, hole.Wall));
     }
 
+    [Fact]
+    public void AVipOnTheWayArrivesAsMuchLaterAsInTheSave()
+    {
+        var simulation = NewSimulation();
+
+        GameImport.Apply(simulation, new ImportedGame { Month = 3, Day = 1, Vip = new ImportedVip(Economy.VipState.Travelling, 3, 1387, 0, null) });
+
+        var vips = simulation.Hospitals[0].Vips;
+        Assert.Equal((Economy.VipState.Travelling, 3, simulation.Tick + 1387), (vips.State, vips.InvitedName, vips.ArrivalTick));
+    }
+
+    [Fact]
+    public void AVipInTheHospitalCarriesOnWithTheRoomsLeft()
+    {
+        var simulation = NewSimulation();
+
+        GameImport.Apply(simulation, new ImportedGame { Month = 3, Day = 1, Vip = new ImportedVip(Economy.VipState.Visiting, 10, -4080, 4, new TilePosition(2, 2)) });
+
+        var vip = simulation.Entities.OfType<Entities.Humanoid>().Select(h => h.Behaviour).OfType<People.VipBehaviour>().Single();
+        Assert.Equal((10, People.VipBehaviour.RoomsToVisit - 4, People.VipPhase.Waiting), (vip.Name, vip.VisitedRooms, vip.Phase));
+        Assert.Equal(Economy.VipState.Visiting, simulation.Hospitals[0].Vips.State);
+    }
+
+    [Fact]
+    public void PatientsPickUpTheirRouteAndTheYearsResearchCounts()
+    {
+        var simulation = NewSimulation();
+
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 3,
+            Day = 1,
+            ResearchPointsThisYear = 25701,
+            Patients =
+            [
+                new ImportedPatient("broken_wind", new TilePosition(1, 1), 0.5m, 0.5m, 0.5m, 0.5m, 1000, Diagnosed: true),
+                new ImportedPatient("broken_wind", new TilePosition(4, 4), 0.5m, 0.5m, 0.5m, 0.5m, 400, SeenByGp: true),
+                new ImportedPatient("broken_wind", new TilePosition(1, 4), 0.5m, 0.5m, 0.5m, 0.5m, 0),
+            ],
+        });
+
+        var patients = simulation.Entities.OfType<Entities.Humanoid>().Where(h => h.Behaviour is People.PatientBehaviour).OrderBy(h => h.Id)
+            .Select(h => (People.PatientBehaviour)h.Behaviour!).ToList();
+        Assert.Equal((true, true, People.RoomSeek.Treatment), (patients[0].IsDiagnosed, patients[0].HasPassedReception, patients[0].Seeking));
+        Assert.Equal((false, true, People.RoomSeek.Gp), (patients[1].IsDiagnosed, patients[1].HasPassedReception, patients[1].Seeking));
+        Assert.False(patients[2].HasPassedReception);
+        Assert.Equal(25701, simulation.Hospitals[0].ResearchPointsThisYear);
+    }
+
+    [Fact]
+    public void AnEmergencyUnderWayKeepsItsPatientsAndWatch()
+    {
+        var simulation = NewSimulation();
+
+        GameImport.Apply(simulation, new ImportedGame
+        {
+            Month = 3,
+            Day = 1,
+            Emergency = new ImportedEmergency("broken_wind", 3, 1, 500, 75, 1000),
+            Patients = [new ImportedPatient("broken_wind", new TilePosition(1, 1), 0.5m, 0.5m, 0.5m, 0.5m, 1000, IsEmergency: true)],
+        });
+
+        var emergency = simulation.Hospitals[0].Emergencies.Current;
+        Assert.NotNull(emergency);
+        Assert.Equal((3, 1, 500, 75, true), (emergency.Victims, emergency.Cured, emergency.Bonus, emergency.Percentage, emergency.IsAccepted));
+        Assert.Single(emergency.PatientIds);
+        Assert.Equal((1000 / Disasters.HospitalEmergencies.WatchTickRate, 1000 % Disasters.HospitalEmergencies.WatchTickRate), (emergency.WatchTimer, emergency.WatchTickTimer));
+    }
+
+    [Fact]
+    public void ThePlannedEarthquakeComesOnTheSavesDay()
+    {
+        var simulation = NewSimulation();
+
+        GameImport.Apply(simulation, new ImportedGame { Month = 3, Day = 1, NextEarthquake = (2, 10 * Calendar.GameDate.HoursPerDay, 4) });
+
+        var quake = simulation.Earthquakes;
+        var expected = Calendar.GameDate.FromHours(simulation.Hours + (10 * Calendar.GameDate.HoursPerDay));
+        Assert.True(quake.IsNextPlanned);
+        Assert.Equal((expected.MonthOfGame, expected.Day, 4), (quake.StartMonth, quake.StartDay, quake.Size));
+    }
+
     private static Simulation NewSimulation()
     {
         var map = new LevelMap(6, 6, 1);

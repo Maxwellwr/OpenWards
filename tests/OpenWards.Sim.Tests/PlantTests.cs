@@ -23,6 +23,20 @@ public class PlantTests
         [Direction.North] = new([new(0, 0, OnlySide)]),
     }, CorridorObject: true);
 
+    [Theory]
+    [InlineData(400, PlantState.Healthy, 64)]
+    [InlineData(200, 1, 32)]
+    [InlineData(-11, 3, 58.72)]
+    [InlineData(-140, PlantState.Dead, 64)]
+    public void AnOriginalSavesWaterSetsTheState(int water, int state, double daysLeft)
+    {
+        var plant = new PlantState();
+
+        plant.ImportOriginalWater(water);
+
+        Assert.Equal((state, (decimal)daysLeft), (plant.State, plant.DaysLeft));
+    }
+
     [Fact]
     public void APlantCountsDownOneDayPlusTheWarmthOfItsTile()
     {
