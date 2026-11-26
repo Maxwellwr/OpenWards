@@ -57,10 +57,7 @@ public class HandymanTests
         simulation.Schedule(0, new PlaceObjectCommand("plant", new TilePosition(9, 9), Direction.South));
         simulation.Step();
         var plant = Assert.Single(simulation.Entities.OfType<RoomObject>()).Plant!;
-        for (var day = 0; day < 64 * 2; day++)
-        {
-            plant.OnEndDay(0m);
-        }
+        plant.ImportOriginalWater(200);
 
         Assert.Equal(2, plant.State);
         var handyman = Hire(simulation, new TilePosition(3, 3));
@@ -79,7 +76,7 @@ public class HandymanTests
         Assert.NotNull(wateredFrom);
         Assert.Equal(1, Math.Abs(wateredFrom.Value.X - 9) + Math.Abs(wateredFrom.Value.Y - 9));
         Assert.Equal(PlantState.Healthy, plant.State);
-        Assert.Equal(PlantState.DaysBetweenStates, plant.DaysLeft);
+        Assert.Equal(PlantState.FullWater, plant.Water);
     }
 
     [Fact]

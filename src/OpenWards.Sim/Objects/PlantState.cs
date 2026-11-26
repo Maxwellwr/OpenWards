@@ -1,5 +1,6 @@
-// Plants drooping without water, ported from CorsixTH CorsixTH/Lua/objects/plant.lua (Plant:Plant, setNextState,
-// tickDay, needsWatering, isPleasingFactor, isDying).
+// Plants drooping without water, as in the original Theme Hospital: the water, its loss, the frames and the call for
+// watering follow the game expert's answer of 26.11.2026 (the developers' notes, checked against the original's saves).
+// The pleasing factor for staff comes from CorsixTH CorsixTH/Lua/objects/plant.lua (isPleasingFactor).
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using OpenWards.Sim.Serialization;
@@ -7,91 +8,119 @@ using OpenWards.Sim.Serialization;
 namespace OpenWards.Sim.Objects;
 
 /// <summary>
-/// How thirsty a plant is: healthy, drooping twice, dying, then dead (CorsixTH's <c>current_state</c> 0 to 4, drawn as
-/// the idle animation's first frame plus the state). Every 64 days, sooner where it is warm, it gets one state worse.
+/// How thirsty a plant is. A watered plant has <see cref="FullWater"/> water. Every <see cref="DroopInterval"/> ticks it
+/// loses 1 with a chance of one in two, whatever the warmth or the game speed: about 1.56 a day, so from watered to dry
+/// takes about 256 days. It droops a frame at 320, 240, 160 and 80 water. It never dies: below 0 the water runs on to
+/// <see cref="LowestWater"/>, then starts again from 0 with a more urgent call for watering.
 /// </summary>
-/// <remarks>The adviser does not warn about thirsty plants yet.</remarks>
 public sealed class PlantState
 {
-    /// <summary>Days between states at 0 °C (CorsixTH's <c>days_between_states</c>, to match TH's rough 50 at ideal warmth).</summary>
-    public const int DaysBetweenStates = 64;
+    /// <summary>The water of a freshly watered plant.</summary>
+    public const int FullWater = 400;
+
+    /// <summary>How much water each frame of drooping lasts.</summary>
+    public const int WaterPerState = 80;
+
+    /// <summary>Where the water of a long dry plant turns back to 0.</summary>
+    public const int LowestWater = -40;
+
+    /// <summary>How many ticks there are between the plants' draws for losing water.</summary>
+    public const int DroopInterval = 16;
+
+    /// <summary>How urgent the call for watering is once the water has run down to <see cref="LowestWater"/>.</summary>
+    public const int WrappedPriority = 10;
 
     /// <summary>The healthy state.</summary>
     public const int Healthy = 0;
 
-    /// <summary>The dead state (<c>phases</c> − 1).</summary>
-    public const int Dead = Phases - 1;
+    /// <summary>The most drooping state, which looks dead (<c>phases</c> − 1).</summary>
+    public const int Wilted = Phases - 1;
 
-    /// <summary>How many states there are (<c>phases</c>).</summary>
+    /// <summary>How many states (animation frames) there are.</summary>
     public const int Phases = 5;
 
-    /// <summary>The state, from <see cref="Healthy"/> to <see cref="Dead"/>.</summary>
-    public int State { get; private set; }
+    /// <summary>The water, from <see cref="LowestWater"/> + 1 to <see cref="FullWater"/>.</summary>
+    public int Water { get; private set; } = FullWater;
 
-    /// <summary>Days left until the next state, counted down by 1 plus the tile's temperature each day (<c>days_left</c>).</summary>
-    public decimal DaysLeft { get; private set; } = DaysBetweenStates;
+    /// <summary>Whether the water has run down to <see cref="LowestWater"/> since the plant was last watered.</summary>
+    public bool HasRunDry { get; private set; }
 
-    /// <summary>Whether a handyman should water it (<c>needsWatering</c>).</summary>
+    /// <summary>The state, from <see cref="Healthy"/> to <see cref="Wilted"/>: one more at each 80 water lost.</summary>
+    public int State => Water > FullWater - WaterPerState ? Healthy : Math.Min(Wilted, (FullWater - Water) / WaterPerState);
+
+    /// <summary>Whether a handyman should water it: from the first drooping frame on.</summary>
     public bool NeedsWatering => State != Healthy;
 
-    /// <summary>How pleasing the plant is to look at, 1 (dead) to 5 (healthy) (<c>isPleasingFactor</c>).</summary>
+    /// <summary>How urgent watering it is: 1 to 4 by the frame, more once it has run dry; 0 when it needs no water.</summary>
+    public int WateringPriority => HasRunDry ? WrappedPriority : State;
+
+    /// <summary>Whether patients see it withered: only once its water is below 0, whatever the frame.</summary>
+    public bool IsWithered => Water < 0;
+
+    /// <summary>How pleasing the plant is to staff, 1 (most drooping) to 5 (healthy) (CorsixTH's <c>isPleasingFactor</c>).</summary>
     public int PleasingFactor => Phases - State;
 
-    /// <summary>Whether the plant droops already or will within three days (<c>isDying</c>).</summary>
-    public bool IsDying => State != Healthy || DaysLeft < 3;
-
-    /// <summary>One day (<c>Plant:tickDay</c>): a warm tile makes the plant thirsty sooner.</summary>
-    /// <param name="temperature">The tile's temperature, 0 to 1 for 0 to 50 °C.</param>
-    internal void OnEndDay(decimal temperature)
+    /// <summary>One of the plants' draws every <see cref="DroopInterval"/> ticks: one in two loses a drop of water.</summary>
+    internal void Droop(SimRandom random)
     {
-        DaysLeft -= 1 + temperature;
-        if (DaysLeft < 1)
+        if (random.Next(2) != 0)
         {
-            DaysLeft = DaysBetweenStates;
-            if (State < Dead)
-            {
-                State++;
-            }
+            return;
+        }
+
+        Water--;
+        if (Water <= LowestWater)
+        {
+            Water = 0;
+            HasRunDry = true;
         }
     }
 
-    /// <summary>The water of a freshly watered plant in the original game's saves.</summary>
-    public const int OriginalFullWater = 400;
-
     /// <summary>
-    /// An original save's plant water (400 when watered, falling a few points a day and below 0 when long dry): the
-    /// water used up spreads evenly over the states up to the last before death, and as much again below 0 kills it.
+    /// An original save's plant water (400 when watered, below 0 when long dry), as it is: the original's water is this
+    /// one. Whether it had already run dry once the save does not tell, so it has not.
     /// </summary>
-    /// <remarks>An estimate: the saves show the water, not when the original draws a plant drooping.</remarks>
     internal void ImportOriginalWater(int water)
     {
-        var perState = (decimal)OriginalFullWater / (Dead - 1);
-        var steps = Math.Max(0m, (OriginalFullWater - water) / perState);
-        State = (int)Math.Min(Math.Floor(steps), Dead);
-        DaysLeft = State == Dead ? DaysBetweenStates : Math.Max(1m, Math.Round(DaysBetweenStates * (1 - (steps - Math.Floor(steps))), 2));
+        Water = water <= LowestWater ? 0 : Math.Min(water, FullWater);
+        HasRunDry = false;
     }
 
-    /// <summary><c>Plant:restoreToFullHealth</c>: watered, the plant is healthy again and starts its days afresh.</summary>
+    /// <summary>Watered, the plant is healthy again with full water (the original's handyman sets 400 and the first frame).</summary>
     internal void Restore()
     {
-        State = Healthy;
-        DaysLeft = DaysBetweenStates;
+        Water = FullWater;
+        HasRunDry = false;
     }
 
     internal void Write(SimWriter writer)
     {
-        writer.WriteInt32(State);
-        writer.WriteDecimal(DaysLeft);
+        writer.WriteInt32(Water);
+        writer.WriteBool(HasRunDry);
     }
 
     internal static PlantState Read(SimReader reader)
     {
-        var state = reader.ReadInt32();
-        if (state is < Healthy or > Dead)
+        if (reader.Version is not 0 and < 119)
         {
-            throw new InvalidDataException($"Plant state {state} is out of range.");
+            // Before format 119 a plant had a state 0 to 4 and the days left until the next one, out of 64.
+            var state = reader.ReadInt32();
+            if (state is < Healthy or > Wilted)
+            {
+                throw new InvalidDataException($"Plant state {state} is out of range.");
+            }
+
+            var daysLeft = reader.ReadDecimal();
+            var lost = (int)Math.Round(WaterPerState * (1 - (Math.Clamp(daysLeft, 0m, 64m) / 64m)));
+            return new PlantState { Water = FullWater - (state * WaterPerState) - Math.Min(lost, WaterPerState - 1) };
         }
 
-        return new PlantState { State = state, DaysLeft = reader.ReadDecimal() };
+        var water = reader.ReadInt32();
+        if (water is <= LowestWater or > FullWater)
+        {
+            throw new InvalidDataException($"Plant water {water} is out of range.");
+        }
+
+        return new PlantState { Water = water, HasRunDry = reader.ReadBool() };
     }
 }
