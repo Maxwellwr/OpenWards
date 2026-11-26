@@ -29,6 +29,5 @@ The full list is in `CHANGELOG.md`.
 - CorsixTH saved games cannot be loaded.
 - Network play is experimental: land auctions and network missions have not been tried over a real network yet, and
   there are no computer opponents in network games.
-- In Russian, the research screen's "Диагностическое оборудование" runs into the "Готово" box.
 
 Please report problems at https://github.com/Maxwellwr/OpenWards/issues, with `crash.log` if the game crashed.

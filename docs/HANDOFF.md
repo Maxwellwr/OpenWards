@@ -64,8 +64,7 @@ Importing the original's saves carries over almost everything that changes in pl
 estimate. `tools/OpenWards.SaveDump` (`coverage`, `diff`) maps new fields from two saves with one action between them.
 
 Left for later: a plant adviser as in the original, live computer opponents in network games, a live check of land
-auctions and network missions over a real network, and the Russian research screen's "Диагностическое
-оборудование" running into the "Готово" box.
+auctions and network missions over a real network.
 
 The project was renamed from CorsixNet to OpenWards on 2026-11-18 (solution, projects, namespaces, the `openwards.*`
 strings, the `OW0001`–`OW0003` analyzer rules, the `OPENWARDS_*` environment variables). The client moves an old
