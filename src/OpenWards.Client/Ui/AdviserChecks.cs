@@ -1,10 +1,11 @@
 // What the adviser says and when, ported from CorsixTH CorsixTH/Lua/hospitals/player_hospital.lua
 // (dailyAdviceChecks, _adviseMoney, _adviseStaffRoom, _adviseToilets, _adviseHeatingForPatients,
-// _adviseHeatingForStaff, _adviseDrinksMachines, advisePlants, checkReceptionAdvice, giveAdvice, msgCured, msgKilled,
+// _adviseHeatingForStaff, _adviseDrinksMachines, checkReceptionAdvice, giveAdvice, msgCured, msgKilled,
 // onEndDay's VIP announcement), staff/staff.lua (the once-only pay rise advice), hospital.lua (boiler) and
 // disasters/earthquake.lua; room.lua (onHumanoidEnter's desk warnings) and the staff classes'
 // adviseWrongPersonForThisRoom. Message keys as in CorsixTH/Lua/languages/original_strings.lua; the no_desk messages
-// are CorsixTH's own (languages/english.lua).
+// are CorsixTH's own (languages/english.lua). The advice on plants is the original Theme Hospital's instead, after the
+// game expert's answer of 27.11.2026 (the developers' notes): see PlantAdvice.
 // Copyright (c) the CorsixTH contributors. Licensed under the MIT license; see THIRD-PARTY-NOTICES.md.
 
 using System.Globalization;
@@ -14,6 +15,7 @@ using OpenWards.Sim.Calendar;
 using OpenWards.Sim.Disasters;
 using OpenWards.Sim.Entities;
 using OpenWards.Sim.Maps;
+using OpenWards.Sim.Objects;
 using OpenWards.Sim.People;
 using OpenWards.Sim.Rooms;
 using OpenWards.Sim.Staff;
@@ -90,8 +92,14 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
     public static readonly Advice BoilerMinimum = new(21, 12, "The boiler has broken: the heating is off.");
     public static readonly Advice BoilerResolved = new(21, 13, "The boiler has been repaired.");
 
-    // plants, drinks
+    // plants (the original's rules: PlantAdvice)
     public static readonly Advice NeedHandymanPlants = new(11, 93, "Hire a handyman to water the plants.");
+    public static readonly Advice DesperateNeedForWatering = new(28, 40, "You badly need a handyman to look after your plants.");
+    public static readonly Advice ChangePrioritiesToPlants = new(28, 41, "Change your handymen's priorities so that they water the plants more.");
+    public static readonly Advice PlantsDying = new(28, 42, "Your plants are dying for want of water. Put more handymen on it.");
+    public static readonly Advice PlantsThirsty = new(11, 91, "You need to look after your plants. They are thirsty.");
+    public static readonly Advice PlantsThriving = new(28, 44, "Very good: your plants are thriving.");
+    public static readonly Advice TooManyPlants = new(11, 92, "You have far too many plants.");
 
     // handymen (Patient:tickDay's litter, World:newObject, CallsDispatcher:callForRepair)
     public static readonly Advice QueueTooLongSendDoctor = new(11, 132, "The queue for your %s is too long. Send another doctor there.");
@@ -102,7 +110,6 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
     public static readonly Advice ManyBenches = new(11, 76, "Patients have enough seating now. Nice one.");
     public static readonly Advice PlentyOfBenches = new(28, 26, "There's plenty of seating, so that's not a problem.");
     public static readonly Advice FewHaveToStand = new(28, 27, "Hardly anyone has to stand in your hospital. The patients will be pleased about that.");
-    public static readonly Advice PlantsThirsty = new(11, 91, "You need to look after your plants. They are thirsty.");
     public static readonly Advice PeopleDidItOnTheFloor = new(28, 13, "Some of your patients couldn't hold it. Build more toilets.");
     public static readonly Advice FaxReceived = new(11, 136, "The icon that just popped up on the bottom panel is a fax: click it to read it.");
     public static readonly Advice EmergencyArrived = new(11, 22, "The emergency patients have arrived. Treat them quickly.");
@@ -227,8 +234,17 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
     /// </summary>
     public bool StartedWithTutorial { get; set; }
 
-    /// <summary>Plants the adviser has said are thirsty (<c>plant_announced</c>).</summary>
-    private readonly HashSet<int> _announcedPlants = [];
+    /// <summary>The original's rule asking for a handyman to water the plants.</summary>
+    private readonly AdviceRule _needHandymanForPlants = new(20);
+
+    /// <summary>The original's rule judging the hospital's care for its plants (<see cref="PlantCare"/>).</summary>
+    private readonly AdviceRule _plantCare = new(15);
+
+    /// <summary>The original's rule on too many plants.</summary>
+    private readonly AdviceRule _tooManyPlants = new(20);
+
+    /// <summary>Whether a patient of the hospital has been about since the game was started or loaded.</summary>
+    private bool _seenPatient;
 
     /// <summary>Whether the first fax has been explained (<c>message_popup</c>).</summary>
     private bool _faxAdvised;
@@ -253,6 +269,10 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
         {
             // A new game or a loaded one: start watching from here.
             _last = snapshot;
+            _needHandymanForPlants.Reset();
+            _plantCare.Reset();
+            _tooManyPlants.Reset();
+            _seenPatient = false;
             return;
         }
 
@@ -300,6 +320,7 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
 
         HandymanAdvice(snapshot, last, Say);
         OneOffAdvice(simulation, player, snapshot, last, Say);
+        PlantAdvice(simulation, player, advice => Say(advice));
 
         if (snapshot.Deaths > last.Deaths)
         {
@@ -560,9 +581,6 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
                     _temperatureAdvice = true;
                 }
 
-                break;
-            case 18 when !Staff(simulation, player).Any(s => s.Profile!.Class == StaffClass.Handyman) && Count(simulation, player, "plant") > 0:
-                Say(NeedHandymanPlants);
                 break;
             case 20 when !_temperatureAdvice && !hospital.IsHeatingBroken:
                 var staffWarmth = Average(Staff(simulation, player), h => h.Warmth, 0.3m);
@@ -910,7 +928,120 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
     }
 
     /// <summary>
-    /// Advice on things happening: a plant drooping badly for the first time (<c>plants_thirsty</c>, once a plant), the
+    /// The original's advice on plants, looked at every frame while the adviser has nothing to say, the first rule to
+    /// apply speaking: with plants and no handyman, ask for one (even before any patient); with three plants or more and
+    /// a patient seen since the game was started or loaded, judge the care for them (<see cref="CareAdvice"/>); and with
+    /// more than one plant to each eight tiles of the land bought, say it is a jungle. Each rule waits longer each time it
+    /// has spoken (<see cref="AdviceRule"/>).
+    /// </summary>
+    private void PlantAdvice(Simulation simulation, int player, Action<Advice> say)
+    {
+        if (!adviser.IsEnabled || adviser.Current is not null || adviser.Queued > 0)
+        {
+            return;
+        }
+
+        _seenPatient = _seenPatient || simulation.Entities.Any(e => e is Humanoid { Behaviour: PatientBehaviour } h && h.HospitalPlayer == player);
+        var plants = PlantCare.Plants(simulation, player);
+        if (plants == 0)
+        {
+            return;
+        }
+
+        var tick = simulation.Tick;
+        var handymen = Staff(simulation, player).Count(s => s.Profile!.Class == StaffClass.Handyman);
+        if (handymen == 0 && _needHandymanForPlants.IsReady(tick))
+        {
+            _needHandymanForPlants.Spoke(tick);
+            say(NeedHandymanPlants);
+            return;
+        }
+
+        if (!_seenPatient)
+        {
+            return;
+        }
+
+        if (plants >= PlantCare.FewestJudged && _plantCare.IsReady(tick) && CareAdvice(simulation.Hospitals[player].PlantCare, plants, handymen) is { } care)
+        {
+            _plantCare.Spoke(tick);
+            say(care);
+            return;
+        }
+
+        if (_tooManyPlants.IsReady(tick) && plants * 8 > OwnedTiles(simulation.Map, player))
+        {
+            _tooManyPlants.Spoke(tick);
+            say(TooManyPlants);
+        }
+    }
+
+    /// <summary>
+    /// What the original's adviser says of the care for <paramref name="plants"/> plants scoring <paramref name="score"/>
+    /// out of 55 each, or null for nothing: below 15 % a handyman is wanted (none hired) or the handymen's priorities
+    /// should change (two or more; with just one he says nothing), below 40 % the plants are dying, below 70 % they are
+    /// thirsty, above 95 % they thrive. The praise between (<c>plants_are_well</c>) is never given in the original.
+    /// </summary>
+    /// <remarks>
+    /// The original works the share out in 32 bits, which overflows with a score above 1310 (24 well kept plants or
+    /// more) and then asks for handymen; OpenWards does not copy that.
+    /// </remarks>
+    internal static Advice? CareAdvice(int score, int plants, int handymen) => PlantCare.Share(score, plants) switch
+    {
+        null => null,
+        < 0.15m => handymen switch
+        {
+            0 => DesperateNeedForWatering,
+            1 => null,
+            _ => ChangePrioritiesToPlants,
+        },
+        < 0.40m => PlantsDying,
+        < 0.70m => PlantsThirsty,
+        <= 0.95m => null,
+        _ => PlantsThriving,
+    };
+
+    /// <summary>The tiles of the land <paramref name="player"/> has bought, the gardens too.</summary>
+    private static int OwnedTiles(LevelMap map, int player)
+    {
+        var count = 0;
+        for (var y = 0; y < map.Height; y++)
+        {
+            for (var x = 0; x < map.Width; x++)
+            {
+                if (map.GetParcelOwner(map[x, y].Parcel) == player + 1)
+                {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// One of the original adviser's rules: it may speak at once, then again only once more than
+    /// <c>pause × times × 102.4</c> ticks have passed since it last spoke, where <c>times</c> is how often it has spoken
+    /// since the game was started or loaded.
+    /// </summary>
+    internal sealed class AdviceRule(int pause)
+    {
+        private int _times;
+        private long _last;
+
+        public bool IsReady(long tick) => _times == 0 || (tick - _last) * 10 > (long)pause * _times * 1024;
+
+        public void Spoke(long tick)
+        {
+            _times++;
+            _last = tick;
+        }
+
+        public void Reset() => _times = 0;
+    }
+
+    /// <summary>
+    /// Advice on things happening: the
     /// first patient to pee on the floor (<c>people_did_it_on_the_floor</c>), the first fax in a campaign level
     /// (<c>fax_received</c>), the emergency helicopter landing (<c>information.emergency</c>), the health inspector
     /// setting off (<c>epidemic_health_inspector</c>), a reception desk bought (<c>msgReceptionDesk</c>), and a patient
@@ -918,14 +1049,6 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
     /// </summary>
     private void OneOffAdvice(Simulation simulation, int player, Snapshot snapshot, Snapshot last, Action<Advice, object[]> say)
     {
-        foreach (var plant in snapshot.ThirstyPlants)
-        {
-            if (_announcedPlants.Add(plant))
-            {
-                say(PlantsThirsty, []);
-            }
-        }
-
         if (snapshot.DidItOnFloor && !last.DidItOnFloor)
         {
             say(PeopleDidItOnTheFloor, []);
@@ -1049,7 +1172,6 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
         bool Littered,
         bool HasHandyman,
         IReadOnlyDictionary<int, (bool NeedsRepair, bool IsNearlyWornOut, bool IsRepairCalled)> Machines,
-        IReadOnlyList<int> ThirstyPlants,
         bool DidItOnFloor,
         int Faxes,
         int HelicopterPhase,
@@ -1086,10 +1208,6 @@ internal sealed class AdviserChecks(Adviser adviser, Random random)
                 simulation.Entities.OfType<RoomObject>()
                     .Where(o => o.Machine is not null && !o.IsDestroyed && IsInHospital(simulation.Map, player, o.Tile))
                     .ToDictionary(o => o.Id, o => (o.Machine!.NeedsRepair, o.Machine.IsNearlyWornOut, o.Machine.IsRepairCalled)),
-                simulation.Entities.OfType<RoomObject>()
-                    .Where(o => o.Plant is { State: > 1 } && IsInHospital(simulation.Map, player, o.Tile))
-                    .Select(o => o.Id)
-                    .ToList(),
                 hospital.DidItOnFloor,
                 Windows.FaxWindow.Pending(simulation, player).Count(),
                 hospital.Emergencies.HelicopterPhase ?? int.MinValue,

@@ -332,6 +332,9 @@ public sealed record ImportedGame
     /// </summary>
     public (int Phase, long HoursToStep, int Size)? EarthquakeUnderWay { get; init; }
 
+    /// <summary>The score for looking after the plants (see <see cref="Objects.PlantCare"/>), or null to estimate it from the plants.</summary>
+    public int? PlantCare { get; init; }
+
     /// <summary>The rats killed and shots fired this year, or null for none.</summary>
     public (int Killed, int Shots)? RatsThisYear { get; init; }
 
@@ -649,6 +652,9 @@ public static class GameImport
         }
 
         ImportYearCounters(hospital, game);
+
+        // The save's score for the plants as it is (its plants add up to it as they were put down); without one, an estimate.
+        hospital.PlantCare = game.PlantCare ?? Objects.PlantCare.Estimate(simulation, hospital.Player);
         ImportVip(simulation, hospital, game.Vip, problems);
         ImportEmergencies(simulation, hospital, game, emergencyPatients);
         if (game.EarthquakeUnderWay is { Phase: >= 1 and <= 4 } underWay)

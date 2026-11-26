@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 121;
+    private const int FormatVersion = 122;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -341,9 +341,9 @@ public sealed class Simulation
         {
             foreach (var entity in _entities)
             {
-                if (entity is RoomObject { Plant: { } plant, IsDestroyed: false })
+                if (entity is RoomObject { Plant: { } plant, IsDestroyed: false } placed && plant.Droop(Random))
                 {
-                    plant.Droop(Random);
+                    Objects.PlantCare.OnDrooped(this, placed);
                 }
             }
         }
@@ -539,6 +539,12 @@ public sealed class Simulation
         }
 
         var entity = _entities[index];
+        if (entity is RoomObject { Plant: not null, IsDestroyed: false } plant)
+        {
+            // A plant taken away takes what it was still worth off the hospital's care for its plants.
+            Objects.PlantCare.OnRemoved(this, plant);
+        }
+
         _entities.RemoveAt(index);
         if (entity is EntranceDoor door)
         {
@@ -655,6 +661,15 @@ public sealed class Simulation
         for (var i = 0; i < delayedCount; i++)
         {
             simulation._delayedObjects.Add(MapObjectPlacement.Read(reader));
+        }
+
+        // Before version 122 the hospitals kept no score for their plants: it is estimated from the plants.
+        if (version is not 0 and < 122)
+        {
+            foreach (var hospital in simulation._hospitals)
+            {
+                hospital.PlantCare = PlantCare.Estimate(simulation, hospital.Player);
+            }
         }
 
         // Before version 118 the parcels' adjacency on the map was kept; the level's neighbour lists replace it.
