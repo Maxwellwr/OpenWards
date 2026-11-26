@@ -423,7 +423,11 @@ public static class PatientNeeds
                                 world.Radiators.Add((placed.Tile, map.Contains(placed.Tile.X, placed.Tile.Y) ? map[placed.Tile.X, placed.Tile.Y].RoomId : 0));
                                 break;
                             case PlantType:
-                                world._plants.Add((placed.Tile, (placed.Plant?.State ?? 0) < 2));
+                                // Only corridor plants count, healthy while they have water left (the original's rule).
+                                if (placed.RoomId == 0)
+                                {
+                                    world._plants.Add((placed.Tile, placed.Plant is not { IsWithered: true }));
+                                }
                                 break;
                             case BenchType when placed.RoomId == 0:
                                 benches.Add(placed);
