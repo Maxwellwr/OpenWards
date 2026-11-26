@@ -31,8 +31,12 @@ public sealed record ImportedObject(string ObjectType, TilePosition Tile, Direct
 /// <param name="Fatigue">Tiredness, from 0 to 1.</param>
 /// <param name="Discontent">How long they have been unhappy (<see cref="Humanoid.Discontent"/>), if known.</param>
 /// <param name="RaiseRequests">How many times they have asked for money, if known.</param>
-/// <param name="HiredHoursAgo">How many hours ago they were hired or last given a raise, if known.</param>
+/// <param name="HiredHoursAgo">How many hours ago they were hired, if known.</param>
 /// <param name="HandymanShares">A handyman's shares of cleaning, watering and repairs in percent, if known.</param>
+/// <param name="RaiseHoursLeft">
+/// While they wait for an answer to a request for money (counted in <paramref name="RaiseRequests"/>), the hours they
+/// will still wait; null when they wait for none.
+/// </param>
 public sealed record ImportedStaff(
     StaffProfile Profile,
     TilePosition Tile,
@@ -41,7 +45,8 @@ public sealed record ImportedStaff(
     int? Discontent = null,
     int? RaiseRequests = null,
     long? HiredHoursAgo = null,
-    (int Cleaning, int Watering, int Repairing)? HandymanShares = null);
+    (int Cleaning, int Watering, int Repairing)? HandymanShares = null,
+    long? RaiseHoursLeft = null);
 
 /// <summary>A patient of an imported save; they start again from reception with what they have.</summary>
 /// <param name="DiseaseId">Their disease.</param>
@@ -86,14 +91,47 @@ public sealed record ImportedPatient(
 /// <param name="Tile">Where the VIP in the hospital stands, if they are.</param>
 public sealed record ImportedVip(VipState State, int Name, long ArrivalInHours, int RoomsLeft, TilePosition? Tile);
 
-/// <summary>An imported save's emergency under way.</summary>
+/// <summary>Where an imported save's emergency stands.</summary>
+public enum ImportedEmergencyStage : byte
+{
+    /// <summary>Accepted: the helicopter sets off in <see cref="ImportedEmergency.HelicopterDaysLeft"/> days.</summary>
+    WaitingForHelicopter,
+
+    /// <summary>The helicopter is on its way.</summary>
+    HelicopterOnWay,
+
+    /// <summary>Under way: its patients are in the hospital or still coming out of the helicopter.</summary>
+    UnderWay,
+
+    /// <summary>Its time is up and the result is to come.</summary>
+    TimeUp,
+
+    /// <summary>Over, the result's fax shown.</summary>
+    Result,
+}
+
+/// <summary>An imported save's emergency, accepted and not yet over, or over with its result's fax shown.</summary>
 /// <param name="DiseaseId">The emergency's disease.</param>
-/// <param name="Victims">Patients brought in.</param>
+/// <param name="Victims">All its patients.</param>
 /// <param name="Cured">Patients cured so far.</param>
 /// <param name="Bonus">Bonus per patient cured.</param>
 /// <param name="Percentage">Share of patients to cure, in percent.</param>
 /// <param name="HoursLeft">Hours left on the watch.</param>
-public sealed record ImportedEmergency(string DiseaseId, int Victims, int Cured, int Bonus, int Percentage, int HoursLeft);
+/// <param name="Stage">Where it stands.</param>
+/// <param name="HelicopterDaysLeft">While waiting for the helicopter, the days until it sets off.</param>
+/// <param name="ToLetOut">Patients the helicopter has still to let out.</param>
+/// <param name="InHospital">Its patients in the hospital now, or −1 if not known.</param>
+public sealed record ImportedEmergency(
+    string DiseaseId,
+    int Victims,
+    int Cured,
+    int Bonus,
+    int Percentage,
+    int HoursLeft,
+    ImportedEmergencyStage Stage = ImportedEmergencyStage.UnderWay,
+    int HelicopterDaysLeft = 0,
+    int ToLetOut = 0,
+    int InHospital = -1);
 
 /// <summary>A casebook entry of an imported save.</summary>
 /// <param name="DiseaseId">The disease.</param>
@@ -269,7 +307,10 @@ public sealed record ImportedGame
     /// <summary>Where the VIP visit stands, or null to keep the level's.</summary>
     public ImportedVip? Vip { get; init; }
 
-    /// <summary>The emergency under way, or null for none; its patients are those marked <see cref="ImportedPatient.IsEmergency"/>.</summary>
+    /// <summary>
+    /// The emergency accepted and not over, or over with its result's fax open, or null for none; its patients are those
+    /// marked <see cref="ImportedPatient.IsEmergency"/>.
+    /// </summary>
     public ImportedEmergency? Emergency { get; init; }
 
     /// <summary>
@@ -283,6 +324,13 @@ public sealed record ImportedGame
     /// level's plan stays.
     /// </summary>
     public (int Used, long? HoursToNext, int Size)? NextEarthquake { get; init; }
+
+    /// <summary>
+    /// The earthquake under way, or null for none: its phase (1 the warning quake starting, 2 waiting for the main quake,
+    /// 3 the main quake, 4 dying down after the damage), the hours to its next step (the main quake, or the end of the
+    /// main quake) and its strength. It takes the place of <see cref="NextEarthquake"/>'s next one.
+    /// </summary>
+    public (int Phase, long HoursToStep, int Size)? EarthquakeUnderWay { get; init; }
 
     /// <summary>The rats killed and shots fired this year, or null for none.</summary>
     public (int Killed, int Shots)? RatsThisYear { get; init; }
@@ -429,6 +477,11 @@ public static class GameImport
             if (member.HiredHoursAgo is >= 0 and var ago)
             {
                 hired.Add((staff, ago));
+            }
+
+            if (member.RaiseHoursLeft is >= 0 and var raiseHours)
+            {
+                StaffEmployment.ImportRaiseRequest(simulation, staff, member.RaiseRequests ?? 1, raiseHours);
             }
 
             if (member.HandymanShares is { } shares && staff.Behaviour is People.HandymanBehaviour handyman)
@@ -598,7 +651,11 @@ public static class GameImport
         ImportYearCounters(hospital, game);
         ImportVip(simulation, hospital, game.Vip, problems);
         ImportEmergencies(simulation, hospital, game, emergencyPatients);
-        if (game.NextEarthquake is { HoursToNext: >= 0 and var quakeHours } quake)
+        if (game.EarthquakeUnderWay is { Phase: >= 1 and <= 4 } underWay)
+        {
+            simulation.Earthquakes.ImportUnderWay(simulation.Rules.Earthquakes.Count, game.NextEarthquake?.Used ?? 0, simulation.Date, underWay.Phase, underWay.HoursToStep, underWay.Size);
+        }
+        else if (game.NextEarthquake is { HoursToNext: >= 0 and var quakeHours } quake)
         {
             simulation.Earthquakes.Import(simulation.Rules.Earthquakes.Count, quake.Used, GameDate.FromHours(simulation.Hours + quakeHours), quake.Size);
         }
@@ -678,19 +735,55 @@ public static class GameImport
             }
         }
 
-        if (game.Emergency is not { } imported || emergencyPatients.Count == 0 || imported.HoursLeft <= 0)
+        if (game.Emergency is not { } imported)
         {
             return;
         }
 
-        var emergency = new Disasters.Emergency(imported.DiseaseId, Math.Max(imported.Victims, emergencyPatients.Count), imported.Bonus, imported.Percentage)
+        var victims = Math.Max(Math.Max(imported.Victims, emergencyPatients.Count), 1);
+        var cured = Math.Clamp(imported.Cured, 0, victims);
+        if (imported.Stage == ImportedEmergencyStage.Result)
+        {
+            // Over: only the result's fax is left, for as long as a new one stays.
+            var success = cured * 100 >= imported.Percentage * victims;
+            state.Report = new Disasters.EmergencyReport(cured, victims, imported.Bonus * victims, success ? imported.Bonus * cured : 0, simulation.Tick + (Disasters.HospitalEmergencies.ReportDays * GameDate.HoursPerDay));
+            return;
+        }
+
+        var toLetOut = imported.Stage switch
+        {
+            ImportedEmergencyStage.WaitingForHelicopter or ImportedEmergencyStage.HelicopterOnWay => victims,
+            ImportedEmergencyStage.UnderWay => Math.Clamp(imported.ToLetOut, 0, victims - cured),
+            _ => 0,
+        };
+
+        // Those neither cured, in the hospital nor still in the helicopter died or went home.
+        var inHospital = imported.InHospital >= 0 ? imported.InHospital : emergencyPatients.Count;
+        var hoursLeft = imported.Stage == ImportedEmergencyStage.TimeUp ? 0 : Math.Max(1, imported.HoursLeft);
+        var emergency = new Disasters.Emergency(imported.DiseaseId, victims, imported.Bonus, imported.Percentage)
         {
             IsAccepted = true,
-            Cured = Math.Max(0, imported.Cured),
-            WatchTimer = Math.Min(imported.HoursLeft / Disasters.HospitalEmergencies.WatchTickRate, Disasters.HospitalEmergencies.WatchSegments - 1),
-            WatchTickTimer = Math.Max(1, imported.HoursLeft % Disasters.HospitalEmergencies.WatchTickRate),
+            Cured = cured,
+            Killed = Math.Max(0, victims - cured - inHospital - toLetOut),
+            WatchTimer = hoursLeft == 0 ? -1 : Math.Min(hoursLeft / Disasters.HospitalEmergencies.WatchTickRate, Disasters.HospitalEmergencies.WatchSegments - 1),
+            WatchTickTimer = Math.Max(1, hoursLeft % Disasters.HospitalEmergencies.WatchTickRate),
         };
         state.Current = emergency;
+        if (toLetOut > 0)
+        {
+            // The helicopter: still to set off, on its way, or landed and letting the rest out.
+            state.HelicopterPhase = imported.Stage switch
+            {
+                ImportedEmergencyStage.WaitingForHelicopter => -Math.Clamp(imported.HelicopterDaysLeft, 1, -Disasters.HospitalEmergencies.HelicopterStart / GameDate.HoursPerDay) * GameDate.HoursPerDay,
+                ImportedEmergencyStage.HelicopterOnWay => 0,
+                // Just past landing, where the count of patients let out starts again.
+                _ => Disasters.HospitalEmergencies.HelicopterLanded + 1,
+            };
+            state.HelicopterVictims = victims;
+            state.HelicopterSpawned = victims - toLetOut;
+            state.HelicopterDisease = imported.DiseaseId;
+        }
+
         var number = 0;
         foreach (var patient in emergencyPatients)
         {

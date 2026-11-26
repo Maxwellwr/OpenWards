@@ -114,4 +114,21 @@ public sealed class OriginalSaveImporterTests(ITestOutputHelper output)
         Assert.Equal(new CompetitorAction(CompetitorActionKind.Build, "gp", FromStart: true), orac.Pending);
         Assert.Equal(new CompetitorAction(CompetitorActionKind.Buy, "bench", 1, FromStart: true), hal.Pending);
     }
+
+    [Fact]
+    public void AStaffMemberWaitingForAnAnswerToARaiseRequestStillWaits()
+    {
+        var install = RealGameData.Require();
+        var file = install.FindDirectory("SAVE") is { } folder ? Path.Combine(folder, "MAXWELL.H3") : null;
+        if (file is null || !File.Exists(file))
+        {
+            Assert.Skip("MAXWELL.H3 is not in the SAVE folder.");
+        }
+
+        // MAXWELL.H3 (tick 54419): one doctor has just asked for money (their first request) and waits until tick 55900.
+        var save = OriginalSaveGame.Parse(File.ReadAllBytes(file));
+        var (simulation, _) = OriginalSaveImporter.Start(install, save, seed: 1);
+        var asking = Assert.Single(simulation.Entities.OfType<Humanoid>(), h => h.Profile is not null && h.HasRaiseRequest);
+        Assert.Equal((1, 55900 - save.Tick), (asking.RaiseRequestCount, asking.QuittingIn));
+    }
 }

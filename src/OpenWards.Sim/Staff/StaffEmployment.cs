@@ -372,6 +372,23 @@ internal static class StaffEmployment
     }
 
     /// <summary>
+    /// An imported save's member of staff who has asked for money and waits for an answer: the request is made again
+    /// here (an original save keeps neither its amount nor its kind, which the original works out afresh whenever its
+    /// fax is opened), as their <paramref name="requests"/>th, and they wait <paramref name="hoursLeft"/> hours more.
+    /// </summary>
+    internal static void ImportRaiseRequest(Simulation simulation, Humanoid humanoid, int requests, long hoursLeft)
+    {
+        if (humanoid.Profile is null || humanoid.HasRaiseRequest)
+        {
+            return;
+        }
+
+        humanoid.RaiseRequestCount = Math.Clamp(requests, 1, DefiniteQuitRequest) - 1;
+        RequestRaise(simulation, humanoid);
+        humanoid.QuittingIn = (int)Math.Clamp(hoursLeft, 0, QuittingDelay);
+    }
+
+    /// <summary>
     /// A request for money, the first reason that holds deciding it: from the sixth request on nothing will keep them;
     /// paid below the expected wage, a rise of the shortfall plus a tenth of the expected wage; very tired, 10 % to 30 %
     /// of the wage (a triangular draw), as a rise one time in four and otherwise as a one-off payment; anything else, a

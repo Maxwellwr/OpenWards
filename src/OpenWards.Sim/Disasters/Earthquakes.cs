@@ -229,12 +229,6 @@ public sealed class Earthquakes
     }
 
     /// <summary>
-    /// Plans the level's next earthquake, if it has one: the first entry not used yet that still has a day after
-    /// <paramref name="day"/> of <paramref name="monthOfGame"/>, on a day drawn evenly from the days of its months left.
-    /// Entries whose months have passed are used up. An entry whose months are the wrong way round starts in its
-    /// <see cref="PlannedEarthquake.StartMonth"/>.
-    /// </summary>
-    /// <summary>
     /// An imported save's planned earthquake: it comes on <paramref name="next"/> with strength <paramref name="size"/>,
     /// and the level's first <paramref name="used"/> planned ones are spent. Without one the level's plan stays: every
     /// save seen marks all sixteen flags used, so they say nothing on their own.
@@ -255,6 +249,53 @@ public sealed class Earthquakes
         IsNextPlanned = true;
     }
 
+    /// <summary>
+    /// An imported save's earthquake under way, of strength <paramref name="size"/>, with the level's first
+    /// <paramref name="used"/> planned ones spent. In <paramref name="phase"/> 1 the warning quake starts and 2 waits
+    /// for the main quake, which comes in <paramref name="hoursToStep"/> hours; in 3 the main quake shakes until
+    /// <paramref name="hoursToStep"/> hours from now, its damage at the end; in 4 the damage is done and the next
+    /// earthquake is planned at once.
+    /// </summary>
+    internal void ImportUnderWay(int plannedCount, int used, GameDate today, int phase, long hoursToStep, int size)
+    {
+        PlannedSoFar = Math.Clamp(used, 0, plannedCount);
+        (StartMonth, StartDay) = (today.MonthOfGame, today.Day);
+        Size = Math.Max(1, size);
+        IsActive = true;
+        IsNextPlanned = false;
+        DamageTimer = DamageTime;
+        var hours = (int)Math.Clamp(hoursToStep, 0, MaxWarningDays * GameDate.HoursPerDay);
+        switch (phase)
+        {
+            case 1:
+                // The warning quake shakes from the next hour.
+                WarningHours = Math.Max(hours, WarningLength + 1);
+                WarningTimer = WarningHours;
+                RemainingDamage = Size;
+                IsNextPlanned = true;
+                break;
+            case 2:
+                WarningHours = MaxWarningDays * GameDate.HoursPerDay;
+                WarningTimer = Math.Clamp(hours, 1, WarningHours - WarningLength - 1);
+                RemainingDamage = Size;
+                break;
+            case 3:
+                WarningTimer = 0;
+                RemainingDamage = Math.Clamp((hours + DamageTime - 1) / DamageTime, 1, Size);
+                break;
+            default:
+                WarningTimer = 0;
+                RemainingDamage = 0;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Plans the level's next earthquake, if it has one: the first entry not used yet that still has a day after
+    /// <paramref name="day"/> of <paramref name="monthOfGame"/>, on a day drawn evenly from the days of its months left.
+    /// Entries whose months have passed are used up. An entry whose months are the wrong way round starts in its
+    /// <see cref="PlannedEarthquake.StartMonth"/>.
+    /// </summary>
     private void PlanNext(IReadOnlyList<PlannedEarthquake> planned, SimRandom random, int monthOfGame, int day)
     {
         IsActive = false;

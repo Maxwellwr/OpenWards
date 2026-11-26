@@ -441,6 +441,32 @@ public class OriginalSaveGameTests
     }
 
     [Fact]
+    public void ReadsTheEmergencyStateTheEarthquakeUnderWayAndARaiseAwaited()
+    {
+        var data = new byte[OriginalSaveGame.Length];
+        var hospital = OriginalSaveGame.HospitalOffset;
+        data[hospital + 481] = 1;
+        data[hospital + 482] = 3;
+        data[hospital + 483] = 2;
+        data[hospital + 486] = 6;
+        data[hospital + 487] = 3;
+        data[OriginalSaveGame.EarthquakePhaseOffset] = 2;
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.EarthquakeStepOffset), 9400);
+        var entity = OriginalSaveGame.EntityOffset + (30 * OriginalSaveGame.EntityLength);
+        data[entity + 12] = 4;
+        data[entity + 142] = 0x70;
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(entity + 116), 55900);
+
+        var save = OriginalSaveGame.Parse(data);
+        var read = save.Hospitals[0];
+        var staff = Assert.Single(save.Entities);
+
+        Assert.Equal((true, 3, 2, 6, 3), (read.EmergencyHelicopterLanded, read.EmergencyState, read.EmergencyToLetOut, read.EmergencyPatients, read.EmergencyPatientsInHospital));
+        Assert.Equal((2, 9400), save.EarthquakeUnderWay);
+        Assert.Equal((true, 55900), (staff.AwaitsRaiseAnswer, staff.RaiseDeadlineTick));
+    }
+
+    [Fact]
     public void ReceptionistsAreNeverTired()
     {
         var install = RealGameData.Require();
