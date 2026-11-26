@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 122;
+    private const int FormatVersion = 123;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -883,6 +883,22 @@ public sealed class Simulation
     public IEnumerable<Hospital> HeldHospitals => _hospitals.Where(hospital => !hospital.IsVacant);
 
     /// <summary>
+    /// Whether the player has the money for the parcel: its price alone (CorsixTH's <c>Hospital:purchasePlot</c>), but more
+    /// than its price to open an auction in a game of several hospitals (<see cref="LandAuction.Start"/>).
+    /// </summary>
+    public bool CanAffordParcel(int parcel, int player)
+    {
+        if (player < 0 || player >= _hospitals.Length)
+        {
+            return false;
+        }
+
+        var price = ParcelPrice(parcel);
+        var balance = _hospitals[player].Balance;
+        return _hospitals.Length > 1 ? balance > price : balance >= price;
+    }
+
+    /// <summary>
     /// <c>Hospital:purchasePlot</c>: the player buys a parcel they may buy and can afford; it adds its price to the
     /// hospital's value.
     /// </summary>
@@ -902,7 +918,7 @@ public sealed class Simulation
 
         var hospital = _hospitals[player];
         var price = ParcelPrice(parcel);
-        if (price <= hospital.Balance)
+        if (CanAffordParcel(parcel, player))
         {
             SetParcelOwner(parcel, player + 1);
             hospital.Spend(Hours, checked((int)price), TransactionKind.BuyLand, parcel.ToString(CultureInfo.InvariantCulture));

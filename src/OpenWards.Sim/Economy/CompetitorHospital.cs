@@ -1381,8 +1381,8 @@ public sealed class CompetitorHospital
             });
         }
 
-        // Version 122 keeps the network game's place it holds.
-        competitor.Seat = reader.Version is 0 or >= 122 ? Math.Max(-1, reader.ReadInt32()) : -1;
+        // Version 123 keeps the network game's place it holds.
+        competitor.Seat = reader.Version is 0 or >= 123 ? Math.Max(-1, reader.ReadInt32()) : -1;
         return competitor;
     }
 

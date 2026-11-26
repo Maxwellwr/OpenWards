@@ -238,10 +238,24 @@ internal sealed class ProgressReportScreen
     /// The hospital's name: for theirs the name the game knows (from an imported save of the original) or the player's
     /// name, the original's competitor names (S[5]) for the others.
     /// </summary>
-    internal static string HospitalName(IWindowHost host, int index) =>
-        index == host.Player
-            ? (index < host.Simulation.Hospitals.Count && host.Simulation.Hospitals[index].Name is { Length: > 0 } name ? name : host.PlayerName)
-        : host.Texts?.String(5, index switch { 1 => 1, 2 => 3, 3 => 2, _ => 4 }) ?? UiText.Format("openwards.hospital_number", "Hospital %1%", index + 1);
+    internal static string HospitalName(IWindowHost host, int index)
+    {
+        // A name the hospital was given (an imported save's), else in a network game the name its player joined under,
+        // else the local player's own name, and the level's rival hospitals for the rest.
+        if (index >= 0 && index < host.Simulation.Hospitals.Count && host.Simulation.Hospitals[index].Name is { Length: > 0 } name)
+        {
+            return name;
+        }
+
+        if (host.NetworkPlayerName(index) is { Length: > 0 } joined)
+        {
+            return joined;
+        }
+
+        return index == host.Player
+            ? host.PlayerName
+            : host.Texts?.String(5, index switch { 1 => 1, 2 => 3, 3 => 2, _ => 4 }) ?? UiText.Format("openwards.hospital_number", "Hospital %1%", index + 1);
+    }
 
     private static bool InHospital(LevelMap map, int player, TilePosition tile) =>
         map.Contains(tile.X, tile.Y) && map[tile.X, tile.Y].Has(TileFlags.Hospital) && map.GetParcelOwner(map[tile.X, tile.Y].Parcel) == player + 1;

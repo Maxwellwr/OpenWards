@@ -2268,8 +2268,8 @@ public sealed class Hospital
             hospital.NetMission = NetMission.Read(reader);
         }
 
-        // Version 122 keeps whether a person holds the hospital's place in a network game.
-        hospital.IsVacant = reader.Version is 0 or >= 122 && reader.ReadBool();
+        // Version 123 keeps whether a person holds the hospital's place in a network game.
+        hospital.IsVacant = reader.Version is 0 or >= 123 && reader.ReadBool();
 
         return hospital;
     }

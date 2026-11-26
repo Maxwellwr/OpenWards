@@ -221,7 +221,7 @@ internal sealed class TownMapScreen
                 var parcel = simulation.Map[tile.X, tile.Y].Parcel;
                 if (parcel != 0)
                 {
-                    var buyable = simulation.IsParcelPurchasable(parcel, host.Player) && simulation.ParcelPrice(parcel) <= hospital.Balance;
+                    var buyable = simulation.IsParcelPurchasable(parcel, host.Player) && simulation.CanAffordParcel(parcel, host.Player);
                     host.PlaySound(buyable ? "cashreg.wav" : "wrong2.wav");
                     if (buyable)
                     {
@@ -254,6 +254,19 @@ internal sealed class TownMapScreen
     /// l_town_map_draw: the hospital's land dark blue (or by its warmth while the radiators are shown), land for sale red,
     /// the walls white, three pixels a tile.
     /// </summary>
+    /// <summary>
+    /// The colour of land a player owns, by the player's number and the same on every machine: dark blue for player 1 (the
+    /// only owner in a game of one hospital), then purple, orange and green. The game expert's answer from the original's
+    /// developer notes; one's own land is not marked apart.
+    /// </summary>
+    internal static Color OwnerColour(int owner) => owner switch
+    {
+        2 => new Color(215, 125, 255),
+        3 => new Color(255, 194, 93),
+        4 => new Color(0, 255, 0),
+        _ => new Color(0, 0, 70),
+    };
+
     private static void DrawTown(SpriteBatch batch, IWindowHost host, Texture2D pixel, Point at, bool heat)
     {
         var simulation = host.Simulation;
@@ -279,7 +292,11 @@ internal sealed class TownMapScreen
                     }
                     else
                     {
-                        colour = heat ? MapViewScreen.TemperatureColor(simulation.Temperatures[x, y], host.TemperatureTheme) : new Color(0, 0, 70);
+                        // The heat is shown on one's own land only; other players' land keeps its owner's colour.
+                        var owner = map.GetParcelOwner(tile.Parcel);
+                        colour = heat && owner == host.Player + 1
+                            ? MapViewScreen.TemperatureColor(simulation.Temperatures[x, y], host.TemperatureTheme)
+                            : OwnerColour(owner);
                     }
 
                     if (colour is { } fill)

@@ -53,4 +53,21 @@ public sealed class AnnualReportScreenTests
         host.Simulation.Hospitals[0].Name = "MAXWELL";
         Assert.Equal("MAXWELL", AnnualReportScreen.Entries(host)[0].Name);
     }
+
+    [Fact]
+    public void ThePlayersOfANetworkGameGoByTheNamesTheyJoinedUnder()
+    {
+        var host = new WindowTestHost();
+        Assert.Equal(((Ui.IWindowHost)host).PlayerName, ProgressReportScreen.HospitalName(host, 0));
+        Assert.Equal("Hospital 2", ProgressReportScreen.HospitalName(host, 1));
+
+        host.NetworkNames[0] = "Alpha";
+        host.NetworkNames[1] = "Beta";
+        Assert.Equal("Alpha", ProgressReportScreen.HospitalName(host, 0));
+        Assert.Equal("Beta", ProgressReportScreen.HospitalName(host, 1));
+
+        // A name an imported save brings still comes first.
+        host.Simulation.Hospitals[0].Name = "MAXWELL";
+        Assert.Equal("MAXWELL", ProgressReportScreen.HospitalName(host, 0));
+    }
 }

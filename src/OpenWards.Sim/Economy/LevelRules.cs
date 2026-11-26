@@ -549,8 +549,8 @@ public sealed class LevelRules
             rules = rules.With(missions, neighbours);
         }
 
-        // Version 122 keeps the opponents a network game may take for the places no person holds.
-        if (reader.Version is 0 or >= 122)
+        // Version 123 keeps the opponents a network game may take for the places no person holds.
+        if (reader.Version is 0 or >= 123)
         {
             rules = rules.WithReserveCompetitors(Enumerable.Range(0, reader.ReadCount(MaxEntries)).Select(_ => ReadCompetitor(reader)).ToList());
         }

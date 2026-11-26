@@ -194,6 +194,18 @@ public class NetMissionTests
     }
 
     [Fact]
+    public void AMissionJustGivenSaysItsMonthsToDo()
+    {
+        // Given at the end of March, it is read in April, when three months have passed: the text says four.
+        var simulation = NewSimulation([new(0, NetCriterion.BuyPlot, 1, 2, 4)]);
+        NetMission.OnEndMonth(simulation, 3);
+        var mission = simulation.Hospitals[0].NetMission;
+        Assert.Equal(7, mission.Deadline);
+        Assert.Equal(4, mission.MonthsLeft(3));
+        Assert.Equal(1, mission.MonthsLeft(6));
+    }
+
+    [Fact]
     public void ThereAreNoMissionsForASingleHospital()
     {
         var simulation = NewSimulation([new(0, NetCriterion.BuyPlot, 1, 1, 3)], players: 1);
