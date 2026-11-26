@@ -221,7 +221,7 @@ internal sealed class TownMapScreen
                 var parcel = simulation.Map[tile.X, tile.Y].Parcel;
                 if (parcel != 0)
                 {
-                    var buyable = simulation.IsParcelPurchasable(parcel, host.Player) && simulation.ParcelPrice(parcel) <= hospital.Balance;
+                    var buyable = simulation.IsParcelPurchasable(parcel, host.Player) && simulation.CanAffordParcel(parcel, host.Player);
                     host.PlaySound(buyable ? "cashreg.wav" : "wrong2.wav");
                     if (buyable)
                     {

@@ -837,6 +837,22 @@ public sealed class Simulation
     public long ParcelPrice(int parcel) => Rules.FreeBuild ? 0 : (long)Map.ParcelTileCount(parcel) * Rules.LandCostPerTile;
 
     /// <summary>
+    /// Whether the player has the money for the parcel: its price alone (CorsixTH's <c>Hospital:purchasePlot</c>), but more
+    /// than its price to open an auction in a game of several hospitals (<see cref="LandAuction.Start"/>).
+    /// </summary>
+    public bool CanAffordParcel(int parcel, int player)
+    {
+        if (player < 0 || player >= _hospitals.Length)
+        {
+            return false;
+        }
+
+        var price = ParcelPrice(parcel);
+        var balance = _hospitals[player].Balance;
+        return _hospitals.Length > 1 ? balance > price : balance >= price;
+    }
+
+    /// <summary>
     /// <c>Hospital:purchasePlot</c>: the player buys a parcel they may buy and can afford; it adds its price to the
     /// hospital's value.
     /// </summary>
@@ -856,7 +872,7 @@ public sealed class Simulation
 
         var hospital = _hospitals[player];
         var price = ParcelPrice(parcel);
-        if (price <= hospital.Balance)
+        if (CanAffordParcel(parcel, player))
         {
             SetParcelOwner(parcel, player + 1);
             hospital.Spend(Hours, checked((int)price), TransactionKind.BuyLand, parcel.ToString(CultureInfo.InvariantCulture));

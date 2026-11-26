@@ -2190,7 +2190,7 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
                 ShowNotice(UiText.Format("openwards.status.parcel_not_for_sale", "Parcel %1% is not for sale", parcel));
                 _sounds.Play("Wrong2.wav");
             }
-            else if (price > simulation.Hospitals[_session.Player].Balance)
+            else if (!simulation.CanAffordParcel(parcel, _session.Player))
             {
                 ShowNotice(UiText.Format("openwards.town_map.cannot_afford", "Not enough money for parcel %1%: it costs %2%", parcel, MoneyText.Format(price)));
                 _sounds.Play("Wrong2.wav");
@@ -3842,6 +3842,9 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
 
     /// <summary>The settings' name, else the system's user name, else PLAYER, as the new game dialog starts it.</summary>
     string IWindowHost.PlayerName => NewGameWindow.DefaultName(_config.PlayerName);
+
+    string? IWindowHost.NetworkPlayerName(int player) =>
+        _session is NetworkSession network ? network.Players.FirstOrDefault(p => p.Player == player)?.Name : null;
 
     string? IWindowHost.HotkeyText(string action) => _hotkeys[action]?.ToString();
 
