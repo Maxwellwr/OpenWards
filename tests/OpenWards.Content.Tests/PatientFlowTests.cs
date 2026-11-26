@@ -548,7 +548,8 @@ public class PatientFlowTests
         // A weak GP leaves level one's patients short of a diagnosis, so that they need a diagnosis room.
         var doctors = simulation.AvailableStaff(StaffClass.Doctor);
         var doctor = weakDoctor ? doctors.Select((profile, index) => (profile.Skill, index)).Min().index : 0;
-        Run(simulation, new HireStaffCommand(StaffClass.Doctor, doctor, new(15, 15)));
+        // Put down in the office: an empty room calls for staff only once a patient wants it.
+        Run(simulation, new HireStaffCommand(StaffClass.Doctor, doctor, InsideDoor(simulation, room)));
         if (!weakDoctor)
         {
             // A diagnosis step adds the doctor's score less the patient's difficulty; a top consultant lets the GP
@@ -581,8 +582,15 @@ public class PatientFlowTests
         PlaceAnywhere(simulation, "pharmacy_cabinet", PharmacyArea);
         Run(simulation, new ConfirmRoomCommand(room.Id));
         Assert.True(room.IsActive);
-        Run(simulation, new HireStaffCommand(StaffClass.Nurse, 0, new(15, 16)));
+        Run(simulation, new HireStaffCommand(StaffClass.Nurse, 0, InsideDoor(simulation, room)));
     }
+
+    /// <summary>
+    /// The tile just inside a room's door, where staff hired onto it take the room over at once (an empty room calls for
+    /// staff only once a patient wants it).
+    /// </summary>
+    internal static TilePosition InsideDoor(Simulation simulation, Room room) =>
+        ((RoomDoor)simulation.FindEntity(room.DoorId)!).InsideTile(room.Area);
 
     /// <summary>A second GP's office where the pharmacy would go, without a doctor of its own.</summary>
     internal static Room BuildSecondGp(Simulation simulation)

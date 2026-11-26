@@ -100,11 +100,16 @@ public class DnaFixerTests
         var simulation = NewStaffedHospital(Rules());
         var room = BuildDnaFixer(simulation, researcher: false);
 
+        // A doctor who is no researcher, put down in the room, does not take it over.
+        var candidates = simulation.AvailableStaff(StaffClass.Doctor);
+        var ordinary = candidates.Select((profile, index) => (profile, index)).First(c => !c.profile.IsResearcher).index;
+        Run(simulation, new HireStaffCommand(StaffClass.Doctor, ordinary, InsideDoor(simulation, room)));
         StepFor(simulation, 3 * GameDate.HoursPerDay);
         Assert.Equal(0, room.StaffId);
 
+        // An empty room calls for staff only once a patient wants it: the researcher is put down there too.
         Run(simulation, new CheatCommand(CheatKind.ToggleSuperDoctor));
-        Run(simulation, new HireStaffCommand(StaffClass.Doctor, 0, new(14, 16)));
+        Run(simulation, new HireStaffCommand(StaffClass.Doctor, 0, InsideDoor(simulation, room)));
         Run(simulation, new CheatCommand(CheatKind.ToggleSuperDoctor));
         StepFor(simulation, 3 * GameDate.HoursPerDay);
 
