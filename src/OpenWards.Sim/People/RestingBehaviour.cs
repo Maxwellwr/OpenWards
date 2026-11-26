@@ -89,7 +89,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
     public RestReturn ReturnTo { get; private set; }
 
     /// <summary>
-    /// A save from before format 119 kept the research department or training room itself (CorsixTH's
+    /// A save from before format 120 kept the research department or training room itself (CorsixTH's
     /// <c>last_room</c>); its kind is taken from it once they are rested, if it is still there.
     /// </summary>
     private int _legacyReturnRoomId;
@@ -427,8 +427,8 @@ public sealed class RestingBehaviour : HumanoidBehaviour
         resting._useTime = reader.ReadInt32();
         resting._nextTargetId = reader.ReadInt32();
         resting._meanders = reader.ReadInt32();
-        // Version 119 keeps the kind of room looked for after the rest rather than the room left.
-        if (reader.Version is 0 or >= 119)
+        // Version 120 keeps the kind of room looked for after the rest rather than the room left.
+        if (reader.Version is 0 or >= 120)
         {
             var returnTo = reader.ReadByte();
             resting.ReturnTo = returnTo <= (byte)RestReturn.Ward ? (RestReturn)returnTo : throw new InvalidDataException($"Bad rest return {returnTo}.");
