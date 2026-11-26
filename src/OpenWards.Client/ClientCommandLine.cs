@@ -20,6 +20,7 @@ internal sealed record ClientOptions
     public string? ConnectTo { get; init; }
     public int? HostPort { get; init; }
     public bool PublicHost { get; init; }
+    public bool NoComputers { get; init; }
     public string? PlayerName { get; init; }
     public bool SpriteViewer { get; init; }
     public bool MapEditor { get; init; }
@@ -241,6 +242,11 @@ internal static class ClientCommandLine
         Description = "Multiplayer: with --host, accept connections from other machines, not only this one",
     };
 
+    private static readonly Option<bool> NoComputersOption = new("--no-computers")
+    {
+        Description = "Multiplayer: with --host, leave the places nobody holds empty instead of giving them to computer opponents",
+    };
+
     private static readonly Option<string?> ConnectOption = new("--connect")
     {
         Description = $"Multiplayer: join a game at HOST or HOST:PORT (default port {DefaultPort})",
@@ -277,6 +283,7 @@ internal static class ClientCommandLine
         ConfigOption,
         HostOption,
         PublicOption,
+        NoComputersOption,
         ConnectOption,
         NameOption,
     };
@@ -320,6 +327,7 @@ internal static class ClientCommandLine
             ConnectTo = result.GetValue(ConnectOption),
             HostPort = result.GetResult(HostOption) is null ? null : result.GetValue(HostOption),
             PublicHost = result.GetValue(PublicOption),
+            NoComputers = result.GetValue(NoComputersOption),
             PlayerName = result.GetValue(NameOption),
             SpriteViewer = result.GetValue(SpriteViewerOption) || sheet is not null,
             MapEditor = result.GetValue(MapEditorOption),

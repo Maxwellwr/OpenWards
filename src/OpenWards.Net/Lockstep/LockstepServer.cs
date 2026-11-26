@@ -2,6 +2,7 @@ using OpenWards.Content.Interface;
 using OpenWards.Net.Protocol;
 using OpenWards.Net.Transport;
 using OpenWards.Sim;
+using OpenWards.Sim.Commands;
 
 namespace OpenWards.Net.Lockstep;
 
@@ -64,6 +65,9 @@ public sealed class LockstepServer : IDisposable
     /// <summary>The tick the level chosen last started at, whose hash switched clients report first.</summary>
     private long _restartTick;
 
+    /// <summary>For each place of the map, whether the simulation was last told a person holds it (<see cref="SetSeatCommand"/>).</summary>
+    private bool[] _seatsHeld = [];
+
     /// <param name="simulation">The game, at its start or loaded.</param>
     /// <param name="level">The name of the level being played.</param>
     /// <param name="levels">The levels the host may switch the game to; none by default.</param>
@@ -73,6 +77,7 @@ public sealed class LockstepServer : IDisposable
         Level = level;
         _levels = levels ?? [];
         ContentHash = ContentFingerprint.Compute(simulation.Content);
+        ResetSeats();
     }
 
     /// <summary>The name of the level being played.</summary>
@@ -93,6 +98,12 @@ public sealed class LockstepServer : IDisposable
     /// before they are allowed to reach them.
     /// </summary>
     public int CommandDelay { get; init; }
+
+    /// <summary>
+    /// Whether a computer opponent plays a place of the map no person holds, until a person comes (OpenWards' own: the
+    /// original's network game has none). On by default; without it a vacant place only stands empty.
+    /// </summary>
+    public bool ComputerOpponents { get; init; } = true;
 
     /// <summary>Receives a line of text for each notable event (joins, leaves, desyncs).</summary>
     public Action<string>? Log { get; init; }
@@ -145,6 +156,7 @@ public sealed class LockstepServer : IDisposable
     /// <summary>Executes the next tick and allows clients to execute it too.</summary>
     public void AdvanceTick()
     {
+        SyncSeats(joining: null);
         Simulation.Step();
 
         if (Simulation.Frame % HashInterval == 0)
@@ -249,6 +261,9 @@ public sealed class LockstepServer : IDisposable
             case HelloMessage hello when peer.Player is null:
                 Join(peer, hello);
                 break;
+            case CommandRequestMessage { Command: SetSeatCommand } when peer.Player is not null:
+                Log?.Invoke($"{Describe(peer)} sent a command only the server may give.");
+                break;
             case CommandRequestMessage request when peer.Player is { } player:
                 var scheduled = Simulation.Schedule(player, request.Command, Simulation.Frame + CommandDelay);
                 Broadcast(new ScheduledCommandMessage(scheduled));
@@ -292,6 +307,8 @@ public sealed class LockstepServer : IDisposable
             return;
         }
 
+        // The others learn that the place is held before the newcomer gets the state, which carries the word too.
+        SyncSeats(joining: free[0]);
         peer.Player = free[0];
         peer.Name = hello.PlayerName;
 
@@ -358,6 +375,7 @@ public sealed class LockstepServer : IDisposable
 
         Simulation = simulation;
         Level = chosen.Name;
+        ResetSeats();
         _hashes.Clear();
         _restartTick = Simulation.Frame;
         _hashes[_restartTick] = Simulation.ComputeStateHash();
@@ -380,6 +398,34 @@ public sealed class LockstepServer : IDisposable
         }
 
         BroadcastPlayers();
+    }
+
+    /// <summary>Takes the places of the map as the simulation has them, after it was replaced.</summary>
+    private void ResetSeats()
+    {
+        _seatsHeld = [.. Simulation.Hospitals.Select(hospital => !hospital.IsVacant)];
+    }
+
+    /// <summary>
+    /// Tells the simulation which places of the map people hold now, for every place whose state changed: a
+    /// <see cref="SetSeatCommand"/> for the current frame, sent to everyone in the game. Done before each tick, so that a
+    /// place left by a person who went goes to a computer opponent, and when someone joins, for the place they take.
+    /// </summary>
+    private void SyncSeats(int? joining)
+    {
+        for (var seat = 0; seat < _seatsHeld.Length; seat++)
+        {
+            var held = seat == joining || _peers.Any(peer => peer.Player == seat && peer.Connection.IsConnected);
+            if (held == _seatsHeld[seat])
+            {
+                continue;
+            }
+
+            _seatsHeld[seat] = held;
+            var scheduled = Simulation.Schedule(-1, new SetSeatCommand(seat, held, ComputerOpponents), Simulation.Frame);
+            Broadcast(new ScheduledCommandMessage(scheduled));
+            Log?.Invoke(held ? $"Place {seat} is held by a person." : ComputerOpponents ? $"A computer opponent plays place {seat}." : $"Place {seat} stands empty.");
+        }
     }
 
     private void CheckHash(Peer peer, StateHashMessage hash)

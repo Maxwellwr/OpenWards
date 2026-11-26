@@ -142,6 +142,7 @@ else
                 [.. lobbyLevels.Select(offered => new LobbyLevel(offered.Name, () => offered.Load().StartSimulation(seed: 1)))])
             {
                 Log = Console.WriteLine,
+                ComputerOpponents = !options.NoComputers,
             };
 
             // --speed sets the game's speed for everyone; --speed pause waits for the players, whom any of them starts.

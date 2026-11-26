@@ -561,6 +561,36 @@ public class LevelRulesLoaderTests
     }
 
     [Fact]
+    public void KeepsEveryComputerOpponentForTheNetworkGamesEmptyPlaces()
+    {
+        var config = LevelConfig.Parse(Encoding.ASCII.GetBytes("""
+            #computer[0].Skill.StaffLevels.Luck.Speed.Comfort.GuessAt.Playing 5 5 3 40 8 75 0
+            #computer[12].Playing.Name 0 CORSIX
+            """));
+
+        var reserve = LevelRulesLoader.FromConfig(config, null, BaseGameContent.Create()).ReserveCompetitors;
+
+        // All twenty, whether they play or not: the traits where the files give them, the names by number.
+        Assert.Equal(20, reserve.Count);
+        Assert.Equal(new PlannedCompetitor(1, "ORAC", new CompetitorPersonality(5, 5, 40, 8, 75)), reserve[0]);
+        Assert.Equal(new PlannedCompetitor(2, "HAL", CompetitorPersonality.Default), reserve[1]);
+        Assert.Equal("CORSIX", reserve[12].Name);
+        Assert.Equal("OLIVAW", reserve[19].Name);
+    }
+
+    [Fact]
+    public void TheNetworkLevelsKeepNET00sComputerOpponentsInReserve()
+    {
+        var install = RealGameData.Require();
+        var rules = LevelRulesLoader.LoadOriginal(install, "LEVEL.L20", BaseGameContent.Create());
+
+        // NET00.SAM: none plays, but each of the twelve has its traits.
+        Assert.Empty(rules.Competitors);
+        Assert.Equal(new CompetitorPersonality(5, 5, 40, 8, 75), rules.ReserveCompetitors[0].Personality);
+        Assert.Equal(new CompetitorPersonality(5, 9, 80, 4, 90), rules.ReserveCompetitors[8].Personality);
+    }
+
+    [Fact]
     public void ReadsHowPatientsAreShared()
     {
         var config = LevelConfig.Parse(Encoding.ASCII.GetBytes("#gbv.AllocDelay 5\n#gbv.AllocTotalRep 3\n#gbv.AllocIndRep 0\n#gbv.AllocRand 10\n"));

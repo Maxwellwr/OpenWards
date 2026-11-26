@@ -83,8 +83,8 @@ public sealed class PatientArrivals
     /// </summary>
     internal void SpawnPatients(Simulation simulation)
     {
-        // As in CorsixTH, patients come only once the first hospital has opened.
-        if (simulation.Hospitals.Count == 0 || !simulation.Hospitals[0].IsOpen)
+        // As in CorsixTH, patients come only once the first hospital has opened: in a network game the first a person holds.
+        if (simulation.Hospitals.Count == 0 || !(simulation.HeldHospitals.FirstOrDefault() ?? simulation.Hospitals[0]).IsOpen)
         {
             return;
         }
@@ -114,10 +114,30 @@ public sealed class PatientArrivals
     /// </summary>
     /// <param name="simulation">The game.</param>
     /// <param name="disease">The new patient's disease, if any; for the hospitals' reputations for it and their prices.</param>
-    /// <returns>A player's hospital, or past the players' a computer opponent's, counting from the first opponent.</returns>
+    /// <returns>A player's hospital, or past the players' a computer opponent's, counting from the first opponent; past them all when every place is vacant.</returns>
     internal static int ChooseHospital(Simulation simulation, DiseaseDefinition? disease = null)
     {
-        var hospitals = simulation.Hospitals.Count + simulation.Competitors.Count;
+        // A vacant place of a network game gets no patients, as an unused hospital record of the original's.
+        var eligible = new List<int>(simulation.Hospitals.Count + simulation.Competitors.Count);
+        for (var i = 0; i < simulation.Hospitals.Count; i++)
+        {
+            if (!simulation.Hospitals[i].IsVacant)
+            {
+                eligible.Add(i);
+            }
+        }
+
+        for (var i = 0; i < simulation.Competitors.Count; i++)
+        {
+            eligible.Add(simulation.Hospitals.Count + i);
+        }
+
+        if (eligible.Count == 0)
+        {
+            return simulation.Hospitals.Count + simulation.Competitors.Count;
+        }
+
+        var hospitals = eligible.Count;
         var allocation = simulation.Rules.Allocation;
         if (allocation.InTurnIn(simulation.Date.MonthOfGame))
         {
@@ -132,25 +152,25 @@ public sealed class PatientArrivals
                 attempts += competitor.SpawnAttempts;
             }
 
-            return (int)(attempts % hospitals);
+            return eligible[(int)(attempts % hospitals)];
         }
 
         if (allocation.RandomChance > 0 && simulation.Random.Next(allocation.RandomChance) == 0)
         {
-            return simulation.Random.Next(hospitals);
+            return eligible[simulation.Random.Next(hospitals)];
         }
 
         var appeals = new long[hospitals];
         long total = 0;
         for (var i = 0; i < hospitals; i++)
         {
-            appeals[i] = Appeal(simulation, i, disease);
+            appeals[i] = Appeal(simulation, eligible[i], disease);
             total += appeals[i];
         }
 
         if (total <= 0)
         {
-            return simulation.Random.Next(hospitals);
+            return eligible[simulation.Random.Next(hospitals)];
         }
 
         // A number from 0 to the sum of the appeals, against each hospital's share of it in turn.
@@ -160,11 +180,11 @@ public sealed class PatientArrivals
             threshold -= appeals[i];
             if (threshold < 0)
             {
-                return i;
+                return eligible[i];
             }
         }
 
-        return hospitals - 1;
+        return eligible[hospitals - 1];
     }
 
     /// <summary>

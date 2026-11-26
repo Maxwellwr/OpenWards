@@ -15,6 +15,8 @@ const string Usage = """
       --difficulty NAME  Difficulty of an original level: Easy, Medium (default) or Hard
       --port PORT    TCP port (default 7777)
       --public       Accept connections from other machines, not only this one
+      --no-computers Leave the places nobody holds empty; by default a computer opponent plays each
+                     until a person joins (not in the original's network game)
       --seed N       Seed for the simulation's random numbers (default 1)
       --speed NAME   Speed the game starts at: Pause (waits until a player starts it), Slowest, Slower,
                      Normal (default), MaxSpeed, AndThenSomeMore or Insane
@@ -29,6 +31,7 @@ string? mapPath = null;
 var port = 7777;
 var publicHost = false;
 var freeBuild = false;
+var computers = true;
 ulong seed = 1;
 var difficulty = Difficulty.Medium;
 var speed = GameSpeed.Normal;
@@ -63,6 +66,9 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--free-build":
             freeBuild = true;
+            break;
+        case "--no-computers":
+            computers = false;
             break;
         case "--help" or "-h":
             Console.WriteLine(Usage);
@@ -145,7 +151,7 @@ if (lobbyInstall?.FindDirectory("LEVELS") is { } levelsFolder)
     }
 }
 
-var server = new LockstepServer(loaded.StartSimulation(seed), levelName, offered) { Log = line => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}") };
+var server = new LockstepServer(loaded.StartSimulation(seed), levelName, offered) { Log = line => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}"), ComputerOpponents = computers };
 server.SetSpeed(speed);
 using var runner = new ServerRunner(server, new TcpConnectionListener(publicHost ? IPAddress.Any : IPAddress.Loopback, port));
 Console.WriteLine($"Serving {levelName} ({loaded.Map.PlayerCount} players) on port {runner.Port}{(publicHost ? "" : " (this machine only; add --public for others)")}. Press Ctrl+C to stop.");

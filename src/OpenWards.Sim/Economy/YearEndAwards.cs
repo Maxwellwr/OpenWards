@@ -204,7 +204,7 @@ public static class YearEndAwards
 
     private static void Awards(Simulation simulation, Hospital hospital, AwardRules rules, int level, List<YearEndAward> prizes)
     {
-        var others = simulation.Hospitals.Where(other => other.Player != hospital.Player).ToList();
+        var others = simulation.HeldHospitals.Where(other => other.Player != hospital.Player).ToList();
         var competitors = simulation.Competitors;
 
         // Reputation, against the others; the bonus needs 2 × the level's number of cures in the year.
