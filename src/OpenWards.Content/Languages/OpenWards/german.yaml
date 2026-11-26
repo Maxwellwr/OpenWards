@@ -23,6 +23,9 @@ strings:
       queuejump_on_cheat: 'Ihre Patienten wissen, wie man ansteht: Sie lassen Todkranke nach vorne.'
       superdoctor_off_cheat: Der Leiter der Medizinschule empfiehlt Sie seinen Absolventen nicht mehr.
       superdoctor_on_cheat: Eine hervorragende Medizinschule empfiehlt Sie ihren Absolventen! Sehen Sie sich das Personal zur Einstellung an.
+    research:
+      # The original uses it for a research area, not a drug.
+      drug_fully_researched: Sie haben den Bereich %s zu 100% erforscht.
     warnings:
       cannot_afford_machine: Sie brauchen mindestens $%1% auf dem Konto, um sich ein neues Gerät (%2%) leisten zu können!
   audio_window:

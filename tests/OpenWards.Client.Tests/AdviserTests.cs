@@ -141,17 +141,29 @@ public class AdviserTests
     }
 
     [Fact]
-    public void AnAreaResearchedToTheEndIsAnnounced()
+    public void TheDiagnosisSliderSwitchedOffIsAnnouncedOnce()
     {
         var host = new WindowTestHost();
-        var research = host.Simulation.Hospitals[0].Research;
-        research.Area(ResearchCategory.Drugs).Current = ResearchTarget.Drug("uncommon_cold");
-        var checks = new AdviserChecks(host.Adviser, new Random(1));
-        checks.Observe(host.Simulation, 0, null, 0);
-
+        var simulation = host.Simulation;
+        var hospital = simulation.Hospitals[0];
+        var research = hospital.Research;
+        research.DiscoverAll(simulation, hospital);
         research.Area(ResearchCategory.Drugs).Current = ResearchTarget.None;
-        checks.Observe(host.Simulation, 0, null, 0);
-        Assert.Equal(AdviserChecks.DrugFullyResearched.Fallback.Replace("%s", "Drugs", StringComparison.Ordinal), host.Adviser.Current);
+        var checks = new AdviserChecks(host.Adviser, new Random(1));
+        checks.Observe(simulation, 0, null, 0);
+
+        // Cure and drugs have nothing to do either, but only the diagnosis area's slider going off is announced, at the
+        // end of a day the research department brought points.
+        research.AddPoints(ResearchDepartment.DeskPoints);
+        research.OnEndDay(simulation, hospital);
+        Assert.Equal(1, research.DiagnosisSwitchedOff);
+        checks.Observe(simulation, 0, null, 0);
+        Assert.Equal(AdviserChecks.DrugFullyResearched.Fallback.Replace("%s", "Diagnosis", StringComparison.Ordinal), host.Adviser.Current);
+
+        // The slider stays off: no second time.
+        research.AddPoints(ResearchDepartment.DeskPoints);
+        research.OnEndDay(simulation, hospital);
+        Assert.Equal(1, research.DiagnosisSwitchedOff);
     }
 
     [Fact]

@@ -67,8 +67,9 @@ public sealed class ResearchArea
 /// <summary>
 /// A hospital's research. Each action of a researcher in the research department adds points to a pool. Once a day the
 /// areas, in the research window's order, each take their slider's percent of what is left in the pool, and put it into
-/// the cheapest item they can work on; an item whose points reach its cost is discovered or improved. An area with
-/// nothing to work on gives its points back and its slider goes off. Research costs no money.
+/// the cheapest item they can work on; an item whose points reach its cost is discovered or improved. A cure or diagnosis
+/// area with nothing to work on gives its points back and its slider goes off; a drugs or improvements area gives them
+/// back and keeps its slider; the specialisation area without a disease loses its share. Research costs no money.
 /// </summary>
 /// <remarks>
 /// Where it departs from CorsixTH: CorsixTH gives each researcher points every day and for each use of a desk, computer
@@ -110,6 +111,13 @@ public sealed class ResearchDepartment
 
     /// <summary>Points the researchers produced that no area has taken yet.</summary>
     public int Pool { get; private set; }
+
+    /// <summary>
+    /// How many times the day's research switched the diagnosis slider off with nothing left to discover, for the
+    /// adviser. The original game's message for the cure area is lost (its category number 0 reads as an empty adviser
+    /// queue), so only diagnosis counts. Not saved: only the interface reads it, comparing it from one look to the next.
+    /// </summary>
+    public int DiagnosisSwitchedOff { get; private set; }
 
     /// <summary>The sum of the areas' sliders, in percent.</summary>
     public int Total => _areas.Sum(area => area.Share);
@@ -188,31 +196,50 @@ public sealed class ResearchDepartment
 
     /// <summary>
     /// The day's research: each area in turn takes its slider's percent of what is left in the pool for its cheapest item;
-    /// an area with nothing to work on leaves its points in the pool and its slider goes off.
+    /// an area whose slider is off or whose share comes to less than a point is passed over.
+    /// With nothing to work on, the cure and diagnosis areas leave their points in the pool and their sliders go off; the
+    /// drugs and improvements areas leave their points in the pool and keep their sliders; and with no disease to
+    /// concentrate on, the specialisation area still takes its share, which is lost. Every share taken and not given
+    /// back counts towards the year's award for research, the lost one too.
     /// </summary>
     internal void OnEndDay(Simulation simulation, Hospital hospital)
     {
         foreach (var category in Order)
         {
             var area = Area(category);
+            var taken = (int)((long)area.Share * Pool / 100);
+            if (area.Share <= 0 || taken <= 0)
+            {
+                // Not looked at: no target sought, the slider kept, nothing for the adviser.
+                continue;
+            }
+
             area.Current = FindTarget(simulation, hospital, category);
             if (area.Current.IsNone)
             {
-                area.Share = 0;
-                if (category == ResearchCategory.Specialisation)
+                switch (category)
                 {
-                    Concentrated = string.Empty;
+                    case ResearchCategory.Cure or ResearchCategory.Diagnosis:
+                        if (category == ResearchCategory.Diagnosis)
+                        {
+                            DiagnosisSwitchedOff++;
+                        }
+
+                        area.Share = 0;
+                        break;
+                    case ResearchCategory.Specialisation:
+                        Concentrated = string.Empty;
+                        Pool -= taken;
+                        hospital.ResearchDistributedThisYear += taken;
+                        break;
                 }
 
                 continue;
             }
 
-            var taken = (int)((long)area.Share * Pool / 100);
-            if (taken > 0)
-            {
-                Pool -= taken;
-                Progress(simulation, hospital, area.Current, taken);
-            }
+            Pool -= taken;
+            hospital.ResearchDistributedThisYear += taken;
+            Progress(simulation, hospital, area.Current, taken);
         }
 
         RefreshTargets(simulation, hospital);

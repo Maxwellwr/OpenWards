@@ -1,3 +1,4 @@
+using OpenWards.Sim.Calendar;
 using OpenWards.Sim.Commands;
 using OpenWards.Sim.Definitions;
 using OpenWards.Sim.Diseases;
@@ -56,14 +57,53 @@ public class ResearchTests
         research.OnEndDay(simulation, hospital);
 
         // Cure has nothing to discover: its points stay in the pool and its slider goes off. Diagnosis takes 20 % of
-        // 1,000, drugs have nothing, improvements take 20 % of the 800 left, specialisation has no disease chosen.
+        // 1,000; drugs have nothing to improve, so their points stay and their slider stays; improvements take 20 % of
+        // the 800 left; with no disease chosen, specialisation's 20 % of the 640 left is lost and its slider stays.
         Assert.Equal(200, research.Objects["ultrascanner"].Points);
         Assert.Equal(160, research.Objects["inflator"].Points);
-        Assert.Equal(640, research.Pool);
+        Assert.Equal(512, research.Pool);
         Assert.Equal(0, research.Area(ResearchCategory.Cure).Share);
-        Assert.Equal(0, research.Area(ResearchCategory.Drugs).Share);
-        Assert.Equal(0, research.Area(ResearchCategory.Specialisation).Share);
-        Assert.Equal(40, research.Total);
+        Assert.Equal(20, research.Area(ResearchCategory.Drugs).Share);
+        Assert.Equal(20, research.Area(ResearchCategory.Specialisation).Share);
+        Assert.Equal(80, research.Total);
+
+        // The shares taken count towards the year's award, the lost one too; those given back do not.
+        Assert.Equal(200 + 160 + 128, hospital.ResearchDistributedThisYear);
+        Assert.Equal(0, research.DiagnosisSwitchedOff);
+    }
+
+    [Fact]
+    public void WithAnEmptyPoolNoAreaIsLookedAtSoTheSlidersStayUntilTheFirstPoints()
+    {
+        var simulation = NewSimulation();
+        var hospital = simulation.Hospitals[0];
+        var research = hospital.Research;
+        research.DiscoverAll(simulation, hospital);
+
+        // No research department: days pass with an empty pool, and diagnosis, with nothing left to discover, keeps
+        // its 20 % and says nothing.
+        for (var day = 2; day <= 5; day++)
+        {
+            EndDayBefore(simulation, day);
+        }
+
+        Assert.Equal(20, research.Area(ResearchCategory.Diagnosis).Share);
+        Assert.Equal(20, research.Area(ResearchCategory.Cure).Share);
+        Assert.Equal(0, research.DiagnosisSwitchedOff);
+
+        // A researcher's first action (at least 50 points): at the end of that day the sliders go off, from 20 %.
+        research.AddPoints(ResearchDepartment.DeskPoints);
+        EndDayBefore(simulation, 6);
+        Assert.Equal(0, research.Area(ResearchCategory.Diagnosis).Share);
+        Assert.Equal(0, research.Area(ResearchCategory.Cure).Share);
+        Assert.Equal(1, research.DiagnosisSwitchedOff);
+    }
+
+    /// <summary>Runs the simulation to the end of the day before <paramref name="day"/> of January, year 1.</summary>
+    private static void EndDayBefore(Simulation simulation, int day)
+    {
+        simulation.SkipToLastHour(new GameDate(1, 1, day, 0));
+        simulation.Step();
     }
 
     [Fact]
