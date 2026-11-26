@@ -375,9 +375,9 @@ public static class OriginalSaveImporter
     /// west, otherwise on the edge of the tile outside.
     /// </summary>
     /// <summary>
-    /// The litter of the low nibble of each tile's extra byte: 1 to 4 are the rubbish patients drop, as OpenWards numbers
-    /// it; 5 and 6 are taken for puke and pee (unchecked against the original's sprites); 7 and 8 mark rat holes in the
-    /// tile's north and west wall. The hospital's count of littered tiles is the tiles of 1 to 6 in every original save;
+    /// The litter of the low nibble of each tile's extra byte: 1 to 3 are the three kinds of rubbish patients drop, 4 a
+    /// dead rat, 5 puke, 6 pee, and 7 and 8 mark rat holes in the tile's north and west wall (the original developers'
+    /// notes, as the maintainer's expert on the original reads them). The hospital's count of littered tiles is the tiles of 1 to 6 in every original save;
     /// the holes come from the hospital's list, which also holds those of east and south walls, unmarked on any tile.
     /// </summary>
     private static List<(TilePosition Tile, LitterType Type)> LitterOf(OriginalSaveGame save)
@@ -389,7 +389,8 @@ public static class OriginalSaveImporter
             {
                 LitterType? type = (save[x, y].Extra & 0x0F) switch
                 {
-                    >= 1 and <= 4 and var rubbish => (LitterType)rubbish,
+                    >= 1 and <= 3 and var rubbish => (LitterType)rubbish,
+                    4 => LitterType.DeadRat,
                     5 => LitterType.Puke,
                     6 => LitterType.Pee,
                     _ => null,
