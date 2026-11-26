@@ -561,7 +561,8 @@ save explicitly. A behaviour runs on every tick in which its humanoid is not wal
   had to be able to buy the parcel. The hammer falls 100 frames after the opening or the last bid (it rests above 70,
   rises every 10 frames and strikes at 3); with no bid the parcel stays for sale, otherwise the leader pays their bid,
   the price and a step for each bid after the first, and the others nothing. The lockstep server runs these frames
-  every 0.1 s whatever the game's speed, paused too (`LockstepServer.AuctionFrameInterval`). Commands are scheduled
+  every 55 ms whatever the game's speed, paused too (`LockstepServer.AuctionFrameInterval`), as the original's frames
+  wait for at least 40 ms on DOS's 18.2 Hz clock: the hammer falls about 5.5 s after the last bid. Commands are scheduled
   by frame, which is the tick outside auctions.
 - **Poaching** (`StaffEmployment.Poach`, after the original's network game). Another player's `PoachStaffCommand`
   makes an unhappy member of staff (happiness below 0.5) demand double their wage of their employer as a raise request

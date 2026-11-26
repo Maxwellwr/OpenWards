@@ -47,11 +47,13 @@ public sealed class LockstepServer : IDisposable
     private readonly SortedDictionary<long, ulong> _hashes = [];
     private readonly List<DesyncMessage> _desyncs = [];
     /// <summary>
-    /// Real time between two frames of a land auction's bidding screen. The original exchanges a frame with every machine
-    /// as fast as the connection allows, so its hammer takes as long as the line makes it; ours waits a fixed 0.1 s, ten
-    /// seconds from the last bid to the hammer (<see cref="Sim.Economy.LandAuction.HammerFrames"/>).
+    /// Real time between two frames of a land auction's bidding screen. In the original every frame, the bidding screen's
+    /// too, waits until at least 40 ms have passed since the last one, reading DOS's clock, which moves 18.2 times a
+    /// second; so a frame takes one clock step, about 55 ms, and the hammer falls about 5.5 s after the last bid
+    /// (<see cref="Sim.Economy.LandAuction.HammerFrames"/>), more on a slow line. The game's speed and pause do not change it.
+    /// Source: the game expert's answer from the developers' notes (expert inbox, 2026-11-26, "auction-frame-pace").
     /// </summary>
-    public static readonly TimeSpan AuctionFrameInterval = TimeSpan.FromMilliseconds(100);
+    public static readonly TimeSpan AuctionFrameInterval = TimeSpan.FromMilliseconds(55);
 
     private readonly GameClock _clock = new();
 
