@@ -9,7 +9,7 @@ using static OpenWards.Sim.Definitions.FootprintFlags;
 
 namespace OpenWards.Sim.Tests;
 
-/// <summary>Plants drooping without water (CorsixTH's objects/plant.lua).</summary>
+/// <summary>Plants drooping without water, as in the original.</summary>
 public class PlantTests
 {
     private static readonly ObjectDefinition Plant = new("plant", "Plant", 45, new Dictionary<Direction, ObjectOrientation>
@@ -24,79 +24,96 @@ public class PlantTests
     }, CorridorObject: true);
 
     [Theory]
-    [InlineData(400, PlantState.Healthy, 64)]
-    [InlineData(200, 1, 32)]
-    [InlineData(-11, 3, 58.72)]
-    [InlineData(-140, PlantState.Dead, 64)]
-    public void AnOriginalSavesWaterSetsTheState(int water, int state, double daysLeft)
+    [InlineData(400, PlantState.Healthy, 400)]
+    [InlineData(321, PlantState.Healthy, 321)]
+    [InlineData(320, 1, 320)]
+    [InlineData(241, 1, 241)]
+    [InlineData(240, 2, 240)]
+    [InlineData(160, 3, 160)]
+    [InlineData(80, PlantState.Wilted, 80)]
+    [InlineData(-11, PlantState.Wilted, -11)]
+    [InlineData(-40, PlantState.Wilted, 0)]
+    public void AnOriginalSavesWaterIsKeptAndSetsTheFrame(int water, int state, int kept)
     {
         var plant = new PlantState();
 
         plant.ImportOriginalWater(water);
 
-        Assert.Equal((state, (decimal)daysLeft), (plant.State, plant.DaysLeft));
+        Assert.Equal((state, kept), (plant.State, plant.Water));
     }
 
     [Fact]
-    public void APlantCountsDownOneDayPlusTheWarmthOfItsTile()
+    public void ItNeedsWateringFromTheFirstDroopingFrameAndIsWitheredOnlyBelowNoWater()
     {
-        var state = new PlantState();
-        Assert.Equal(PlantState.Healthy, state.State);
-        Assert.False(state.NeedsWatering);
-        Assert.Equal(5, state.PleasingFactor);
+        var plant = new PlantState();
+        Assert.Equal((false, 0, false, 5), (plant.NeedsWatering, plant.WateringPriority, plant.IsWithered, plant.PleasingFactor));
 
-        state.OnEndDay(0.25m);
+        plant.ImportOriginalWater(320);
+        Assert.Equal((true, 1, false), (plant.NeedsWatering, plant.WateringPriority, plant.IsWithered));
 
-        Assert.Equal(PlantState.DaysBetweenStates - 1.25m, state.DaysLeft);
+        plant.ImportOriginalWater(0);
+        Assert.Equal((true, 4, false, 1), (plant.NeedsWatering, plant.WateringPriority, plant.IsWithered, plant.PleasingFactor));
+
+        plant.ImportOriginalWater(-1);
+        Assert.True(plant.IsWithered);
     }
 
     [Fact]
-    public void EverySixtyFourDaysAtNoWarmthItGetsAStateWorseUntilDead()
+    public void BelowNoWaterItRunsDownToMinusFortyThenStartsAgainMoreUrgently()
     {
-        var state = new PlantState();
-        for (var day = 0; day < 63; day++)
+        var plant = new PlantState();
+        plant.ImportOriginalWater(-39);
+        var random = new SimRandom(7);
+
+        while (!plant.HasRunDry)
         {
-            state.OnEndDay(0m);
+            plant.Droop(random);
         }
 
-        Assert.Equal(PlantState.Healthy, state.State);
-        Assert.True(state.IsDying); // One day left.
+        Assert.Equal((0, PlantState.Wilted, PlantState.WrappedPriority), (plant.Water, plant.State, plant.WateringPriority));
 
-        state.OnEndDay(0m);
-        Assert.Equal(1, state.State);
-        Assert.True(state.NeedsWatering);
-        Assert.Equal(PlantState.DaysBetweenStates, state.DaysLeft);
-
-        for (var day = 0; day < 64 * 10; day++)
-        {
-            state.OnEndDay(0m);
-        }
-
-        Assert.Equal(PlantState.Dead, state.State);
-        Assert.Equal(1, state.PleasingFactor);
+        plant.Restore();
+        Assert.Equal((PlantState.FullWater, false, PlantState.Healthy), (plant.Water, plant.HasRunDry, plant.State));
     }
 
     [Fact]
-    public void APlacedPlantDroopsDayByDayAndSavesKeepIt()
+    public void APlacedPlantLosesAboutADropAndAHalfADayWhateverTheWarmthAndSavesKeepIt()
     {
         var simulation = NewSimulation();
         Place(simulation, "plant", new TilePosition(3, 3));
         var plant = Assert.Single(simulation.Entities.OfType<RoomObject>()).Plant;
         Assert.NotNull(plant);
 
-        while (simulation.Date.Day == 1)
+        // Thirty days: one draw in two every 16 ticks of 50 a day, about 47 drops.
+        for (var tick = 0; tick < 30 * 50; tick++)
         {
             simulation.Step();
         }
 
-        Assert.InRange(plant.DaysLeft, 62.8m, 62.9m); // 1 + about 0.125 for the tile's 6 °C.
+        Assert.InRange(PlantState.FullWater - plant.Water, 30, 64);
         using var stream = new MemoryStream();
         simulation.Save(stream);
         stream.Position = 0;
         var restored = Simulation.Load(stream, simulation.Content);
 
         Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
-        Assert.Equal(plant.DaysLeft, Assert.Single(restored.Entities.OfType<RoomObject>()).Plant!.DaysLeft);
+        Assert.Equal(plant.Water, Assert.Single(restored.Entities.OfType<RoomObject>()).Plant!.Water);
+    }
+
+    [Fact]
+    public void FromWateredToDryTakesAbout256Days()
+    {
+        var plant = new PlantState();
+        var random = new SimRandom(11);
+        var draws = 0;
+        while (plant.Water > 0)
+        {
+            plant.Droop(random);
+            draws++;
+        }
+
+        // 800 draws on average, 16 ticks each, 50 ticks a day.
+        Assert.InRange(draws * PlantState.DroopInterval / 50, 230, 282);
     }
 
     [Fact]
@@ -114,10 +131,7 @@ public class PlantTests
         var simulation = NewSimulation();
         Place(simulation, "plant", new TilePosition(3, 3));
         var plant = Assert.Single(simulation.Entities.OfType<RoomObject>()).Plant!;
-        for (var day = 0; day < 64 * 4; day++)
-        {
-            plant.OnEndDay(0m);
-        }
+        plant.ImportOriginalWater(0);
 
         simulation.Schedule(0, new HireStaffCommand(StaffClass.Handyman, 0, new TilePosition(4, 4)));
         simulation.Step();
@@ -127,7 +141,7 @@ public class PlantTests
 
         Feelings.OnEndDay(simulation, handyman);
 
-        // The dead plant −0.003 + 1 × 0.001.
+        // The most drooping plant −0.003 + 1 × 0.001.
         Assert.Equal(0.5m - 0.002m, handyman.Happiness);
     }
 

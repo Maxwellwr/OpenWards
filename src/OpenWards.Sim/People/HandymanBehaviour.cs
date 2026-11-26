@@ -693,7 +693,7 @@ public sealed class HandymanBehaviour : HumanoidBehaviour
                     break;
                 case HandymanTaskType.Watering when entity is RoomObject { Plant: { NeedsWatering: true } state } plant
                     && Owner(simulation, plant.Tile) == humanoid.Employer && BestUsageTile(simulation, humanoid, plant) is { } tile:
-                    yield return new HandymanTask(type, plant, tile, state.State + 1);
+                    yield return new HandymanTask(type, plant, tile, state.WateringPriority);
                     break;
                 case HandymanTaskType.Repairing when entity is RoomObject { Machine: { } wear, IsDestroyed: false } machine
                     && (wear.NeedsRepair || wear.IsRepairCalled)

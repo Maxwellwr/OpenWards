@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 118;
+    private const int FormatVersion = 119;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -334,6 +334,18 @@ public sealed class Simulation
         for (var i = 0; i < count && i < _entities.Count; i++)
         {
             _entities[i].Update(this);
+        }
+
+        // Every few ticks each plant might lose a drop of water, as in the original.
+        if (Tick % Objects.PlantState.DroopInterval == 0)
+        {
+            foreach (var entity in _entities)
+            {
+                if (entity is RoomObject { Plant: { } plant, IsDestroyed: false })
+                {
+                    plant.Droop(Random);
+                }
+            }
         }
 
         // Every ModifyFreq ticks the patients' needs are worked out, after everyone has moved.
@@ -893,17 +905,13 @@ public sealed class Simulation
             Rats.OnEndDay(this, hospital);
         }
 
-        // Then each person's and plant's day, as World:onEndDay's entity:tickDay().
+        // Then each person's day, as World:onEndDay's entity:tickDay().
         foreach (var entity in _entities)
         {
             if (entity is Humanoid humanoid)
             {
                 (humanoid.Behaviour as VipBehaviour)?.OnEndDay(this, humanoid);
                 Feelings.OnEndDay(this, humanoid);
-            }
-            else if (entity is RoomObject { Plant: { } plant } placed)
-            {
-                plant.OnEndDay(Temperatures[placed.Tile.X, placed.Tile.Y] / (decimal)TileTemperatures.Max);
             }
         }
 
