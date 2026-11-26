@@ -16,7 +16,7 @@ Settings, saves and `crash.log` are in `%AppData%\OpenWards`. Saved games of 0.1
   diagnosis and treatment, patients' needs, research and machine wear, VIPs, rats and loans, staff wages, training
   and rest, epidemics and emergencies, the level rating and the yearly bonus.
 - Computer opponents follow their scenario, as in the original.
-- Network play has land auctions and network missions.
+- Network play has land auctions and network missions, and computer opponents fill the places no person holds.
 - Much more of an original saved game comes over: research, reputation, patients, staff, VIPs, emergencies,
   earthquakes, litter, rats and the computer opponents.
 
@@ -27,7 +27,7 @@ The full list is in `CHANGELOG.md`.
 - Importing an original saved game does not carry over the candidates for hire, and emergencies offered but not
   answered yet are dropped. Plants' water is an estimate.
 - CorsixTH saved games cannot be loaded.
-- Network play is experimental: land auctions and network missions have not been tried over a real network yet, and
-  there are no computer opponents in network games.
+- Network play is experimental. The map is not chosen by the number of players, and a player who leaves does not
+  lose their hospital: a computer opponent takes the place until someone joins.
 
 Please report problems at https://github.com/Maxwellwr/OpenWards/issues, with `crash.log` if the game crashed.

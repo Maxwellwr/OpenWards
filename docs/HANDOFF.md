@@ -47,10 +47,10 @@ the new session has absorbed it.
 
 Version 0.1.0 was released on 2026-11-23 (tag `v0.1.0`); 0.2.0 is being prepared (`CHANGELOG.md`,
 `docs/release-notes.md`, `VersionPrefix` 0.2.0). Only the user pushes release tags and publishes releases. The save
-format is 121 (`Simulation.FormatVersion`); parallel pull requests each take the next free number and renumber when
+format is 123 (`Simulation.FormatVersion`); parallel pull requests each take the next free number and renumber when
 another one lands first.
 
-Since 0.1.0 (#518–#552) the game logic follows the user's specification of the original game's rules, collected from
+Since 0.1.0 (#518–#557) the game logic follows the user's specification of the original game's rules, collected from
 the community (a PDF, not in the repository): reputation, prices and insurance, diagnosis and treatment, patients'
 needs, research and wear, VIPs, rats and loans, staff, epidemics and emergencies, level rating, training, opponents
 by scenario, land auctions and network missions. The specification's random number generator and its raw constants
@@ -63,8 +63,11 @@ Importing the original's saves carries over almost everything that changes in pl
 #545, #549). Still left out: candidates for hire, emergencies offered but not answered, and plant water is an
 estimate. `tools/OpenWards.SaveDump` (`coverage`, `diff`) maps new fields from two saves with one action between them.
 
-Left for later: a plant adviser as in the original, live computer opponents in network games, a live check of land
-auctions and network missions over a real network.
+The plant adviser works on the original's plant care score (`Hospital.PlantCare`, #556). In network games computer
+opponents hold the places no person holds (`SetSeatCommand`, `Hospital.IsVacant`; `--no-computers` turns them off;
+#557): this is OpenWards' own, the original's network game has none. Land auctions and network missions were checked
+live with a headless server and two clients under xvfb (#555). Not done: choosing the map by the number of players,
+and a player who quits losing their hospital as in the original (here the place becomes vacant).
 
 The project was renamed from CorsixNet to OpenWards on 2026-11-18 (solution, projects, namespaces, the `openwards.*`
 strings, the `OW0001`–`OW0003` analyzer rules, the `OPENWARDS_*` environment variables). The client moves an old
