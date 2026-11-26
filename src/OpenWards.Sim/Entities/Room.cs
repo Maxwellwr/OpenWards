@@ -438,8 +438,8 @@ public sealed class RoomDoor : Entity
             door.SwingIn = reader.ReadBool();
             door.SwingCrossTicks = reader.ReadInt32();
 
-            // Version 119 keeps the pace of the left door's swing.
-            door.SwingFrameTicks = reader.Version is 0 or >= 119 ? Math.Clamp(reader.ReadInt32(), 1, 2) : 1;
+            // Version 121 keeps the pace of the left door's swing.
+            door.SwingFrameTicks = reader.Version is 0 or >= 121 ? Math.Clamp(reader.ReadInt32(), 1, 2) : 1;
         }
 
         return door;
