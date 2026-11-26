@@ -106,6 +106,47 @@ public class StringTableTests
     }
 
     [Fact]
+    public void NumbersTheSlotsOfTheGermanReputationMission()
+    {
+        var sections = new List<string>[67];
+        for (var i = 0; i < sections.Length; i++)
+        {
+            sections[i] = ["x"];
+        }
+
+        // Section 67, string 21: mission 7 with the months first; string 18 (mission 6) keeps the usual order.
+        sections[66] = [.. Enumerable.Range(1, 21).Select(i => i switch
+        {
+            18 => "Wert %d in %d Monaten",
+            21 => "In %d Monaten Ruf %d",
+            _ => $"m{i}",
+        })];
+
+        var table = StringTable.Parse(Build(sections));
+        table.FixGerman();
+
+        Assert.Equal("In %2$d Monaten Ruf %1$d", table[66, 20]);
+        Assert.Equal("Wert %d in %d Monaten", table[66, 17]);
+    }
+
+    [Fact]
+    public void TheGermanReputationMissionGetsItsNumbersByMeaning()
+    {
+        var install = RealGameData.Require();
+        if (!install.InstalledLanguages().Contains(StringTable.German))
+        {
+            Assert.Skip("The German strings are not installed.");
+        }
+
+        var german = install.LoadStrings(StringTable.German)[66, 20];
+        var english = install.LoadStrings(StringTable.English)[66, 20];
+
+        // The months come first in the German wording, so they take the second number; the target the first.
+        Assert.True(german.IndexOf("%2$d", StringComparison.Ordinal) is >= 0 and var months && months < german.IndexOf("%1$d", StringComparison.Ordinal), german);
+        Assert.DoesNotContain("$d", english, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReadsTheInstalledLanguage()
     {
         var install = RealGameData.Require();

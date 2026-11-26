@@ -56,6 +56,12 @@ public sealed class OriginalSaveImporterTests(ITestOutputHelper output)
             Assert.Equal(saved.Reputation, hospital.Reputation);
             Assert.Equal(saved.PeopleCured, hospital.Cured);
 
+            // Every littered tile the hospital counts comes over, and its rat holes from its list of holes.
+            var litter = simulation.Entities.OfType<Litter>().Count(l => l.Player == 0 && !l.IsRemoved);
+            output.WriteLine($"   litter {litter}/{saved.LitteredTiles}, rat holes {hospital.Ratholes.Count}/{saved.RatholeCount}");
+            Assert.Equal(saved.LitteredTiles, litter);
+            Assert.Equal(Math.Min(saved.RatholeCount, OpenWards.Sim.Disasters.Rats.MaxRatholes), hospital.Ratholes.Count);
+
             // The computer players' reputations go to the level's opponents.
             var rivals = save.Hospitals.Where(h => h.Kind == 2).Select(h => h.Reputation).Order();
             Assert.Equal(rivals.Take(simulation.Competitors.Count), simulation.Competitors.Select(c => c.Reputation).Order().Take(rivals.Count()));

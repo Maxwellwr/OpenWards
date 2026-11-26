@@ -593,6 +593,25 @@ public class OriginalSaveGameTests
 
             var bySlotAll = save.Entities.ToDictionary(e => e.Slot);
 
+            // The hospital counts the tiles with litter (1 to 6 in the low nibble of the tile's extra byte); rat holes
+            // mark their tile with 7 (north wall) or 8 (west wall), and every mark is one of the hospital's holes.
+            var littered = 0;
+            for (var y = 0; y < OriginalSaveGame.MapSize; y++)
+            {
+                for (var x = 0; x < OriginalSaveGame.MapSize; x++)
+                {
+                    var mark = save[x, y].Extra & 0x0F;
+                    littered += mark is >= 1 and <= 6 ? 1 : 0;
+                    if (mark is 7 or 8)
+                    {
+                        var wall = mark == 7 ? 0 : 3;
+                        Assert.Contains((x, y, wall), Enumerable.Range(0, Math.Min(local.RatholeCount, OriginalSaveHospital.MaxRatholes)).Select(local.Rathole));
+                    }
+                }
+            }
+
+            Assert.Equal(local.LitteredTiles, littered);
+
             // The chart history is recorded month by month, so it never runs ahead of today's totals.
             Assert.True(save.Chart(OriginalSaveChart.Cures).Max() <= local.PeopleCured);
 
