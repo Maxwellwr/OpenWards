@@ -3023,11 +3023,13 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
             var swingAnimation = slave
                 ? (door.SwingIn ? swing.SlaveIn : swing.SlaveOut)
                 : (door.SwingIn ? swing.MasterIn : swing.MasterOut);
+            // The left door swings at the pace of the humanoid going through, the right one at its own two ticks a frame.
+            var frameTicks = slave ? door.SwingFrameTicks : RoomDoor.CloseFrameTicks;
             var elapsed = simulation.Tick - door.SwingStart - (slave ? 0 : door.SwingCrossTicks);
-            if (elapsed >= 0 && elapsed < swingAnimation.Length)
+            if (elapsed >= 0 && elapsed < (long)swingAnimation.Length * frameTicks)
             {
                 var first = _animations.Animations.FirstFrame(swingAnimation.Id);
-                DrawDoorFrame(batch, door, _animations.Animations.Advance(first, (int)elapsed), anchorX, anchorY, west);
+                DrawDoorFrame(batch, door, _animations.Animations.Advance(first, (int)(elapsed / frameTicks)), anchorX, anchorY, west);
                 return;
             }
         }

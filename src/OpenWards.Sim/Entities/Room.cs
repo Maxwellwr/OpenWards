@@ -291,17 +291,30 @@ public sealed class RoomDoor : Entity
     /// <summary>How long the humanoid took through them, after which the right door swings (<c>swingDoors</c>' length).</summary>
     public int SwingCrossTicks { get; private set; }
 
+    /// <summary>
+    /// How many ticks a frame of the left door's swing lasts: the frame length of the humanoid going through, so the
+    /// door swings at their pace (the original, by the expert's reading of the developers' notes).
+    /// </summary>
+    public int SwingFrameTicks { get; private set; } = 1;
+
+    /// <summary>
+    /// How many ticks a frame of the right door's swing lasts once the humanoid is through: 2 for every swing door,
+    /// whoever went through (every swing door in the original's saves H2–H8 has it).
+    /// </summary>
+    public const int CloseFrameTicks = 2;
+
     /// <summary><c>SwingDoor:swingDoors</c>: the left door swings at once, the right one once the humanoid is through.</summary>
-    internal void StartSwing(long tick, bool swingIn, int crossTicks)
+    internal void StartSwing(long tick, bool swingIn, int crossTicks, int frameTicks)
     {
         SwingStart = tick;
         SwingIn = swingIn;
         SwingCrossTicks = crossTicks;
+        SwingFrameTicks = frameTicks;
     }
 
     /// <summary>
-    /// Whether the swing doors are still swinging: until the right door's swing ends nobody else goes through
-    /// (<c>SwingDoor:swing</c> removes the user then).
+    /// Whether the swing doors are still swinging: until the right door has swung shut, at <see cref="CloseFrameTicks"/>
+    /// a frame (34 or 38 ticks), nobody else goes through (as in the original; CorsixTH frees it after a tick a frame).
     /// </summary>
     public bool IsSwingBusy(long tick, SwingDoorAnimations? animations)
     {
@@ -311,7 +324,7 @@ public sealed class RoomDoor : Entity
         }
 
         var master = SwingIn ? animations.MasterIn : animations.MasterOut;
-        return tick < SwingStart + SwingCrossTicks + master.Length;
+        return tick < SwingStart + SwingCrossTicks + (master.Length * CloseFrameTicks);
     }
 
     public override EntityKind Kind => EntityKind.RoomDoor;
@@ -424,6 +437,9 @@ public sealed class RoomDoor : Entity
             door.SwingStart = reader.ReadInt64();
             door.SwingIn = reader.ReadBool();
             door.SwingCrossTicks = reader.ReadInt32();
+
+            // Version 119 keeps the pace of the left door's swing.
+            door.SwingFrameTicks = reader.Version is 0 or >= 119 ? Math.Clamp(reader.ReadInt32(), 1, 2) : 1;
         }
 
         return door;
@@ -440,6 +456,7 @@ public sealed class RoomDoor : Entity
             writer.WriteInt64(SwingStart);
             writer.WriteBool(SwingIn);
             writer.WriteInt32(SwingCrossTicks);
+            writer.WriteInt32(SwingFrameTicks);
         }
     }
 }

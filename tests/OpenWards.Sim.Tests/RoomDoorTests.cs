@@ -126,6 +126,22 @@ public class RoomDoorTests
         Assert.True(nurse.IsStepping);
     }
 
+    [Theory]
+    [InlineData(true, 7, 1, 19)]
+    [InlineData(false, 12, 2, 17)]
+    public void SwingDoorsStayBusyUntilTheRightDoorHasSwungShutAtTwoTicksAFrame(bool swingIn, int crossTicks, int frameTicks, int closeFrames)
+    {
+        var animations = new SwingDoorAnimations(SlaveIn: new(2032, 27), SlaveOut: new(2034, 22), MasterIn: new(2048, 19), MasterOut: new(2052, 17));
+        var door = new RoomDoor(1, new TilePosition(3, 6), EdgeOrientation.North, 0, isSwing: true);
+        door.StartSwing(100, swingIn, crossTicks, frameTicks);
+
+        Assert.Equal(frameTicks, door.SwingFrameTicks);
+        var freeAt = 100 + crossTicks + (closeFrames * 2);
+        Assert.True(door.IsSwingBusy(100, animations));
+        Assert.True(door.IsSwingBusy(freeAt - 1, animations));
+        Assert.False(door.IsSwingBusy(freeAt, animations));
+    }
+
     [Fact]
     public void SaveAndLoadKeepAHumanoidGoingThroughADoor()
     {

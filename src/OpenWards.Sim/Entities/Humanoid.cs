@@ -634,9 +634,11 @@ public sealed class Humanoid : Entity
     /// Goes through a room door as CorsixTH's <c>navigateDoor</c> (<c>humanoid_actions/walk.lua</c>): the humanoid stands on
     /// the door's tile while its door animation plays, the door itself hidden (<c>Door:setUser</c>), and comes out on
     /// <paramref name="exit"/> when the animation ends. Going north or west uses the leaving animation, east or south the
-    /// entering one, mirrored for west and south. A member of staff goes through at the pace of their frames
-    /// (<see cref="FrameTicks"/>): the logic specification leaves the door's pace open, and this is the assumption until it
-    /// is checked.
+    /// entering one, mirrored for west and south. Going through takes the animation's frames times the humanoid's frame
+    /// length (<see cref="FrameTicks"/>), whatever their walking speed, with no pause before or after: a slow member of
+    /// staff takes twice as long (the original, by the expert's reading of the developers' notes). Through swing doors the
+    /// left door swings at the humanoid's pace too, and the right one then swings shut at
+    /// <see cref="RoomDoor.CloseFrameTicks"/> a frame, the doors staying busy until it has.
     /// </summary>
     private void CrossDoor(Simulation simulation, RoomDoor door, DoorAnimations animations, Direction direction, TilePosition exit)
     {
@@ -651,7 +653,7 @@ public sealed class Humanoid : Entity
             _doorExit = exit;
             _doorTicks = AnimationTicks(swing);
             SetActionAnimation(simulation, swing, direction is Direction.West or Direction.South, door.Tile, door.Tile, 0);
-            door.StartSwing(simulation.Tick, inwards, _doorTicks);
+            door.StartSwing(simulation.Tick, inwards, _doorTicks, FrameTicks);
             return;
         }
 
