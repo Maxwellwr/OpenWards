@@ -135,7 +135,8 @@ public static class OriginalSaveImporter
                 entity.Discontent,
                 entity.RaiseRequests,
                 Math.Min(hiredAgo, Math.Max(0, save.Tick)),
-                (flags & 2) != 0 ? (cleaning, watering, repairing) : null));
+                (flags & 2) != 0 ? (cleaning, watering, repairing) : null,
+                entity.AwaitsRaiseAnswer ? Math.Max(0, (long)entity.RaiseDeadlineTick - save.Tick) : null));
         }
 
         var patients = new List<ImportedPatient>();
@@ -217,11 +218,12 @@ public static class OriginalSaveImporter
             // OpenWards counts the days since the VIP was invited: the arrival less the journey.
             DaysSinceVip = hospital.VipArrivalTick is > 0 and var vip ? Math.Max(0, save.Tick - vip + VipVisits.TravelTicks) / 50 : null,
             Vip = VipOf(save, hospital),
-            Emergency = hospital.EmergencyTimer > 0 && DiseaseCatalog.All.FirstOrDefault(d => d.ExpertiseId == hospital.EmergencyDisease && !d.IsPseudo) is { } emergencyDisease
-                ? new ImportedEmergency(emergencyDisease.Id, hospital.EmergencyPatients, hospital.EmergencyCured, hospital.EmergencyBonus, hospital.EmergencyPassPercent, hospital.EmergencyTimer * 25)
-                : null,
+            Emergency = EmergencyOf(hospital),
             NextEmergency = (save.EmergenciesUsed, save.NextEmergency is { Planned: true, Tick: var emergencyTick } ? Math.Max(0, emergencyTick - save.Tick) : null),
             NextEarthquake = (save.EarthquakesUsed, save.NextEarthquake is { Planned: true, Tick: var quakeTick } ? Math.Max(0, quakeTick - save.Tick) : null, save.NextEarthquake.Strength),
+            EarthquakeUnderWay = save.EarthquakeUnderWay is { Phase: >= 1 and <= 4 } quake
+                ? (quake.Phase, Math.Max(0, (long)quake.StepTick - save.Tick), save.NextEarthquake.Strength)
+                : null,
             ResearchDistributedThisYear = save.ResearchDistributedThisYear,
             RatsThisYear = save.RatsThisYear,
             Litter = LitterOf(save),
@@ -498,6 +500,40 @@ public static class OriginalSaveImporter
             4 => new CompetitorAction(CompetitorActionKind.Loan, FromStart: fromStart),
             _ => null,
         };
+    }
+
+    /// <summary>
+    /// The save's emergency by its state (+482): accepted and waiting for the helicopter (10 to 6, the days left being
+    /// the state less 5), the helicopter on its way (5), under way (3), time up (2) or its result's fax shown (1). The
+    /// disease, cured and patients of the last emergency stay in the save after it, so none is taken at state 0.
+    /// </summary>
+    private static ImportedEmergency? EmergencyOf(OriginalSaveHospital hospital)
+    {
+        var stage = hospital.EmergencyState switch
+        {
+            >= 6 and <= 10 => ImportedEmergencyStage.WaitingForHelicopter,
+            5 or 4 => ImportedEmergencyStage.HelicopterOnWay,
+            3 => ImportedEmergencyStage.UnderWay,
+            2 => ImportedEmergencyStage.TimeUp,
+            1 => ImportedEmergencyStage.Result,
+            _ => (ImportedEmergencyStage?)null,
+        };
+        if (stage is not { } known || DiseaseCatalog.All.FirstOrDefault(d => d.ExpertiseId == hospital.EmergencyDisease && !d.IsPseudo) is not { } disease)
+        {
+            return null;
+        }
+
+        return new ImportedEmergency(
+            disease.Id,
+            hospital.EmergencyPatients,
+            hospital.EmergencyCured,
+            hospital.EmergencyBonus,
+            hospital.EmergencyPassPercent,
+            hospital.EmergencyTimer * 25,
+            known,
+            Math.Max(0, hospital.EmergencyState - 5),
+            hospital.EmergencyToLetOut,
+            hospital.EmergencyPatientsInHospital);
     }
 
     /// <summary>Patient flag (+116) of those brought by the emergency helicopter.</summary>

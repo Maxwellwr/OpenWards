@@ -87,8 +87,10 @@ internal static class StaffEmployment
             humanoid.Discontent = Math.Max(0, humanoid.Discontent - 1);
         }
 
-        // The length of service asked for is drawn again at every check: six to nine months, mostly about six.
-        if (humanoid.Discontent > rules.ResignMax && !humanoid.HasRaiseRequest
+        // The length of service asked for is drawn again at every check: six to nine months, mostly about six. The
+        // original checks when the member of staff chooses what to do next, which a rest in the staff room does not;
+        // the rest halves the discontent at its end (RestingBehaviour).
+        if (humanoid.Discontent > rules.ResignMax && !humanoid.HasRaiseRequest && humanoid.Behaviour is not People.RestingBehaviour
             && !Cheats.SalaryRaiseDisabled(simulation, simulation.Hospitals[humanoid.Employer])
             && simulation.Hours - humanoid.HiredAt > (6 + simulation.Random.Next(4)) * (long)Month)
         {
@@ -369,6 +371,23 @@ internal static class StaffEmployment
 
         Quit(simulation, humanoid);
         return true;
+    }
+
+    /// <summary>
+    /// An imported save's member of staff who has asked for money and waits for an answer: the request is made again
+    /// here (an original save keeps neither its amount nor its kind, which the original works out afresh whenever its
+    /// fax is opened), as their <paramref name="requests"/>th, and they wait <paramref name="hoursLeft"/> hours more.
+    /// </summary>
+    internal static void ImportRaiseRequest(Simulation simulation, Humanoid humanoid, int requests, long hoursLeft)
+    {
+        if (humanoid.Profile is null || humanoid.HasRaiseRequest)
+        {
+            return;
+        }
+
+        humanoid.RaiseRequestCount = Math.Clamp(requests, 1, DefiniteQuitRequest) - 1;
+        RequestRaise(simulation, humanoid);
+        humanoid.QuittingIn = (int)Math.Clamp(hoursLeft, 0, QuittingDelay);
     }
 
     /// <summary>

@@ -163,6 +163,15 @@ public sealed record OriginalSaveEntity(int Slot, ReadOnlyMemory<byte> Raw)
     /// <summary>Patients only: the flags at +116 (0x40 an emergency patient).</summary>
     public int PatientFlags => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[116..]);
 
+    /// <summary>Staff only: whether they have asked for money and wait for an answer (bit 0x20 at +142).</summary>
+    public bool AwaitsRaiseAnswer => (Raw.Span[142] & 0x20) != 0;
+
+    /// <summary>
+    /// Staff only: the tick (as <see cref="OriginalSaveGame.Tick"/>) until which they wait for an answer to their request
+    /// for money, 1500 ticks (30 days) after asking; left over once answered.
+    /// </summary>
+    public int RaiseDeadlineTick => BinaryPrimitives.ReadInt32LittleEndian(Raw.Span[116..]);
+
     /// <summary>Patients only: happiness from 0 to 100, the first bar of the patient window.</summary>
     public byte Happiness => Raw.Span[81];
 
@@ -209,7 +218,7 @@ public sealed record OriginalSaveEntity(int Slot, ReadOnlyMemory<byte> Raw)
     public int Discontent => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[128..]);
 
     /// <summary>
-    /// Staff only: the low 16 bits of the tick (<see cref="OriginalSaveGame.Tick"/>) they were hired or last given a raise.
+    /// Staff only: the low 16 bits of the tick (<see cref="OriginalSaveGame.Tick"/>) they were hired.
     /// </summary>
     public int HiredTick16 => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[130..]);
 
@@ -515,7 +524,7 @@ public sealed record OriginalSaveHospital(
         [.. Enumerable.Range(0, 5).Select(i => (int)BinaryPrimitives.ReadInt16LittleEndian(Raw.Span[(433 + (2 * i))..]))];
 
     /// <summary>Current or last emergency: bonus paid per patient cured.</summary>
-    /// <remarks>16 bits: the next two bytes hold the slot of the emergency's helicopter while it is on the map.</remarks>
+    /// <remarks>16 bits: the next two bytes hold the entity slot of the emergency's helicopter.</remarks>
     public int EmergencyBonus => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[477..]);
 
     /// <summary>The tick the current or last VIP arrived, or 0 before the first.</summary>
@@ -533,8 +542,24 @@ public sealed record OriginalSaveHospital(
     /// <summary>Rooms the VIP in the hospital has still to look at.</summary>
     public int VipRoomsLeft => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[507..]);
 
-    /// <summary>Current emergency: the time left on its watch, in half-days (0 when none is under way).</summary>
+    /// <summary>
+    /// Current emergency: the time left on its watch, in half-days (25 ticks): 100 when accepted, the helicopter's
+    /// 5 days included; at 0 the emergency's time is up.
+    /// </summary>
     public int EmergencyTimer => BinaryPrimitives.ReadUInt16LittleEndian(Raw.Span[473..]);
+
+    /// <summary>
+    /// Current emergency: where it stands. 0 none; 10 to 6 accepted, the helicopter to set off in (state − 5) days; 5
+    /// the helicopter on its way; 3 under way; 2 time up, the result to come once no emergency patient is left; 1 the
+    /// result's fax shown.
+    /// </summary>
+    public int EmergencyState => Raw.Span[482];
+
+    /// <summary>Current emergency: whether the helicopter has landed and is letting its patients out.</summary>
+    public bool EmergencyHelicopterLanded => Raw.Span[481] != 0;
+
+    /// <summary>Current emergency: patients the helicopter has still to let out, one every 25 ticks.</summary>
+    public int EmergencyToLetOut => Raw.Span[483];
 
     /// <summary>Current or last emergency: the disease (casebook index).</summary>
     public int EmergencyDisease => Raw.Span[484];
@@ -542,8 +567,11 @@ public sealed record OriginalSaveHospital(
     /// <summary>Current or last emergency: patients cured so far.</summary>
     public int EmergencyCured => Raw.Span[485];
 
-    /// <summary>Current or last emergency: patients brought in.</summary>
+    /// <summary>Current or last emergency: all its patients.</summary>
     public int EmergencyPatients => Raw.Span[486];
+
+    /// <summary>Current emergency: its patients in the hospital now.</summary>
+    public int EmergencyPatientsInHospital => Raw.Span[487];
 
     /// <summary>Current or last emergency: share of patients that must be cured, in percent.</summary>
     public int EmergencyPassPercent => Raw.Span[488];
@@ -754,6 +782,12 @@ public sealed class OriginalSaveGame
     /// <summary>Offset of the next earthquake (<see cref="NextEarthquake"/>).</summary>
     public const int NextEarthquakeOffset = 0x6681F;
 
+    /// <summary>Offset of the tick of the earthquake's next step (<see cref="EarthquakeUnderWay"/>).</summary>
+    public const int EarthquakeStepOffset = 0x667E3;
+
+    /// <summary>Offset of the earthquake's phase (<see cref="EarthquakeUnderWay"/>).</summary>
+    public const int EarthquakePhaseOffset = 0x667E7;
+
     /// <summary>Offset of the flags of the level's planned emergencies used up.</summary>
     public const int UsedEmergencyOffset = 0x66853;
 
@@ -846,6 +880,16 @@ public sealed class OriginalSaveGame
         BinaryPrimitives.ReadInt32LittleEndian(Data.Span[NextEarthquakeOffset..]),
         Data.Span[NextEarthquakeOffset + 4],
         Data.Span[NextEarthquakeOffset + 5] != 0);
+
+    /// <summary>
+    /// The earthquake under way: its phase (0 none; 1 the warning quake starting; 2 waiting for the main quake; 3 the main
+    /// quake; 4 dying down, the machines already damaged) and the tick of its next step (the main quake, 5 to 9 days after
+    /// the warning; then the end of the main quake, at most 200 ticks, and of the dying down, at most 100). While one is
+    /// under way <see cref="NextEarthquake"/> holds its strength; the next is planned once it is over.
+    /// </summary>
+    public (int Phase, int StepTick) EarthquakeUnderWay => (
+        Data.Span[EarthquakePhaseOffset],
+        BinaryPrimitives.ReadInt32LittleEndian(Data.Span[EarthquakeStepOffset..]));
 
     /// <summary>How many of the level's planned emergencies have been used up, from the first.</summary>
     public int EmergenciesUsed => CountFlags(UsedEmergencyOffset, UsedEmergencyCount);
