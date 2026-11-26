@@ -391,7 +391,7 @@ public sealed class LockstepTests : IDisposable
             Assert.NotNull(server.Simulation.Auction);
             var tick = server.Simulation.Tick;
 
-            // Paused or not, a frame every 0.1 s; the hours of the game do not move.
+            // Paused or not, a frame every AuctionFrameInterval (55 ms); the hours of the game do not move.
             server.SetSpeed(GameSpeed.Pause);
             Assert.Equal(10, server.Run(LockstepServer.AuctionFrameInterval * 10));
             clients[1].Submit(new BidForParcelCommand(2));

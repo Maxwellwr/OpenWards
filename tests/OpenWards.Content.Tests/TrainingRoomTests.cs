@@ -120,7 +120,7 @@ public class TrainingRoomTests
                 tiredMood |= doctor.IsTiredMoodShown;
                 if (doctor.Behaviour is RestingBehaviour resting)
                 {
-                    Assert.Equal(room.Id, resting.ReturnRoomId);
+                    Assert.Equal(RestReturn.Training, resting.ReturnTo);
                     rested.Add(doctor.Id);
                 }
                 else if (rested.Contains(doctor.Id) && doctor.Behaviour is DoctorBehaviour { Phase: DoctorPhase.Studying or DoctorPhase.Lecturing or DoctorPhase.UsingTrainingAid } back)
