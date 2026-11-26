@@ -1,6 +1,7 @@
 using OpenWards.Content.Saves;
 using OpenWards.Formats;
 using OpenWards.Formats.Tests;
+using OpenWards.Sim.Economy;
 using OpenWards.Sim.Entities;
 
 namespace OpenWards.Content.Tests;
@@ -92,5 +93,25 @@ public sealed class OriginalSaveImporterTests(ITestOutputHelper output)
                 simulation.Step();
             }
         }
+    }
+
+    [Fact]
+    public void ComputerPlayersGoOnWithTheBuildingAndBuyingTheyWereWaitingFor()
+    {
+        var install = RealGameData.Require();
+        var file = install.FindDirectory("SAVE") is { } folder ? Path.Combine(folder, "MAXWELL.H99") : null;
+        if (file is null || !File.Exists(file))
+        {
+            Assert.Skip("MAXWELL.H99 is not in the SAVE folder.");
+        }
+
+        // MAXWELL.H99 (level 1, tick 796) catches two computer players in their start: ORAC waits to build a GP's office
+        // (+4604 = 2, room type 7) and HAL to buy one more bench (+4604 = 3, object type 4, one left).
+        var save = OriginalSaveGame.Parse(File.ReadAllBytes(file));
+        var (simulation, _) = OriginalSaveImporter.Start(install, save, seed: 1);
+        var orac = Assert.Single(simulation.Competitors, c => string.Equals(c.Name, "ORAC", StringComparison.OrdinalIgnoreCase));
+        var hal = Assert.Single(simulation.Competitors, c => string.Equals(c.Name, "HAL", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(new CompetitorAction(CompetitorActionKind.Build, "gp", FromStart: true), orac.Pending);
+        Assert.Equal(new CompetitorAction(CompetitorActionKind.Buy, "bench", 1, FromStart: true), hal.Pending);
     }
 }
