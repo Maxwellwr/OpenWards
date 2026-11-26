@@ -3,6 +3,7 @@ using OpenWards.Sim.Calendar;
 using OpenWards.Sim.Commands;
 using OpenWards.Sim.Entities;
 using OpenWards.Sim.Maps;
+using OpenWards.Sim.People;
 using OpenWards.Sim.Rooms;
 using OpenWards.Sim.Staff;
 using static OpenWards.Content.Tests.PatientFlowTests;
@@ -66,6 +67,11 @@ public class SwingDoorTests
 
         Run(simulation, new ConfirmRoomCommand(room.Id));
         Run(simulation, new HireStaffCommand(StaffClass.Nurse, 0, new(14, 16)));
+
+        // The ward calls for a nurse only once a patient wants it: she is sent there as a call would.
+        var nurse = simulation.Entities.OfType<Humanoid>().Last(h => h.Profile?.Class == StaffClass.Nurse);
+        room.StaffId = nurse.Id;
+        ((IRoomStaff)nurse.Behaviour!).GoToRoom(simulation, nurse, room, door.InsideTile(room.Area));
 
         var swings = new HashSet<long>();
         var swingAnimations = new HashSet<int>();

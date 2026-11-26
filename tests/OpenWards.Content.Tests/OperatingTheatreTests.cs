@@ -303,10 +303,11 @@ public class OperatingTheatreTests
         Run(simulation, new ConfirmRoomCommand(room.Id));
         Assert.True(room.IsActive);
 
-        // The super doctor cheat makes every doctor for hire a surgeon.
+        // The super doctor cheat makes every doctor for hire a surgeon; put down in the theatre, they work there at once
+        // (an empty room calls for staff only once a patient wants it).
         Run(simulation, new CheatCommand(CheatKind.ToggleSuperDoctor));
-        Run(simulation, new HireStaffCommand(StaffClass.Doctor, 0, new(15, 16)));
-        Run(simulation, new HireStaffCommand(StaffClass.Doctor, 0, new(16, 16)));
+        Run(simulation, new HireStaffCommand(StaffClass.Doctor, 0, InsideDoor(simulation, room)));
+        Run(simulation, new HireStaffCommand(StaffClass.Doctor, 0, InsideDoor(simulation, room)));
         return room;
     }
 

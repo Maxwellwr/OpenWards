@@ -133,9 +133,10 @@ public class QueueWindowTests
         var spot = Enumerable.Range(12, 8).SelectMany(y => Enumerable.Range(12, 8).Select(x => new TilePosition(x, y)))
             .First(tile => simulation.Map[tile.X, tile.Y].Has(TileFlags.Hospital) && StaffHiring.Check(simulation, StaffClass.Doctor, 0, tile, 0) == StaffHireProblem.None);
 
-        // Two doctors: the first room's may have left by now for want of a raise.
+        // Two doctors: the first room's may have left by now for want of a raise. The second is put down in the new room,
+        // as an empty room calls for staff only once a patient wants it.
         Run(simulation, new HireStaffCommand(StaffClass.Doctor, 0, spot));
-        Run(simulation, new HireStaffCommand(StaffClass.Doctor, 0, spot));
+        Run(simulation, new HireStaffCommand(StaffClass.Doctor, 0, InsideDoor(simulation, second)));
 
         // The first in line is still first, or was just let into the first office.
         var firstInLine = (PatientBehaviour)((Humanoid)simulation.FindEntity(front)!).Behaviour!;
