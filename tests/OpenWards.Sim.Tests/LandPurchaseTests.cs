@@ -159,12 +159,15 @@ public class LandPurchaseTests
     public void OpeningAnAuctionTakesMoreMoneyThanThePrice()
     {
         var even = NewSimulation(120, players: 2);
+        Assert.False(even.CanAffordParcel(2, 0));
+        Assert.True(NewSimulation(120).CanAffordParcel(2, 0));
         even.Schedule(0, new PurchaseParcelCommand(2));
         even.Step();
         Assert.Null(even.Auction);
         Assert.Equal(1L, even.Tick);
 
         var more = NewSimulation(121, players: 2);
+        Assert.True(more.CanAffordParcel(2, 0));
         more.Schedule(0, new PurchaseParcelCommand(2));
         more.Step();
         Assert.NotNull(more.Auction);

@@ -314,6 +314,12 @@ internal interface IWindowHost
     /// <summary>The player's name, which their hospital goes by (CorsixTH's <c>player_name</c>).</summary>
     string PlayerName => "Player";
 
+    /// <summary>
+    /// The name a player of a network game joined under, which their hospital goes by, or null for a local game or a
+    /// player not connected.
+    /// </summary>
+    string? NetworkPlayerName(int player) => null;
+
     /// <summary>The level's town, in capitals, as the town map shows it (<c>map.level_name</c>), or null if unknown.</summary>
     string? LevelTitle => null;
 

@@ -139,8 +139,11 @@ public sealed class NetMission
     /// <summary>The rows given so far, a bit for each <see cref="NetMissionRule.Index"/>.</summary>
     public int GivenRows { get; private set; }
 
-    /// <summary>The months left until the deadline in the month given, for the mission's text.</summary>
-    public int MonthsLeft(int month) => Math.Max(0, Deadline - month);
+    /// <summary>
+    /// The months left until the deadline, for the mission's text, given the months that have passed (April of the first
+    /// year is 3, as the deadline counts from the quarter's end): the row's months to do when the mission has just been given.
+    /// </summary>
+    public int MonthsLeft(int monthsPassed) => Math.Max(0, Deadline - monthsPassed);
 
     /// <summary>Notes the event a mission 1 to 3 waits for, if it is the mission being played.</summary>
     internal void Happened(NetCriterion criterion)

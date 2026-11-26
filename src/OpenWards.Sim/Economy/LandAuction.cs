@@ -93,7 +93,7 @@ public sealed class LandAuction
     internal static void Start(Simulation simulation, int parcel, int player)
     {
         var price = simulation.ParcelPrice(parcel);
-        if (simulation.Auction is not null || simulation.Hospitals[player].Balance <= price)
+        if (simulation.Auction is not null || !simulation.CanAffordParcel(parcel, player))
         {
             return;
         }
