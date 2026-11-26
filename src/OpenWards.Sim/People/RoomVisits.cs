@@ -329,7 +329,8 @@ public static class RoomVisits
     /// </summary>
     private static void CallExtraStaff(Simulation simulation, Room room, BehaviourKind kind)
     {
-        if (simulation.FindEntity(room.DoorId) is not RoomDoor door)
+        if (simulation.FindEntity(room.DoorId) is not RoomDoor door
+            || (string.Equals(room.RoomType, OperatingTheatreRoom, StringComparison.Ordinal) && !IsWanted(simulation, room)))
         {
             return;
         }
@@ -481,6 +482,20 @@ public static class RoomVisits
                     return true;
                 }
             }
+            else if (string.Equals(room.RoomType, OperatingTheatreRoom, StringComparison.Ordinal))
+            {
+                // OperatingTheatreRoom's maximum_staff: two surgeons; a surgeon put down there joins while one is missing.
+                if (placed && staff.Behaviour is DoctorBehaviour && IsQualifiedFor(room.RoomType, staff) && Surgeons(simulation, room).Count < 2)
+                {
+                    if (room.StaffId == 0)
+                    {
+                        room.StaffId = staff.Id;
+                    }
+
+                    roomStaff.GoToRoom(simulation, staff, room, tile);
+                    return true;
+                }
+            }
             else if (Rules.TryGetValue(room.RoomType, out var rules) && rules.Staff == staff.Behaviour!.Kind && IsQualifiedFor(room.RoomType, staff))
             {
                 if (placed && room.StaffId != 0 && room.StaffId != staff.Id && room.PatientId == 0 && simulation.FindEntity(room.StaffId) is Humanoid { Profile: not null } current)
@@ -537,56 +552,75 @@ public static class RoomVisits
     }
 
     /// <summary>
-    /// <c>use_staffroom</c>'s end for a rested researcher or doctor in training: back to their <c>last_room</c> if it is
-    /// still there and has room for them (<c>testStaffCriteria(getMaximumStaffCriteria())</c>): a desk for a researcher,
-    /// a lecture chair for a student, the projector for a consultant while nobody else lectures.
+    /// The end of a rest for a researcher, a doctor from the training room or a nurse, who look for that kind of room
+    /// again rather than for the one they left (the original keeps no room for them; the game expert's answer of
+    /// 26.11.2026, from the developers' notes; CorsixTH's <c>last_room</c> sends them back to the very room, and only
+    /// while it has room for them). A researcher goes to the hospital's research department with the most desks less
+    /// researchers, a student to the training room with the most lecture chairs less students, even when none is left
+    /// free (the first such room on a tie); a consultant to the first training room without a lecturer; a nurse to one
+    /// of the hospital's wards at random. With no such room they are free like anyone else.
     /// </summary>
-    /// <returns>Whether they are on their way back.</returns>
-    internal static bool ReturnToLastRoom(Simulation simulation, Humanoid staff, int roomId)
+    /// <returns>Whether they are on their way to a room.</returns>
+    internal static bool ReturnAfterRest(Simulation simulation, Humanoid staff, RestReturn returnTo)
     {
-        if (simulation.FindEntity(roomId) is not Room { IsActive: true, IsClosing: false, IsCrashed: false } room || Owner(simulation, room) != staff.Employer
-            || simulation.FindEntity(room.DoorId) is not RoomDoor door || staff.Behaviour is not DoctorBehaviour { RoomId: 0 } doctor
-            || staff.Profile is not { } profile)
+        if (returnTo == RestReturn.None || staff.Behaviour is not IRoomStaff { RoomId: 0 } roomStaff || staff.Profile is not { } profile)
         {
             return false;
         }
 
-        if (string.Equals(room.RoomType, ResearchRoom, StringComparison.Ordinal))
+        var rooms = simulation.Entities.OfType<Room>()
+            .Where(room => room is { IsActive: true, IsClosing: false, IsCrashed: false } && Owner(simulation, room) == staff.Employer
+                && simulation.FindEntity(room.DoorId) is RoomDoor)
+            .ToList();
+        Room? chosen = null;
+        switch (returnTo)
         {
-            if (!profile.IsResearcher || CountResearchers(simulation, room) >= CountObjects(simulation, room, "desk"))
-            {
-                return false;
-            }
+            case RestReturn.Research when staff.Behaviour is DoctorBehaviour && profile.IsResearcher:
+                chosen = MostRoomLeft(rooms, ResearchRoom, room => CountObjects(simulation, room, "desk") - CountResearchers(simulation, room));
+                break;
+            case RestReturn.Training when staff.Behaviour is DoctorBehaviour && profile.IsConsultant:
+                chosen = rooms.FirstOrDefault(room => string.Equals(room.RoomType, Staff.Training.RoomType, StringComparison.Ordinal) && room.StaffId == 0);
+                break;
+            case RestReturn.Training when staff.Behaviour is DoctorBehaviour:
+                chosen = MostRoomLeft(rooms, Staff.Training.RoomType, room => CountObjects(simulation, room, "lecture_chair")
+                    - simulation.Entities.Count(e => e is Humanoid { Behaviour: DoctorBehaviour other, IsFired: false } h && other.RoomId == room.Id && h.Id != room.StaffId));
+                break;
+            case RestReturn.Ward when staff.Behaviour is NurseBehaviour:
+                var wards = rooms.Where(room => string.Equals(room.RoomType, WardRoom, StringComparison.Ordinal)).ToList();
+                chosen = wards.Count == 0 ? null : wards[simulation.Random.NextInclusive(0, wards.Count - 1)];
+                break;
         }
-        else if (string.Equals(room.RoomType, Staff.Training.RoomType, StringComparison.Ordinal))
-        {
-            if (profile.IsConsultant)
-            {
-                // The training room can only have one consultant.
-                if (room.StaffId != 0)
-                {
-                    return false;
-                }
-            }
-            else if (simulation.Entities.Count(e => e is Humanoid { Behaviour: DoctorBehaviour other, IsFired: false } h && other.RoomId == room.Id && h.Id != room.StaffId)
-                     >= CountObjects(simulation, room, "lecture_chair"))
-            {
-                return false;
-            }
-        }
-        else
+
+        if (chosen is null || simulation.FindEntity(chosen.DoorId) is not RoomDoor door)
         {
             return false;
         }
 
-        // The research department's first researcher, or the training room's lecturer (never a student).
-        if (room.StaffId == 0 && (profile.IsConsultant || !string.Equals(room.RoomType, Staff.Training.RoomType, StringComparison.Ordinal)))
+        // The research department's first researcher, the training room's lecturer (never a student), the ward's first nurse.
+        if (chosen.StaffId == 0 && (returnTo != RestReturn.Training || profile.IsConsultant))
         {
-            room.StaffId = staff.Id;
+            chosen.StaffId = staff.Id;
         }
 
-        ((IRoomStaff)doctor).GoToRoom(simulation, staff, room, door.InsideTile(room.Area));
+        roomStaff.GoToRoom(simulation, staff, chosen, door.InsideTile(chosen.Area));
         return true;
+    }
+
+    /// <summary>The room of a type with the most room left, the first one on a tie, or null if there is none.</summary>
+    private static Room? MostRoomLeft(List<Room> rooms, string roomType, Func<Room, int> roomLeft)
+    {
+        Room? best = null;
+        var bestLeft = 0;
+        foreach (var room in rooms)
+        {
+            if (string.Equals(room.RoomType, roomType, StringComparison.Ordinal) && roomLeft(room) is var left && (best is null || left > bestLeft))
+            {
+                best = room;
+                bestLeft = left;
+            }
+        }
+
+        return best;
     }
 
     private static int CountResearchers(Simulation simulation, Room room) =>
@@ -1081,7 +1115,7 @@ public static class RoomVisits
     /// </summary>
     private static void CallStaff(Simulation simulation, Room room)
     {
-        if (!Rules.TryGetValue(room.RoomType, out var rules) || simulation.FindEntity(room.DoorId) is not RoomDoor door)
+        if (!Rules.TryGetValue(room.RoomType, out var rules) || simulation.FindEntity(room.DoorId) is not RoomDoor door || !IsWanted(simulation, room))
         {
             return;
         }
@@ -1121,6 +1155,17 @@ public static class RoomVisits
         room.StaffId = best.Id;
         ((IRoomStaff)best.Behaviour!).GoToRoom(simulation, best, room, target);
     }
+
+    /// <summary>
+    /// Whether a room without its staff calls for them: only once a patient wants it, queueing at its door, inside or on
+    /// the way. The original's calls come from a patient sent to a room without the staff it needs (two surgeons for the
+    /// operating theatre) and from staff leaving a room with a queue, so an empty room nobody is coming to does not take
+    /// a doctor off the corridor (the game expert's answer of 26.11.2026, from the developers' notes). CorsixTH's rooms
+    /// call for staff as soon as they are built.
+    /// </summary>
+    private static bool IsWanted(Simulation simulation, Room room) =>
+        room.PatientId != 0 || room.DoorQueue is { Count: > 0 }
+        || simulation.Entities.Any(e => e is Humanoid { Behaviour: PatientBehaviour patient } && patient.TargetId == room.Id);
 
     /// <summary>
     /// <c>verifyStaffForRoom</c> for staff in another room: the policy lets staff move, the room calling has patients

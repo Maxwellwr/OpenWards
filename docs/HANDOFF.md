@@ -364,7 +364,10 @@ Next, in this order (2026-11-10):
    CheckIfNeedRest, once their room's patient has gone; ward nurses at once) and gives them back their usual behaviour,
    free for any room, when rested. Done 2026-11-12 (cloud): researchers and doctors in training go back to their room
    once rested if it has room for them (`RestingBehaviour.ReturnRoomId`, CorsixTH's `last_room`;
-   `RoomVisits.ReturnToLastRoom`), staff on call (a handyman with a job, a nurse going to vaccinate, staff walking to
+   `RoomVisits.ReturnToLastRoom`; replaced 2026-11-26, save format 120, as the original: nobody keeps their room, a
+   rested researcher goes to the department with the most desks left, a student to the training room with the most
+   chairs left, a consultant to the first one without a lecturer, a nurse to a random ward — `RestingBehaviour.ReturnTo`,
+   `RoomVisits.ReturnAfterRest`), staff on call (a handyman with a job, a nurse going to vaccinate, staff walking to
    a room) neither rest nor stop tiring in the staff room, and very tired staff show the tired mood until rested
    (`Humanoid.IsTiredMoodShown`; text in the staff window). Save format 74. Mood icons drawn (2026-11-12, MSI):
    `HumanoidMoods` picks the highest-priority active mood of humanoid.lua's table and `HumanoidDrawing` draws it 96 px

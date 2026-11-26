@@ -73,7 +73,8 @@ public class HumanoidMoodsTests
 
         host.Submit(new ConfirmRoomCommand(room.Id));
         Assert.True(room.IsActive);
-        host.Submit(new HireStaffCommand(StaffClass.Doctor, 0, new(5, 2)));
+        // Put down in the office: an empty room calls for staff only once a patient wants it.
+        host.Submit(new HireStaffCommand(StaffClass.Doctor, 0, ((RoomDoor)simulation.FindEntity(room.DoorId)!).InsideTile(room.Area)));
         var doctor = simulation.Entities.OfType<Humanoid>().Single(h => h.Behaviour is DoctorBehaviour);
         for (var tick = 0; tick < 2000 && doctor.Behaviour is not DoctorBehaviour { RoomId: not 0 }; tick++)
         {
