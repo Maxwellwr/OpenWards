@@ -59,6 +59,9 @@ public static class PatientNeeds
     /// <summary>How far a radiator warms the corridor, along each axis.</summary>
     private const int RadiatorReach = 8;
 
+    /// <summary>What a radiator gives a room, spread over its floor: ⌊radiators × this / area⌋.</summary>
+    private const int RoomRadiatorHeat = 1250;
+
     /// <summary>How far a patient sees plants, along each axis.</summary>
     private const int PlantSight = 5;
 
@@ -239,9 +242,15 @@ public static class PatientNeeds
 
     /// <summary>
     /// Where the patient's warmth heads. In a corridor, each radiator within <see cref="RadiatorReach"/> tiles along both
-    /// axes adds ⌊heat × 10 / (|dx| + |dy|)⌋; in a room, its radiators give ⌊radiators × heat × 250 / area⌋, which is the
-    /// specification's ⌊radiators × 1250 / area⌋ at the default heat of 5. With the heating at 0, nothing.
+    /// axes adds ⌊heat × 10 / (|dx| + |dy|)⌋, except one on the patient's own tile; only radiators outside rooms count. In
+    /// a room, only that room's radiators count, whatever the distance: ⌊radiators × 1250 / (width × height)⌋, and the
+    /// heating level does not scale it. With the heating at 0, nothing anywhere.
     /// </summary>
+    /// <remarks>
+    /// As in the original (developers' notes, by the game expert's reading, matched against the staff's warmth in
+    /// original saves H2–H8, H2 with the heating at 7): the heating slider warms and cools corridors only; in a room it
+    /// matters only when off. CorsixTH spreads heat across tiles instead.
+    /// </remarks>
     internal static int WarmthTarget(Simulation simulation, World world, Humanoid humanoid, int roomId)
     {
         var player = humanoid.HospitalPlayer;
@@ -262,7 +271,7 @@ public static class PatientNeeds
             if (simulation.FindEntity(roomId) is Room room && room.Area.Width * room.Area.Height is var area and > 0)
             {
                 var radiators = world.Radiators.Count(radiator => radiator.RoomId == roomId);
-                target = radiators * heat * 250 / area;
+                target = radiators * RoomRadiatorHeat / area;
             }
         }
         else
@@ -271,9 +280,9 @@ public static class PatientNeeds
             {
                 var dx = Math.Abs(radiator.Tile.X - humanoid.Tile.X);
                 var dy = Math.Abs(radiator.Tile.Y - humanoid.Tile.Y);
-                if (radiator.RoomId == 0 && dx <= RadiatorReach && dy <= RadiatorReach)
+                if (radiator.RoomId == 0 && dx + dy > 0 && dx <= RadiatorReach && dy <= RadiatorReach)
                 {
-                    target += heat * 10 / Math.Max(1, dx + dy);
+                    target += heat * 10 / (dx + dy);
                 }
             }
         }

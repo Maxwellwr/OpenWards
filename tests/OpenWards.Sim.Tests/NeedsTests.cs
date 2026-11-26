@@ -4,6 +4,7 @@ using OpenWards.Sim.Economy;
 using OpenWards.Sim.Entities;
 using OpenWards.Sim.Maps;
 using OpenWards.Sim.People;
+using OpenWards.Sim.Rooms;
 
 namespace OpenWards.Sim.Tests;
 
@@ -117,6 +118,55 @@ public class NeedsTests
 
         PatientNeeds.Modify(simulation);
         Assert.Equal(51, PatientNeeds.Warmth(humanoid));
+    }
+
+    [Fact]
+    public void ARadiatorOnThePatientsTileDoesNotWarmThem()
+    {
+        var simulation = NewSimulation();
+        var (humanoid, _) = AddPatient(simulation, "uncommon_cold");
+        AddObject(simulation, "radiator", new TilePosition(2, 2));
+        AddObject(simulation, "radiator", new TilePosition(2, 4));
+        var world = PatientNeeds.World.Of(simulation);
+
+        // Heat 5: only the one two tiles away, ⌊50 / 2⌋.
+        Assert.Equal(25, PatientNeeds.WarmthTarget(simulation, world, humanoid, roomId: 0));
+    }
+
+    [Fact]
+    public void ARoomIsWarmedByItsOwnRadiatorsOverItsAreaWhateverTheHeatingLevel()
+    {
+        var simulation = NewSimulation();
+        var (humanoid, _) = AddPatient(simulation, "uncommon_cold");
+        var room = AddRoom(simulation, new TileRect(1, 1, 6, 5));
+        AddObject(simulation, "radiator", new TilePosition(1, 1));
+        AddObject(simulation, "radiator", new TilePosition(6, 7));
+        var world = PatientNeeds.World.Of(simulation);
+
+        // One radiator in a 6 × 5 room: ⌊1250 / 30⌋; the corridor's radiator does not reach in.
+        Assert.Equal(41, PatientNeeds.WarmthTarget(simulation, world, humanoid, room.Id));
+
+        // The heating level only matters when off.
+        Assert.True(simulation.Hospitals[0].SetRadiatorHeat(10));
+        Assert.Equal(41, PatientNeeds.WarmthTarget(simulation, world, humanoid, room.Id));
+
+        // Two radiators in a small room: more than the most warmth.
+        AddObject(simulation, "radiator", new TilePosition(3, 1));
+        world = PatientNeeds.World.Of(simulation);
+        Assert.Equal(83, PatientNeeds.WarmthTarget(simulation, world, humanoid, room.Id));
+    }
+
+    [Fact]
+    public void ARoomsRadiatorsDoNotWarmTheCorridor()
+    {
+        var simulation = NewSimulation();
+        var (humanoid, _) = AddPatient(simulation, "uncommon_cold");
+        AddRoom(simulation, new TileRect(4, 0, 4, 8));
+        AddObject(simulation, "radiator", new TilePosition(4, 2));
+        var world = PatientNeeds.World.Of(simulation);
+
+        // Two tiles away, but inside the room: nothing.
+        Assert.Equal(0, PatientNeeds.WarmthTarget(simulation, world, humanoid, roomId: 0));
     }
 
     [Fact]
@@ -260,6 +310,20 @@ public class NeedsTests
     private static void AddObject(Simulation simulation, string objectType, TilePosition tile)
     {
         simulation.AddEntity(id => new RoomObject(id, objectType, tile, Direction.South, 0));
+    }
+
+    private static Room AddRoom(Simulation simulation, TileRect area)
+    {
+        var room = simulation.AddEntity(id => new Room(id, "gp", area, [.. Enumerable.Repeat(default(OriginalTile), area.Width * area.Height)]));
+        for (var x = area.X; x < area.Right; x++)
+        {
+            for (var y = area.Y; y < area.Bottom; y++)
+            {
+                simulation.Map[x, y].RoomId = room.Id;
+            }
+        }
+
+        return room;
     }
 
     private static Simulation NewSimulation(PatientNeedsRules? needs = null)
