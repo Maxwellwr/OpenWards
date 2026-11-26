@@ -87,8 +87,10 @@ internal static class StaffEmployment
             humanoid.Discontent = Math.Max(0, humanoid.Discontent - 1);
         }
 
-        // The length of service asked for is drawn again at every check: six to nine months, mostly about six.
-        if (humanoid.Discontent > rules.ResignMax && !humanoid.HasRaiseRequest
+        // The length of service asked for is drawn again at every check: six to nine months, mostly about six. The
+        // original checks when the member of staff chooses what to do next, which a rest in the staff room does not;
+        // the rest halves the discontent at its end (RestingBehaviour).
+        if (humanoid.Discontent > rules.ResignMax && !humanoid.HasRaiseRequest && humanoid.Behaviour is not People.RestingBehaviour
             && !Cheats.SalaryRaiseDisabled(simulation, simulation.Hospitals[humanoid.Employer])
             && simulation.Hours - humanoid.HiredAt > (6 + simulation.Random.Next(4)) * (long)Month)
         {

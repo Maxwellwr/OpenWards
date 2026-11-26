@@ -129,6 +129,22 @@ public class StaffEmploymentTests
     }
 
     [Fact]
+    public void NobodyAsksWhileResting()
+    {
+        var simulation = NewSimulation();
+        var doctor = Hire(simulation, StaffClass.Doctor);
+        doctor.Happiness = 0.1m;
+        doctor.Discontent = 200;
+        doctor.HiredAt = simulation.Hours - (9 * Month) - 1;
+        doctor.Behaviour = new People.RestingBehaviour(roomId: 0, parcel: 0);
+
+        // The discontent still counts, but the request waits for the rest to end.
+        StaffEmployment.Modify(simulation, doctor);
+        Assert.Equal(RaiseReason.None, doctor.RaiseReason);
+        Assert.Equal(201, doctor.Discontent);
+    }
+
+    [Fact]
     public void ServiceAskedForIsSixToNineMonths()
     {
         var earliest = long.MaxValue;
