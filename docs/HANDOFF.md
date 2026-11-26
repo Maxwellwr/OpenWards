@@ -1,4 +1,4 @@
-# Handoff notes (2026-11-08)
+# Handoff notes (2026-11-08, brought up to date 2026-11-26)
 
 Context for continuing the work in a new Claude Code session on another computer. Read
 `CLAUDE.md` and `ARCHITECTURE.md` first. This note covers what they don't: where the work
@@ -45,20 +45,39 @@ the new session has absorbed it.
 
 ## Where the work stands
 
-Milestone M5 (build mode and a first complete room, then reception → GP patient flow).
+Version 0.1.0 was released on 2026-11-23 (tag `v0.1.0`); 0.2.0 is being prepared (`CHANGELOG.md`,
+`docs/release-notes.md`, `VersionPrefix` 0.2.0). Only the user pushes release tags and publishes releases. The save
+format is 121 (`Simulation.FormatVersion`); parallel pull requests each take the next free number and renumber when
+another one lands first.
+
+Since 0.1.0 (#518–#552) the game logic follows the user's specification of the original game's rules, collected from
+the community (a PDF, not in the repository): reputation, prices and insurance, diagnosis and treatment, patients'
+needs, research and wear, VIPs, rats and loans, staff, epidemics and emergencies, level rating, training, opponents
+by scenario, land auctions and network missions. The specification's random number generator and its raw constants
+are not used: the sim keeps its own deterministic RNG. Questions about how the original behaves go to the user's
+separate "game expert" Claude Code session on MSI through a file inbox (`C:\Users\mmasl\source\expert-inbox`). Its
+answers that cite the developers' notes may be used; answers from disassembly may not, unless the user allows it for
+that case.
+
+Importing the original's saves carries over almost everything that changes in play (#474–#480, #536–#540, #543,
+#545, #549). Still left out: candidates for hire, emergencies offered but not answered, and plant water is an
+estimate. `tools/OpenWards.SaveDump` (`coverage`, `diff`) maps new fields from two saves with one action between them.
+
+Left for later: a plant adviser as in the original, live computer opponents in network games, a live check of land
+auctions and network missions over a real network, and the Russian research screen's "Диагностическое
+оборудование" running into the "Готово" box.
 
 The project was renamed from CorsixNet to OpenWards on 2026-11-18 (solution, projects, namespaces, the `openwards.*`
 strings, the `OW0001`–`OW0003` analyzer rules, the `OPENWARDS_*` environment variables). The client moves an old
 `CorsixNet` settings and saves folder to `OpenWards` on start (`LegacyFolders`) and still reads the `CORSIXNET_*`
 variables. Saves and replays keep their `CNETSAVE`/`CNETRPLY` headers so older files load. Each original level is
-named to the player as a ward of the hospital, "Ward No. n" ("Палата №n"). The GitHub repository is still
-`Maxwellwr/CorsixNet`.
+named to the player as a ward of the hospital, "Ward No. n" ("Палата №n"). The GitHub repository is
+`Maxwellwr/OpenWards`.
 
-The porting backlog is finished and its list was removed. Three differences from CorsixTH remain: in
-multi-hospital games patients do not choose a hospital by reputation and price (`gbv.AllocDelay`, `AllocRand`,
-`AllocIndRep`), since that code is commented out in CorsixTH and the hospitals take turns instead; the calls dispatcher
-is built differently (rooms call every tick instead of queuing calls, `calls_dispatcher.lua`) but behaves the same;
-CorsixTH's own saves cannot be loaded (they are its persisted Lua heap), while the original game's saves can (#474–#480).
+The porting backlog is finished and its list was removed. Two differences from CorsixTH in structure remain: the calls
+dispatcher is built differently (rooms call every tick instead of queuing calls, `calls_dispatcher.lua`) but behaves
+the same; CorsixTH's own saves cannot be loaded (they are its persisted Lua heap), while the original game's saves can.
+In multi-hospital games patients now choose a hospital by reputation, as in the original (#513).
 
 Done and committed:
 
