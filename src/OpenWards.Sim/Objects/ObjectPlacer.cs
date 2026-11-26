@@ -475,6 +475,7 @@ public static class ObjectPlacer
         if (definition.Id == PlantType)
         {
             placed.Plant = new PlantState();
+            PlantCare.OnPlaced(simulation, placed);
         }
 
         Machines.OnPlaced(simulation, placed, owner);
