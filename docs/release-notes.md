@@ -22,7 +22,6 @@ Settings, saves and `crash.log` are in `%AppData%\OpenWards`.
 
 - Importing an original saved game does not carry over VIP visit scheduling or the research progress of
   individual machines and drugs.
-- Surgeons' sink in an operating theatre loaded from the original game's second save slot.
 - CorsixTH saved games cannot be loaded.
 - Network play is experimental.
 

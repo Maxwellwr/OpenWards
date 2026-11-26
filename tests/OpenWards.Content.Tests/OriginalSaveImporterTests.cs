@@ -2,6 +2,7 @@ using OpenWards.Content.Saves;
 using OpenWards.Formats;
 using OpenWards.Formats.Tests;
 using OpenWards.Sim.Entities;
+using OpenWards.Sim.Maps;
 
 namespace OpenWards.Content.Tests;
 
@@ -39,6 +40,7 @@ public sealed class OriginalSaveImporterTests(ITestOutputHelper output)
             }
 
             Assert.Empty(report.Problems);
+            AssertSecondHalvesMatch(save, simulation);
             Assert.Equal(save.Hospitals[0].Money, hospital.Balance);
             Assert.Equal(save.Hospitals[0].Loan, hospital.Loan);
             Assert.Equal(save.Month + 1, simulation.Date.Month);
@@ -93,4 +95,33 @@ public sealed class OriginalSaveImporterTests(ITestOutputHelper output)
             }
         }
     }
+
+    /// <summary>
+    /// The second halves of two-part objects are not imported but drawn from their first half: each one in the save
+    /// (op_sink2, operating_table_b) has to fall on the tile its imported first half draws it at, so the surgeons' sink
+    /// and the table's far side stand where the original had them.
+    /// </summary>
+    private void AssertSecondHalvesMatch(OriginalSaveGame save, OpenWards.Sim.Simulation simulation)
+    {
+        (byte Type, string Master)[] halves = [(34, "op_sink1"), (31, "operating_table")];
+        foreach (var (type, master) in halves)
+        {
+            foreach (var half in save.Entities.Where(e => e.Kind == 6 && e.TileX != 0 && e.Type == type))
+            {
+                var tile = new TilePosition(half.TileX, half.TileY);
+                var slaves = simulation.Entities.OfType<RoomObject>().Where(o => o.ObjectType == master).Select(SlaveTile).ToList();
+                output.WriteLine($"   {master} second half at {tile}");
+                Assert.Contains(tile, slaves);
+            }
+        }
+    }
+
+    /// <summary>Where a two-part object's second half is: op_sink2.lua and operating_table_b.lua's <c>slave_position</c>.</summary>
+    private static TilePosition SlaveTile(RoomObject master) => (master.ObjectType, master.Orientation is Direction.North or Direction.South) switch
+    {
+        ("op_sink1", true) => new TilePosition(master.Tile.X, master.Tile.Y - 1),
+        ("op_sink1", false) => new TilePosition(master.Tile.X - 1, master.Tile.Y),
+        (_, true) => new TilePosition(master.Tile.X + 1, master.Tile.Y - 1),
+        _ => new TilePosition(master.Tile.X - 1, master.Tile.Y + 1),
+    };
 }
