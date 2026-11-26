@@ -3491,7 +3491,7 @@ internal sealed class MapViewScreen : IScreen, IWindowHost
         {
             if (_netMissionWatched && mission.Current is { } current)
             {
-                _windows.Open(new InformationWindow(NetMissionTexts.Mission(this, current, mission.MonthsLeft(Simulation.Date.MonthOfGame))));
+                _windows.Open(new InformationWindow(NetMissionTexts.Mission(this, current, mission.MonthsLeft(Simulation.Date.MonthOfGame - 1))));
             }
 
             _netMissionSeen = given;
