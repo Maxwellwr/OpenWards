@@ -796,6 +796,13 @@ public sealed class Hospital
     /// </summary>
     public bool IsOpen { get; private set; }
 
+    /// <summary>
+    /// Whether no person holds the hospital's place in a network game (<see cref="Simulation.SetSeat"/>): it gets no new
+    /// patients and takes no part in what the hospitals share (emergencies, VIPs, missions, the year's comparisons), as an
+    /// unused hospital record of the original's network game. What is in it goes on.
+    /// </summary>
+    public bool IsVacant { get; internal set; }
+
     /// <summary>The room types the hospital may build, in id order: those discovered at the start or since by research.</summary>
     public IReadOnlyCollection<string> DiscoveredRooms => _discoveredRooms;
 
@@ -1957,6 +1964,7 @@ public sealed class Hospital
         }
 
         NetMission.Write(writer);
+        writer.WriteBool(IsVacant);
     }
 
     internal static Hospital Read(SimReader reader, int player)
@@ -2259,6 +2267,9 @@ public sealed class Hospital
         {
             hospital.NetMission = NetMission.Read(reader);
         }
+
+        // Version 122 keeps whether a person holds the hospital's place in a network game.
+        hospital.IsVacant = reader.Version is 0 or >= 122 && reader.ReadBool();
 
         return hospital;
     }

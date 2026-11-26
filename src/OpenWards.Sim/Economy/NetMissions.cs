@@ -158,14 +158,15 @@ public sealed class NetMission
     /// </summary>
     internal static void OnEndMonth(Simulation simulation, int month)
     {
-        var hospitals = simulation.Hospitals;
-        if (month % QuarterMonths != 0 || hospitals.Count < 2 || simulation.Rules.NetMissions.Count == 0)
+        // Only the hospitals a person holds have missions; a computer opponent holding a place counts as a rival.
+        var hospitals = simulation.HeldHospitals.ToList();
+        if (month % QuarterMonths != 0 || hospitals.Count + StandIns(simulation).Count() < 2 || simulation.Rules.NetMissions.Count == 0)
         {
             return;
         }
 
         // Every result is reckoned before any mission changes, since the last two compare the players.
-        var passed = new bool?[hospitals.Count];
+        var passed = new bool?[simulation.Hospitals.Count];
         NetMissionRule? judged = null;
         foreach (var hospital in hospitals)
         {
@@ -199,7 +200,8 @@ public sealed class NetMission
     /// <summary>Whether the player has done their mission now.</summary>
     internal static bool Passed(Simulation simulation, Hospital hospital, NetMissionRule mission)
     {
-        var others = simulation.Hospitals.Where(other => other.Player != hospital.Player).ToList();
+        var others = simulation.HeldHospitals.Where(other => other.Player != hospital.Player).ToList();
+        var standIns = StandIns(simulation).ToList();
         return mission.Criterion switch
         {
             NetCriterion.Emergency or NetCriterion.Vip or NetCriterion.BuyPlot => hospital.NetMission.Done,
@@ -209,11 +211,16 @@ public sealed class NetMission
             NetCriterion.Reputation => hospital.Reputation >= mission.Value,
 
             // Last only below every other player: level with anyone is enough.
-            NetCriterion.NotLowestReputation => others.Count == 0 || others.Any(other => hospital.Reputation >= other.Reputation),
-            NetCriterion.NotLowestMoney => others.Count == 0 || others.Any(other => hospital.Balance - hospital.Loan >= other.Balance - other.Loan),
+            NetCriterion.NotLowestReputation => others.Count + standIns.Count == 0
+                || others.Any(other => hospital.Reputation >= other.Reputation) || standIns.Any(other => hospital.Reputation >= other.Reputation),
+            NetCriterion.NotLowestMoney => others.Count + standIns.Count == 0
+                || others.Any(other => hospital.Balance - hospital.Loan >= other.Balance - other.Loan) || standIns.Any(other => hospital.Balance - hospital.Loan >= other.Balance),
             _ => true,
         };
     }
+
+    /// <summary>The computer opponents holding places no person holds (<see cref="Simulation.SetSeat"/>).</summary>
+    private static IEnumerable<CompetitorHospital> StandIns(Simulation simulation) => simulation.Competitors.Where(competitor => competitor.Seat >= 0);
 
     /// <summary>Gives the first row not given yet whose month has come, if any.</summary>
     private void Give(IReadOnlyList<NetMissionRule> rows, int month, int cured)

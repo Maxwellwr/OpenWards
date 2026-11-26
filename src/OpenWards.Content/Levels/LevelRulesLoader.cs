@@ -250,7 +250,7 @@ public static partial class LevelRulesLoader
             AllocationFromConfig(config),
             NeedsFromConfig(config, difficulty),
             NetMissionsFromConfig(config),
-            PlotNeighbours.ForLevel(levelNumber));
+            PlotNeighbours.ForLevel(levelNumber)).WithReserveCompetitors(ReserveCompetitorsFromConfig(config));
     }
 
     /// <summary>
@@ -330,6 +330,27 @@ public static partial class LevelRulesLoader
                     config.GetInt($"computer[{index}].GuessAt") ?? defaults.GuessAt);
                 yield return new PlannedCompetitor(index + 1, config[$"computer[{index}].Name"] ?? BaseCompetitorNames[index], personality);
             }
+        }
+    }
+
+    /// <summary>
+    /// Every computer opponent of the original's twenty, whether it plays or not, for the places of a network game no person
+    /// holds: the i-th name (<c>computer[i].Name</c>, else the original's) and the traits of <c>computer[i]</c> where the
+    /// level files give them (<see cref="CompetitorPersonality.Default"/> where they do not), as the original gives a free
+    /// hospital record an unused name of the twenty and that entry's traits.
+    /// </summary>
+    public static IEnumerable<PlannedCompetitor> ReserveCompetitorsFromConfig(LevelConfig config)
+    {
+        var defaults = CompetitorPersonality.Default;
+        for (var index = 0; index < BaseCompetitorNames.Length; index++)
+        {
+            var personality = new CompetitorPersonality(
+                config.GetInt($"computer[{index}].Skill") ?? defaults.Skill,
+                config.GetInt($"computer[{index}].StaffLevels") ?? defaults.StaffLevels,
+                config.GetInt($"computer[{index}].Speed") ?? defaults.Speed,
+                config.GetInt($"computer[{index}].Comfort") ?? defaults.Comfort,
+                config.GetInt($"computer[{index}].GuessAt") ?? defaults.GuessAt);
+            yield return new PlannedCompetitor(index + 1, config[$"computer[{index}].Name"] ?? BaseCompetitorNames[index], personality);
         }
     }
 

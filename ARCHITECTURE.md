@@ -84,6 +84,12 @@ UI state never enters the simulation.
 - **Joining** sends `Hello` with the protocol version. The server replies with `Welcome`:
   the player number, the full `Simulation.Save` output and the allowed tick. Players get the
   lowest free number below the map's player count; a full game rejects the client.
+- **Places nobody holds.** Before every tick, and when someone joins, the server tells the simulation which places
+  people hold with a `SetSeatCommand` (player -1, which clients may not send). A vacant place (`Hospital.IsVacant`)
+  gets no new patients and takes no part in shared emergencies, VIPs, missions, referrals or the year's comparisons.
+  By default a computer opponent (`CompetitorHospital` with a `Seat`, the single-player scenario without a map) plays
+  it until a person joins, who then takes the place; one who leaves gives it back. The original's network game has no
+  computer opponents; `--no-computers` leaves such places empty.
 - **Desyncs.** Every 16 ticks the server records its state hash, and clients send theirs.
   A mismatch is logged and broadcast as `DesyncMessage`. The state hash excludes pending
   commands and the sequence counter: they are inputs, and a client behind the server may

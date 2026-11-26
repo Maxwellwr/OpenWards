@@ -304,6 +304,21 @@ public sealed class LevelRules
             MayorLaunch, Emergencies, Epidemics, Competitors, ScoreMaxIncrease, LevelNumber, RandomEmergencies, Difficulty, SodaPrice, Research, Allocation, Needs, netMissions, parcelNeighbours);
     }
 
+    /// <summary>
+    /// Every computer opponent the level files describe (<c>computer[0…19]</c>), whether it plays or not, by its number: the
+    /// network game takes one of them for a place no person holds (<see cref="Simulation.SetSeat"/>). Empty for a level
+    /// that names none.
+    /// </summary>
+    public IReadOnlyList<PlannedCompetitor> ReserveCompetitors { get; private set; } = [];
+
+    /// <summary>The same level with the given <see cref="ReserveCompetitors"/>.</summary>
+    public LevelRules WithReserveCompetitors(IEnumerable<PlannedCompetitor> reserve)
+    {
+        var rules = (LevelRules)MemberwiseClone();
+        rules.ReserveCompetitors = [.. reserve.OrderBy(competitor => competitor.Number)];
+        return rules;
+    }
+
     /// <summary>The same level with no computer opponents, so every patient comes to the players' hospitals.</summary>
     public LevelRules WithoutCompetitors()
     {
@@ -354,6 +369,22 @@ public sealed class LevelRules
     }
 
     /// <summary>A planned opponent; its traits since version 117.</summary>
+    private static void WriteCompetitors(SimWriter writer, IReadOnlyList<PlannedCompetitor> competitors)
+    {
+        writer.WriteInt32(competitors.Count);
+        foreach (var competitor in competitors)
+        {
+            writer.WriteInt32(competitor.Number);
+            writer.WriteString(competitor.Name);
+            var personality = competitor.Personality ?? CompetitorPersonality.Default;
+            writer.WriteInt32(personality.Skill);
+            writer.WriteInt32(personality.StaffLevels);
+            writer.WriteInt32(personality.Speed);
+            writer.WriteInt32(personality.Comfort);
+            writer.WriteInt32(personality.GuessAt);
+        }
+    }
+
     private static PlannedCompetitor ReadCompetitor(SimReader reader)
     {
         var number = reader.ReadInt32();
@@ -409,18 +440,7 @@ public sealed class LevelRules
         }
 
         Epidemics.Write(writer);
-        writer.WriteInt32(Competitors.Count);
-        foreach (var competitor in Competitors)
-        {
-            writer.WriteInt32(competitor.Number);
-            writer.WriteString(competitor.Name);
-            var personality = competitor.Personality ?? CompetitorPersonality.Default;
-            writer.WriteInt32(personality.Skill);
-            writer.WriteInt32(personality.StaffLevels);
-            writer.WriteInt32(personality.Speed);
-            writer.WriteInt32(personality.Comfort);
-            writer.WriteInt32(personality.GuessAt);
-        }
+        WriteCompetitors(writer, Competitors);
 
         writer.WriteInt32(ScoreMaxIncrease);
         writer.WriteInt32(LevelNumber ?? 0);
@@ -453,6 +473,8 @@ public sealed class LevelRules
                 writer.WriteInt32(other);
             }
         }
+
+        WriteCompetitors(writer, ReserveCompetitors);
     }
 
     internal static LevelRules Read(SimReader reader)
@@ -525,6 +547,12 @@ public sealed class LevelRules
             }
 
             rules = rules.With(missions, neighbours);
+        }
+
+        // Version 122 keeps the opponents a network game may take for the places no person holds.
+        if (reader.Version is 0 or >= 122)
+        {
+            rules = rules.WithReserveCompetitors(Enumerable.Range(0, reader.ReadCount(MaxEntries)).Select(_ => ReadCompetitor(reader)).ToList());
         }
 
         return freeBuild ? rules.WithFreeBuild() : rules;

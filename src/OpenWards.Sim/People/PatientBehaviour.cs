@@ -1036,13 +1036,13 @@ public sealed class PatientBehaviour : HumanoidBehaviour, IQueueMember
     /// <summary>
     /// The network game's referral (the original's NETPLAY.TXT, "Referrals", the Patient Redirection Panel): a patient
     /// between rooms goes to another player's hospital instead, to its reception, as one arriving there would.
-    /// Emergency patients stay.
+    /// Emergency patients stay, and nobody goes to a vacant place.
     /// </summary>
     /// <returns>Whether the patient went.</returns>
     internal bool Refer(Simulation simulation, Humanoid humanoid, int hospital)
     {
         if (Phase is not (PatientPhase.SeekRoom or PatientPhase.WalkingToRoom or PatientPhase.InDoorQueue) || EmergencyIndex > 0
-            || hospital < 0 || hospital >= simulation.Hospitals.Count || hospital == humanoid.HospitalPlayer)
+            || hospital < 0 || hospital >= simulation.Hospitals.Count || hospital == humanoid.HospitalPlayer || simulation.Hospitals[hospital].IsVacant)
         {
             return false;
         }

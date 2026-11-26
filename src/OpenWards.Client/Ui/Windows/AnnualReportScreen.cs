@@ -331,8 +331,11 @@ internal sealed class AnnualReportScreen
     internal static List<ChartEntry> Entries(IWindowHost host)
     {
         var simulation = host.Simulation;
+        // A vacant place of a network game is left out; the computer opponent playing it comes with the opponents.
         var entries = simulation.Hospitals
-            .Select((h, i) => new ChartEntry(ProgressReportScreen.HospitalName(host, i), h.Balance - h.Loan, h.PlayerSalary, h.Cured, h.Deaths, h.Visitors, h.Value))
+            .Select((h, i) => (Hospital: h, Entry: new ChartEntry(ProgressReportScreen.HospitalName(host, i), h.Balance - h.Loan, h.PlayerSalary, h.Cured, h.Deaths, h.Visitors, h.Value)))
+            .Where(pair => !pair.Hospital.IsVacant)
+            .Select(pair => pair.Entry)
             .ToList();
         entries.AddRange(simulation.Competitors.Select(c => new ChartEntry(c.Name, c.Balance, c.PlayerSalary, c.Cured, c.Deaths, c.Visitors, c.Value)));
         return entries;

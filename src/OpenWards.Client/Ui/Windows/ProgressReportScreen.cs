@@ -83,10 +83,14 @@ internal sealed class ProgressReportScreen
 
         void At(TextRenderer font, string text, int x, int y) => font.Draw(batch, text, new Vector2(origin.X + x, origin.Y + y));
 
-        // The hospitals, the player's (selected) in red.
+        // The hospitals people hold, the player's (selected) in red.
+        var listed = 0;
         for (var i = 0; i < simulation.Hospitals.Count; i++)
         {
-            At(i == host.Player ? red : normal, HospitalName(host, i).ToUpperInvariant(), 272, 73 + (i * 25));
+            if (!simulation.Hospitals[i].IsVacant)
+            {
+                At(i == host.Player ? red : normal, HospitalName(host, i).ToUpperInvariant(), 272, 73 + (listed++ * 25));
+            }
         }
 
         // A column for each goal.

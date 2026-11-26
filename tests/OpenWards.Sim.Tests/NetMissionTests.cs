@@ -271,6 +271,33 @@ public class NetMissionTests
     }
 
     [Fact]
+    public void AVacantPlaceHasNoMissionAndAComputerHoldingItIsARival()
+    {
+        var simulation = NewSimulation([new(0, NetCriterion.Cures, 5, 1, 3)], players: 3);
+        var reserved = simulation.Rules.WithReserveCompetitors([new PlannedCompetitor(1, "ORAC")]);
+        simulation = new Simulation(simulation.Map, seed: 1, rules: reserved);
+
+        // Alone with two empty places, the person has no rival and so no mission.
+        simulation.SetSeat(1, occupied: false, computer: false);
+        simulation.SetSeat(2, occupied: false, computer: false);
+        NetMission.OnEndMonth(simulation, 3);
+        Assert.Null(simulation.Hospitals[0].NetMission.Current);
+
+        // A computer opponent in one of them is a rival: the person gets the mission, the empty places do not.
+        simulation.SetSeat(1, occupied: false, computer: true);
+        NetMission.OnEndMonth(simulation, 6);
+        Assert.NotNull(simulation.Hospitals[0].NetMission.Current);
+        Assert.Null(simulation.Hospitals[1].NetMission.Current);
+        Assert.Null(simulation.Hospitals[2].NetMission.Current);
+
+        // Last only below the computer too.
+        var standIn = Assert.Single(simulation.Competitors);
+        standIn.SetReputation(600);
+        simulation.Hospitals[0].SetReputation(500);
+        Assert.False(NetMission.Passed(simulation, simulation.Hospitals[0], new(0, NetCriterion.NotLowestReputation, 1, 1, 3)));
+    }
+
+    [Fact]
     public void SavesKeepTheMissionsAndTheLastResult()
     {
         var simulation = NewSimulation([new(0, NetCriterion.Cures, 5, 1, 3), new(3, NetCriterion.Reputation, 600, 2, 4)]);

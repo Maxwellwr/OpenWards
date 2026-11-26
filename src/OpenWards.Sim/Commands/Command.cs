@@ -73,6 +73,7 @@ public enum CommandKind : ushort
     SellCarriedObject = 58,
     MakeDebugPatient = 59,
     DeclineSalaryOffer = 60,
+    SetSeat = 61,
 }
 
 /// <summary>
@@ -157,6 +158,7 @@ public abstract record Command
             CommandKind.SellCarriedObject => new SellCarriedObjectCommand(),
             CommandKind.MakeDebugPatient => new MakeDebugPatientCommand(reader.ReadString(), reader.ReadTile()),
             CommandKind.DeclineSalaryOffer => new DeclineSalaryOfferCommand(),
+            CommandKind.SetSeat => new SetSeatCommand(reader.ReadInt32(), reader.ReadBool(), reader.ReadBool()),
             _ => throw new InvalidDataException($"Unknown command kind {(ushort)kind}."),
         };
     }
@@ -933,6 +935,31 @@ public sealed record ReferPatientCommand(int PatientId, int Hospital) : Command
     {
         writer.WriteInt32(PatientId);
         writer.WriteInt32(Hospital);
+    }
+}
+
+/// <summary>
+/// The lockstep server's word that a person took (<paramref name="Occupied"/>) or left the place of hospital
+/// <paramref name="Seat"/>, and whether a computer opponent plays a place no person holds (<see cref="Simulation.SetSeat"/>).
+/// Only the server issues it (as player -1); it takes effect on the bidding screen too.
+/// </summary>
+public sealed record SetSeatCommand(int Seat, bool Occupied, bool Computer) : Command
+{
+    public override CommandKind Kind => CommandKind.SetSeat;
+
+    public override void Execute(Simulation simulation, int player)
+    {
+        if (player < 0)
+        {
+            simulation.SetSeat(Seat, Occupied, Computer);
+        }
+    }
+
+    protected override void WriteArguments(SimWriter writer)
+    {
+        writer.WriteInt32(Seat);
+        writer.WriteBool(Occupied);
+        writer.WriteBool(Computer);
     }
 }
 

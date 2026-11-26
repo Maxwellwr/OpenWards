@@ -38,7 +38,7 @@ internal sealed class PatientWindow(int patientId) : UiWindow
         for (var i = 1; i <= count; i++)
         {
             var next = (((from < 0 ? host.Player : from) + (step * i)) % count + count) % count;
-            if (next != host.Player)
+            if (next != host.Player && !host.Simulation.Hospitals[next].IsVacant)
             {
                 return next;
             }
@@ -50,7 +50,7 @@ internal sealed class PatientWindow(int patientId) : UiWindow
     /// <summary>The referral button, CorsixTH style, under the original's panel: left sends, right picks another hospital.</summary>
     private List<DialogPanel> ReferPanels(IWindowHost host, Humanoid humanoid)
     {
-        if (_referTo < 0 || _referTo >= host.Simulation.Hospitals.Count || _referTo == host.Player)
+        if (_referTo < 0 || _referTo >= host.Simulation.Hospitals.Count || _referTo == host.Player || host.Simulation.Hospitals[_referTo].IsVacant)
         {
             _referTo = NextHospital(host, -1, 1);
         }
@@ -195,7 +195,7 @@ internal sealed class PatientWindow(int patientId) : UiWindow
         if (simulation.Hospitals.Count > 1)
         {
             // The network game's Patient Redirection Panel: a button for each other hospital.
-            yield return WindowRow.Of([.. Enumerable.Range(0, simulation.Hospitals.Count).Where(other => other != host.Player).Select(other =>
+            yield return WindowRow.Of([.. Enumerable.Range(0, simulation.Hospitals.Count).Where(other => other != host.Player && !simulation.Hospitals[other].IsVacant).Select(other =>
                 WindowCell.Button(UiText.Format("openwards.referral.refer", "Refer to %1%", ProgressReportScreen.HospitalName(host, other)), () => host.Submit(new ReferPatientCommand(humanoid.Id, other)))
                     .WithTooltip(UiText.Get("openwards.referral.tooltip", "Send the patient to another player's hospital; right click picks another hospital")))]);
         }

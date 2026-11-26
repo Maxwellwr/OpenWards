@@ -406,11 +406,11 @@ public static class Emergencies
     }
 
     /// <summary>
-    /// Whether an emergency due now has to wait: the hospital not open yet, a fax waiting (a VIP's, an epidemic's or
+    /// Whether an emergency due now has to wait: the hospital not open yet or a vacant place of a network game, a fax waiting (a VIP's, an epidemic's or
     /// an emergency's), an epidemic being covered up, an emergency under way, or the last result's fax still open.
     /// </summary>
     internal static bool IsBusy(Hospital hospital) =>
-        !hospital.IsOpen || hospital.Emergencies.Current is not null || hospital.Emergencies.Report is not null
+        !hospital.IsOpen || hospital.IsVacant || hospital.Emergencies.Current is not null || hospital.Emergencies.Report is not null
         || hospital.Vips.IsInvitationPending || hospital.Epidemics.IsFaxPending || hospital.Epidemics.Current is { IsCoverUpActive: true };
 
     /// <summary>Whether emergencies and VIP visits go to all the hospitals at once: a game of several hospitals.</summary>

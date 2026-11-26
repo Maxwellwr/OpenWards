@@ -1,4 +1,5 @@
 using OpenWards.Sim.Calendar;
+using OpenWards.Sim.Commands;
 using OpenWards.Sim.Economy;
 using OpenWards.Sim.Import;
 using OpenWards.Sim.Maps;
@@ -216,6 +217,48 @@ public class PatientAllocationTests
 
         // The month's patients are spread over its days, not left to the level's first month.
         Assert.True(imported.Arrivals.SpawnDates.Sum() > played.Rules.Population[0].Change);
+    }
+
+    [Fact]
+    public void AVacantPlaceGetsNoPatientsAndAComputerOpponentHoldingItDoes()
+    {
+        var rules = new LevelRules(0, [], []).WithReserveCompetitors([new PlannedCompetitor(1, "ORAC"), new PlannedCompetitor(2, "HAL")]);
+        var simulation = NewSimulation(players: 3, rules);
+        new SetSeatCommand(1, Occupied: false, Computer: true).Execute(simulation, -1);
+        new SetSeatCommand(2, Occupied: false, Computer: false).Execute(simulation, -1);
+        var standIn = Assert.Single(simulation.Competitors);
+        Assert.Equal(1, standIn.Seat);
+        standIn.Open();
+
+        var chosen = new List<int>();
+        for (var i = 0; i < 4; i++)
+        {
+            var hospital = PatientArrivals.ChooseHospital(simulation);
+            chosen.Add(hospital);
+            simulation.Arrivals.SpawnPatient(simulation, hospital);
+        }
+
+        // The person's hospital and the opponent take turns; the empty places get none.
+        Assert.Equal([0, 3, 0, 3], chosen);
+        Assert.Equal([2L, 0L, 0L], simulation.Hospitals.Select(h => h.SpawnAttempts));
+
+        // A client may not say who holds a place: only the server's word (player -1) counts.
+        new SetSeatCommand(2, Occupied: true, Computer: false).Execute(simulation, 0);
+        Assert.True(simulation.Hospitals[2].IsVacant);
+
+        using var stream = new MemoryStream();
+        simulation.Save(stream);
+        stream.Position = 0;
+        var restored = Simulation.Load(stream);
+        Assert.Equal(simulation.ComputeStateHash(), restored.ComputeStateHash());
+        Assert.Equal([false, true, true], restored.Hospitals.Select(h => h.IsVacant));
+        Assert.Equal(1, Assert.Single(restored.Competitors).Seat);
+        Assert.Equal(2, restored.Rules.ReserveCompetitors.Count);
+
+        // A person who takes the place sends its opponent away.
+        new SetSeatCommand(1, Occupied: true, Computer: true).Execute(restored, -1);
+        Assert.False(restored.Hospitals[1].IsVacant);
+        Assert.Empty(restored.Competitors);
     }
 
     private static Simulation NewSimulation(int players, LevelRules? rules = null)

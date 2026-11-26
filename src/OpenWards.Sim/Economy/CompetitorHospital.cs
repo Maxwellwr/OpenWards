@@ -210,6 +210,12 @@ public sealed class CompetitorHospital
     /// <summary>The level files' index plus one.</summary>
     public int Number { get; }
 
+    /// <summary>
+    /// The place of a network game it holds while no person does (<see cref="Simulation.SetSeat"/>), or -1 for an opponent
+    /// the level brings.
+    /// </summary>
+    public int Seat { get; private set; } = -1;
+
     /// <summary>Its name.</summary>
     public string Name { get; }
 
@@ -393,6 +399,15 @@ public sealed class CompetitorHospital
     /// <param name="tiles">The tiles of the plot the players start on.</param>
     internal static CompetitorHospital Create(PlannedCompetitor planned, LevelRules rules, int tiles) =>
         new(planned.Number, planned.Name, rules.StartReputation, rules.StartCash, tiles, planned.Personality);
+
+    /// <summary>An opponent that takes a network game's place no person holds, starting its scenario now.</summary>
+    internal static CompetitorHospital ForSeat(PlannedCompetitor planned, LevelRules rules, int tiles, int seat, long tick)
+    {
+        var competitor = Create(planned, rules, tiles);
+        competitor.Seat = seat;
+        competitor.NextActionTick = tick;
+        return competitor;
+    }
 
     /// <summary>
     /// Once every <see cref="DecisionInterval"/> ticks, when the time has come: a decision takes the scenario's next step,
@@ -1213,6 +1228,8 @@ public sealed class CompetitorHospital
             writer.WriteInt32(month.NotCured);
             writer.WriteInt32(month.Leaving);
         }
+
+        writer.WriteInt32(Seat);
     }
 
     private static void WriteAction(SimWriter writer, CompetitorAction action)
@@ -1364,6 +1381,8 @@ public sealed class CompetitorHospital
             });
         }
 
+        // Version 122 keeps the network game's place it holds.
+        competitor.Seat = reader.Version is 0 or >= 122 ? Math.Max(-1, reader.ReadInt32()) : -1;
         return competitor;
     }
 
