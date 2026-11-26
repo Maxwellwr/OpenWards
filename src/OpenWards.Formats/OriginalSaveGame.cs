@@ -776,6 +776,12 @@ public sealed class OriginalSaveGame
     /// </summary>
     public const int AwardCounterOffset = 0x669A8;
 
+    /// <summary>Offset of the player's plant count (2 bytes), just after the award counters (<see cref="PlantCount"/>).</summary>
+    public const int PlantCountOffset = 0x669C5;
+
+    /// <summary>Offset of the player's score for looking after the plants (4 bytes, signed; <see cref="PlantCare"/>).</summary>
+    public const int PlantCareOffset = 0x669D0;
+
     /// <summary>Offset of the next emergency (<see cref="NextEmergency"/>).</summary>
     public const int NextEmergencyOffset = 0x66815;
 
@@ -853,6 +859,15 @@ public sealed class OriginalSaveGame
     /// <summary>The rats the player killed and the shots fired this year.</summary>
     public (int Killed, int Shots) RatsThisYear =>
         (BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 21)..]), BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 25)..]));
+
+    /// <summary>How many plants the player has, in the corridors and in the rooms.</summary>
+    public int PlantCount => BinaryPrimitives.ReadUInt16LittleEndian(Data.Span[PlantCountOffset..]);
+
+    /// <summary>
+    /// The player's score for looking after the plants, which the adviser judges: a running count, up to 55 a plant (the
+    /// game expert's answer of 27.11.2026, from the developers' notes and the saves).
+    /// </summary>
+    public int PlantCare => BinaryPrimitives.ReadInt32LittleEndian(Data.Span[PlantCareOffset..]);
 
     /// <summary>The research points the player earned this year. The original game never reads it.</summary>
     public int ResearchEarnedThisYear => BinaryPrimitives.ReadInt32LittleEndian(Data.Span[(AwardCounterOffset + 13)..]);

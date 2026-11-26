@@ -672,6 +672,9 @@ public sealed class Hospital
     /// </summary>
     public int ResearchDistributedThisYear { get; internal set; }
 
+    /// <summary>The score for looking after the plants, which the adviser judges (see <see cref="Objects.PlantCare"/>).</summary>
+    public int PlantCare { get; internal set; }
+
     /// <summary>The player (0-based) the hospital belongs to.</summary>
     public int Player { get; }
 
@@ -1957,6 +1960,7 @@ public sealed class Hospital
         }
 
         NetMission.Write(writer);
+        writer.WriteInt32(PlantCare);
     }
 
     internal static Hospital Read(SimReader reader, int player)
@@ -2258,6 +2262,12 @@ public sealed class Hospital
         if (reader.Version is 0 or >= 118)
         {
             hospital.NetMission = NetMission.Read(reader);
+        }
+
+        // Version 122 keeps the score for the plants; older games work it out from the plants once they are read.
+        if (reader.Version is 0 or >= 122)
+        {
+            hospital.PlantCare = reader.ReadInt32();
         }
 
         return hospital;

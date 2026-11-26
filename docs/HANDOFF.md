@@ -195,7 +195,7 @@ Done and committed:
   The adviser (adviser.lua, player_hospital.lua) pops up over the bottom panel (animations 438,
   460, 440) with his speech in a balloon (Panel02V, Font50V): a queue said in turn (left click on him for the next,
   right click sends him down), the history of the last 20 (Messages button), the adviser_disabled option, and
-  advice on set days from month 5 (money, staff room, radiators, toilets, heating, plants, thirst),
+  advice on set days from month 5 (money, staff room, radiators, toilets, heating, thirst),
   the reception at month ends of year 1, the first cure/death, the first raise request, the boiler,
   earthquakes, new machines and VIPs walking in. Texts come from the game's strings (S[11], S[28],
   S[21], S[62]) with English stand-ins. Benches, queues, litter, machines and level progress came later (see below);
@@ -280,8 +280,14 @@ Done and committed:
   most text windows' buttons have them now, including the fax, cheats, adviser history and level end windows
   (TooltipTests lists the windows checked). The progress report's goals carry tooltip.status (ProgressReportWindow.Tooltip;
   section 64 when loaded).
+  Plants are advised as in the original (save format 122): Hospital.PlantCare is the original's running care
+  score (Sim/Objects/PlantCare.cs: +55 a plant put down up to the plants before it, −11 a frame drooped, watering
+  +55 − ⌊(w+40)/8⌋, a plant taken away −⌊(w+40)/8⌋; imported from the save at 0x669D0), and the adviser's
+  PlantAdvice looks every frame while he is free: need_handyman_plants, then with 3+ plants and a patient seen
+  the share bands 15/40/70/95 % (28/40 or 28/41, 28/42, 11/91, silence, 28/44), then too_many_plants, each rule
+  pausing 15 or 20 × times × 102.4 ticks. A plant moved is put down freshly watered.
   More advice (#72; save format 79): long queues on day 10 (getRandomBusyRoom: queues_too_long, or for a doctor's room
-  queue_too_long_send_doctor/need_doctors), plants_thirsty once a plant, people_did_it_on_the_floor
+  queue_too_long_send_doctor/need_doctors), people_did_it_on_the_floor
   (Hospital.DidItOnFloor), fax_received (first fax in a campaign level; client-side flag, not saved),
   information.emergency at helicopter phase 60, epidemic_health_inspector, reception_need_receptionist / no_desk_5 on
   buying a desk. Bench advice and the tutorial were done since; crazy doctors done 2026-11-13 (`Tiredness.CheckCrazy`, `Humanoid.IsCrazy`, save format 91: a very
