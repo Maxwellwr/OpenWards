@@ -180,7 +180,7 @@ public sealed class VipVisits
         int? name = null;
         foreach (var each in simulation.Hospitals)
         {
-            if (each.Vips.State is (VipState.None or VipState.Over) && HasDesk(simulation, each.Player))
+            if (!each.IsVacant && each.Vips.State is (VipState.None or VipState.Over) && HasDesk(simulation, each.Player))
             {
                 if (name is null)
                 {

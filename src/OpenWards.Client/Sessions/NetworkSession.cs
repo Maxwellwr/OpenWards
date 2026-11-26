@@ -86,6 +86,9 @@ internal sealed class NetworkSession : IGameSession
     /// <summary>How many chat lines have arrived in all.</summary>
     public int ChatCount => _client.ChatCount;
 
+    /// <summary>The players connected, with the names they joined under.</summary>
+    public IReadOnlyList<PlayerInfo> Players => _client.Players;
+
     /// <summary>The levels the server offers the host.</summary>
     public IReadOnlyList<string> Levels => _client.Levels;
 

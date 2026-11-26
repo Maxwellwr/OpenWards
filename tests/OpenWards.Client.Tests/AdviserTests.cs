@@ -529,5 +529,58 @@ public class AdviserNameTests
         Assert.Equal(german.Get("adviser.warnings.no_desk"), AdviserChecks.NoDesk.Text(texts));
     }
 
+    [Theory]
+    [InlineData(-20, 0, "desperate")]
+    [InlineData(32, 0, "desperate")]
+    [InlineData(32, 1, null)]
+    [InlineData(32, 2, "priorities")]
+    [InlineData(33, 1, "dying")]
+    [InlineData(87, 1, "dying")]
+    [InlineData(88, 1, "thirsty")]
+    [InlineData(153, 1, "thirsty")]
+    [InlineData(154, 1, null)]
+    [InlineData(209, 1, null)]
+    [InlineData(210, 1, "thriving")]
+    [InlineData(260, 1, "thriving")]
+    public void TheCareForThePlantsIsJudgedAsTheOriginalDoes(int score, int handymen, string? expected)
+    {
+        // Four plants: 220 at most, so 15 % is 33, 40 % is 88, 70 % is 154 and 95 % is 209.
+        var advice = AdviserChecks.CareAdvice(score, 4, handymen);
+
+        Assert.Equal(expected switch
+        {
+            "desperate" => AdviserChecks.DesperateNeedForWatering,
+            "priorities" => AdviserChecks.ChangePrioritiesToPlants,
+            "dying" => AdviserChecks.PlantsDying,
+            "thirsty" => AdviserChecks.PlantsThirsty,
+            "thriving" => AdviserChecks.PlantsThriving,
+            _ => null,
+        }, advice);
+    }
+
+    [Fact]
+    public void ThreeNewPlantsAreThoughtThirstyAsInTheOriginal()
+    {
+        // 110 of 165 after putting down three: 67 %.
+        Assert.Equal(AdviserChecks.PlantsThirsty, AdviserChecks.CareAdvice(110, 3, 1));
+        Assert.Null(AdviserChecks.CareAdvice(165, 4, 1));
+    }
+
+    [Fact]
+    public void AnAdviceRuleWaitsLongerEachTimeItHasSpoken()
+    {
+        var rule = new AdviserChecks.AdviceRule(15);
+        Assert.True(rule.IsReady(0));
+
+        rule.Spoke(100);
+        Assert.Equal((false, true), (rule.IsReady(100 + 1536), rule.IsReady(100 + 1537)));
+
+        rule.Spoke(2000);
+        Assert.Equal((false, true), (rule.IsReady(2000 + 3072), rule.IsReady(2000 + 3073)));
+
+        rule.Reset();
+        Assert.True(rule.IsReady(2001));
+    }
+
     private static OpenWards.Formats.StringTable EmptyStrings() => OpenWards.Formats.StringTable.Parse(new byte[] { 0, 0 });
 }

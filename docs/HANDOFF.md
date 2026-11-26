@@ -213,7 +213,7 @@ Done and committed:
   The adviser (adviser.lua, player_hospital.lua) pops up over the bottom panel (animations 438,
   460, 440) with his speech in a balloon (Panel02V, Font50V): a queue said in turn (left click on him for the next,
   right click sends him down), the history of the last 20 (Messages button), the adviser_disabled option, and
-  advice on set days from month 5 (money, staff room, radiators, toilets, heating, plants, thirst),
+  advice on set days from month 5 (money, staff room, radiators, toilets, heating, thirst),
   the reception at month ends of year 1, the first cure/death, the first raise request, the boiler,
   earthquakes, new machines and VIPs walking in. Texts come from the game's strings (S[11], S[28],
   S[21], S[62]) with English stand-ins. Benches, queues, litter, machines and level progress came later (see below);
@@ -298,8 +298,14 @@ Done and committed:
   most text windows' buttons have them now, including the fax, cheats, adviser history and level end windows
   (TooltipTests lists the windows checked). The progress report's goals carry tooltip.status (ProgressReportWindow.Tooltip;
   section 64 when loaded).
+  Plants are advised as in the original (save format 122): Hospital.PlantCare is the original's running care
+  score (Sim/Objects/PlantCare.cs: +55 a plant put down up to the plants before it, −11 a frame drooped, watering
+  +55 − ⌊(w+40)/8⌋, a plant taken away −⌊(w+40)/8⌋; imported from the save at 0x669D0), and the adviser's
+  PlantAdvice looks every frame while he is free: need_handyman_plants, then with 3+ plants and a patient seen
+  the share bands 15/40/70/95 % (28/40 or 28/41, 28/42, 11/91, silence, 28/44), then too_many_plants, each rule
+  pausing 15 or 20 × times × 102.4 ticks. A plant moved is put down freshly watered.
   More advice (#72; save format 79): long queues on day 10 (getRandomBusyRoom: queues_too_long, or for a doctor's room
-  queue_too_long_send_doctor/need_doctors), plants_thirsty once a plant, people_did_it_on_the_floor
+  queue_too_long_send_doctor/need_doctors), people_did_it_on_the_floor
   (Hospital.DidItOnFloor), fax_received (first fax in a campaign level; client-side flag, not saved),
   information.emergency at helicopter phase 60, epidemic_health_inspector, reception_need_receptionist / no_desk_5 on
   buying a desk. Bench advice and the tutorial were done since; crazy doctors done 2026-11-13 (`Tiredness.CheckCrazy`, `Humanoid.IsCrazy`, save format 91: a very
@@ -322,7 +328,7 @@ Done and committed:
   english.lua's corrections apply too. The options list CorsixTH's languages drawn with the game's font (cp437),
   and since 2026-11-14 (cloud) also Russian (Font "mik") and the Unicode-font languages, drawn with a TrueType font
   (unicode_font, else CorsixTHUnicode.ttf/GoNotoKurrent-Regular.ttf beside the game, else a system font with the
-  language's letters; see ARCHITECTURE.md, "Settings"). Looked at live on MSI with Russian 2026-11-14: Segoe UI unhinted and squeezed to 70% looked bad, so it is now FreeType, hinted and one bit a pixel, Tahoma first, sized to the bitmap fonts' letters, Latin-only lines in the bitmap font; then (PR after #329) Cyrillic made from the bitmap fonts' own letters (`CyrillicGlyphs`) for FONT00V/01V/16V/31V/36V/50V/74V/100V/101V, the serif and hand-drawn ones (casebook, research, policy titles, awards) keep TrueType. The research screen's "Диагностическое оборудование" still runs a letter under the "Готово" box. CorsixTH's own adviser
+  language's letters; see ARCHITECTURE.md, "Settings"). Looked at live on MSI with Russian 2026-11-14: Segoe UI unhinted and squeezed to 70% looked bad, so it is now FreeType, hinted and one bit a pixel, Tahoma first, sized to the bitmap fonts' letters, Latin-only lines in the bitmap font; then (PR after #329) Cyrillic made from the bitmap fonts' own letters (`CyrillicGlyphs`) for FONT00V/01V/16V/31V/36V/50V/74V/100V/101V, the serif and hand-drawn ones (casebook, research, policy titles, awards) keep TrueType. The research screen's "Диагностическое оборудование" is broken onto two lines where it would not fit before the arrows (`ResearchScreen.LabelLines`, #498); looked at live on MSI with Trebuchet 2026-11-26, it no longer runs under "Готово". CorsixTH's own adviser
   messages (no_desk_*, another_desk, *_needs_desk_*, not_enough_lecture_chairs) carry their names (`Advice.Name`), and
   the main menu and the new game window take main_menu.*, new_game_window.* and their tooltips (`CorsixText.Get`). Staff
   names, descriptions and professions come from the translation's humanoid_name_starts/_ends, staff_descriptions and

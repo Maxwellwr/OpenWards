@@ -672,6 +672,9 @@ public sealed class Hospital
     /// </summary>
     public int ResearchDistributedThisYear { get; internal set; }
 
+    /// <summary>The score for looking after the plants, which the adviser judges (see <see cref="Objects.PlantCare"/>).</summary>
+    public int PlantCare { get; internal set; }
+
     /// <summary>The player (0-based) the hospital belongs to.</summary>
     public int Player { get; }
 
@@ -795,6 +798,13 @@ public sealed class Hospital
     /// watch has run down, or when the player opened it early.
     /// </summary>
     public bool IsOpen { get; private set; }
+
+    /// <summary>
+    /// Whether no person holds the hospital's place in a network game (<see cref="Simulation.SetSeat"/>): it gets no new
+    /// patients and takes no part in what the hospitals share (emergencies, VIPs, missions, the year's comparisons), as an
+    /// unused hospital record of the original's network game. What is in it goes on.
+    /// </summary>
+    public bool IsVacant { get; internal set; }
 
     /// <summary>The room types the hospital may build, in id order: those discovered at the start or since by research.</summary>
     public IReadOnlyCollection<string> DiscoveredRooms => _discoveredRooms;
@@ -1957,6 +1967,8 @@ public sealed class Hospital
         }
 
         NetMission.Write(writer);
+        writer.WriteInt32(PlantCare);
+        writer.WriteBool(IsVacant);
     }
 
     internal static Hospital Read(SimReader reader, int player)
@@ -2259,6 +2271,15 @@ public sealed class Hospital
         {
             hospital.NetMission = NetMission.Read(reader);
         }
+
+        // Version 122 keeps the score for the plants; older games work it out from the plants once they are read.
+        if (reader.Version is 0 or >= 122)
+        {
+            hospital.PlantCare = reader.ReadInt32();
+        }
+
+        // Version 123 keeps whether a person holds the hospital's place in a network game.
+        hospital.IsVacant = reader.Version is 0 or >= 123 && reader.ReadBool();
 
         return hospital;
     }

@@ -61,11 +61,12 @@ public sealed class PlantState
     public int PleasingFactor => Phases - State;
 
     /// <summary>One of the plants' draws every <see cref="DroopInterval"/> ticks: one in two loses a drop of water.</summary>
-    internal void Droop(SimRandom random)
+    /// <returns>Whether it drooped a frame (its water came to 320, 240, 160 or 80).</returns>
+    internal bool Droop(SimRandom random)
     {
         if (random.Next(2) != 0)
         {
-            return;
+            return false;
         }
 
         Water--;
@@ -73,7 +74,10 @@ public sealed class PlantState
         {
             Water = 0;
             HasRunDry = true;
+            return false;
         }
+
+        return Water is > 0 and < FullWater && Water % WaterPerState == 0;
     }
 
     /// <summary>

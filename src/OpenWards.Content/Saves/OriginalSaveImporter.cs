@@ -226,6 +226,7 @@ public static class OriginalSaveImporter
                 : null,
             ResearchDistributedThisYear = save.ResearchDistributedThisYear,
             RatsThisYear = save.RatsThisYear,
+            PlantCare = save.PlantCare,
             Litter = LitterOf(save),
             Ratholes = Enumerable.Range(0, Math.Min(hospital.RatholeCount, OriginalSaveHospital.MaxRatholes))
                 .Select(hospital.Rathole)

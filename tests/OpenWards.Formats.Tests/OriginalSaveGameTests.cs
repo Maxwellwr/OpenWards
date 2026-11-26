@@ -487,6 +487,36 @@ public class OriginalSaveGameTests
     }
 
     [Fact]
+    public void ReadsThePlantCountAndCareScore()
+    {
+        var data = new byte[OriginalSaveGame.Length];
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(OriginalSaveGame.PlantCountOffset), 8);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(OriginalSaveGame.PlantCareOffset), -22);
+
+        var save = OriginalSaveGame.Parse(data);
+
+        Assert.Equal((8, -22), (save.PlantCount, save.PlantCare));
+    }
+
+    [Theory]
+    [InlineData("MAXWELL.H3", 8, 384)]
+    [InlineData("MAXWELL.H8", 8, 51)]
+    public void RealSavesKeepThePlantCareScore(string name, int plants, int score)
+    {
+        var install = RealGameData.Require();
+        var path = install.FindDirectory("SAVE") is { } folder ? Path.Combine(folder, name) : null;
+        if (path is null || !File.Exists(path))
+        {
+            Assert.Skip($"No {name} in the SAVE folder.");
+        }
+
+        // The game expert's reading of the saves (27.11.2026): eight plants each, 384 and 51 of 440.
+        var save = OriginalSaveGame.Parse(File.ReadAllBytes(path));
+
+        Assert.Equal((plants, score), (save.PlantCount, save.PlantCare));
+    }
+
+    [Fact]
     public void BenchFramesAreBenchIdleAnimations()
     {
         var install = RealGameData.Require();

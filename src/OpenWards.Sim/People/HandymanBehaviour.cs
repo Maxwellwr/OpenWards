@@ -486,6 +486,7 @@ public sealed class HandymanBehaviour : HumanoidBehaviour
     /// <summary>The plant is watered back to health as he starts (<c>restoreToFullHealth</c>); he waters it once through.</summary>
     private void StartWatering(Simulation simulation, Humanoid humanoid, RoomObject plant)
     {
+        Objects.PlantCare.OnWatered(simulation, plant);
         plant.Plant!.Restore();
         Phase = HandymanPhase.Watering;
         _stage = 0;

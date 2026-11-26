@@ -13,7 +13,10 @@ using OpenWards.Sim.Rooms;
 
 namespace OpenWards.Sim.Objects;
 
-/// <summary>An object a hospital has picked up and not yet put down: what it is, where it stood, and a plant's thirst.</summary>
+/// <summary>
+/// An object a hospital has picked up and not yet put down: what it is and where it stood. A plant put down again is
+/// freshly watered, as in the original, so its thirst (<paramref name="Plant"/>) is no longer carried; old saves have it.
+/// </summary>
 public sealed record CarriedObject(string ObjectType, TilePosition Tile, Direction Orientation, PlantState? Plant);
 
 /// <summary>
@@ -76,7 +79,7 @@ public static class CorridorObjects
     /// </summary>
     internal static void PickUp(Simulation simulation, RoomObject placed, int player)
     {
-        simulation.Hospitals[player].Carried = new CarriedObject(placed.ObjectType, placed.Tile, placed.Orientation, placed.Plant);
+        simulation.Hospitals[player].Carried = new CarriedObject(placed.ObjectType, placed.Tile, placed.Orientation, null);
         Remove(simulation, placed);
     }
 
@@ -130,12 +133,7 @@ public static class CorridorObjects
     private static void Put(Simulation simulation, int player, CarriedObject carried, TilePosition tile, Direction orientation)
     {
         simulation.Hospitals[player].Carried = null;
-        var put = ObjectPlacer.Place(simulation, simulation.Content.FindObject(carried.ObjectType)!, tile, orientation);
-        if (carried.Plant is { } plant)
-        {
-            put.Plant = plant;
-        }
-
+        ObjectPlacer.Place(simulation, simulation.Content.FindObject(carried.ObjectType)!, tile, orientation);
         simulation.Map.UpdatePathfinding();
     }
 
@@ -152,12 +150,7 @@ public static class CorridorObjects
         }
 
         Remove(simulation, placed);
-        var put = ObjectPlacer.Place(simulation, simulation.Content.FindObject(placed.ObjectType)!, tile, orientation);
-        if (placed.Plant is { } plant)
-        {
-            put.Plant = plant;
-        }
-
+        ObjectPlacer.Place(simulation, simulation.Content.FindObject(placed.ObjectType)!, tile, orientation);
         simulation.Map.UpdatePathfinding();
         return true;
     }

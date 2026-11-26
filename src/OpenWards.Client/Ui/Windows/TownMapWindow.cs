@@ -66,7 +66,7 @@ internal sealed class TownMapWindow : UiWindow
                 forSale
                     ? WindowCell.Button(UiText.Get("openwards.build.buy", "Buy"), () =>
                     {
-                        if (price > hospital.Balance)
+                        if (!simulation.CanAffordParcel(number, host.Player))
                         {
                             host.Notice(UiText.Format("openwards.town_map.cannot_afford", "Not enough money for parcel %1%: it costs %2%", number, MoneyText.Format(price)));
                             host.PlaySound("Wrong2.wav");

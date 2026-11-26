@@ -43,6 +43,8 @@ public static class OriginalSaveFields
         new(OriginalSaveArea.File, OriginalSaveGame.AwardCounterOffset + 21, 8, "rats killed and shots this year", true),
         new(OriginalSaveArea.File, OriginalSaveGame.AwardCounterOffset + 13, 4, "research points earned this year (never read)", true),
         new(OriginalSaveArea.File, OriginalSaveGame.AwardCounterOffset + 17, 4, "research points distributed this year", true),
+        new(OriginalSaveArea.File, OriginalSaveGame.PlantCountOffset, 2, "plant count (the map's plants are counted instead)", true),
+        new(OriginalSaveArea.File, OriginalSaveGame.PlantCareOffset, 4, "plant care score", true),
         new(OriginalSaveArea.File, OriginalSaveGame.NextEmergencyOffset, 10, "next emergency", true),
         new(OriginalSaveArea.File, OriginalSaveGame.NextEarthquakeOffset, 6, "next earthquake", true),
         new(OriginalSaveArea.File, OriginalSaveGame.EarthquakeStepOffset, 5, "earthquake under way: next step tick, phase", true),

@@ -24,6 +24,11 @@ internal sealed class WindowTestHost : IWindowHost
 
     public OriginalTexts? Texts { get; set; }
 
+    /// <summary>The names the players of a network game joined under, by player.</summary>
+    public Dictionary<int, string> NetworkNames { get; } = [];
+
+    public string? NetworkPlayerName(int player) => NetworkNames.GetValueOrDefault(player);
+
     public Adviser Adviser { get; } = new();
 
     public List<Command> Submitted { get; } = [];

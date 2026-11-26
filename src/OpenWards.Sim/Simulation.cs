@@ -28,7 +28,7 @@ namespace OpenWards.Sim;
 public sealed class Simulation
 {
     /// <summary>Version of the serialized format written by <see cref="Save"/>.</summary>
-    private const int FormatVersion = 121;
+    private const int FormatVersion = 123;
 
     /// <summary>
     /// The oldest version still read: 57 lacks what handymen are doing (version 58) and 58 whether rooms are paid for or
@@ -274,7 +274,7 @@ public sealed class Simulation
             _pending.RemoveAt(0);
 
             // On the bidding screen the only thing a player can do is bid (the original's auction screen covers the game).
-            if (Auction is not null && scheduled.Command is not BidForParcelCommand)
+            if (Auction is not null && scheduled.Command is not (BidForParcelCommand or SetSeatCommand))
             {
                 continue;
             }
@@ -341,9 +341,9 @@ public sealed class Simulation
         {
             foreach (var entity in _entities)
             {
-                if (entity is RoomObject { Plant: { } plant, IsDestroyed: false })
+                if (entity is RoomObject { Plant: { } plant, IsDestroyed: false } placed && plant.Droop(Random))
                 {
-                    plant.Droop(Random);
+                    Objects.PlantCare.OnDrooped(this, placed);
                 }
             }
         }
@@ -539,6 +539,12 @@ public sealed class Simulation
         }
 
         var entity = _entities[index];
+        if (entity is RoomObject { Plant: not null, IsDestroyed: false } plant)
+        {
+            // A plant taken away takes what it was still worth off the hospital's care for its plants.
+            Objects.PlantCare.OnRemoved(this, plant);
+        }
+
         _entities.RemoveAt(index);
         if (entity is EntranceDoor door)
         {
@@ -597,7 +603,7 @@ public sealed class Simulation
             simulation._hospitals[player].FreeBuild = rules.FreeBuild;
         }
 
-        var competitorCount = reader.ReadCount(rules.Competitors.Count);
+        var competitorCount = reader.ReadCount(rules.Competitors.Count + map.PlayerCount);
         for (var i = 0; i < competitorCount; i++)
         {
             simulation._competitors.Add(CompetitorHospital.Read(reader, rules.StartReputation, rules.StartCash, map.ParcelTileCount(1), i < rules.Competitors.Count ? rules.Competitors[i].Personality : null));
@@ -655,6 +661,15 @@ public sealed class Simulation
         for (var i = 0; i < delayedCount; i++)
         {
             simulation._delayedObjects.Add(MapObjectPlacement.Read(reader));
+        }
+
+        // Before version 122 the hospitals kept no score for their plants: it is estimated from the plants.
+        if (version is not 0 and < 122)
+        {
+            foreach (var hospital in simulation._hospitals)
+            {
+                hospital.PlantCare = PlantCare.Estimate(simulation, hospital.Player);
+            }
         }
 
         // Before version 118 the parcels' adjacency on the map was kept; the level's neighbour lists replace it.
@@ -837,6 +852,68 @@ public sealed class Simulation
     public long ParcelPrice(int parcel) => Rules.FreeBuild ? 0 : (long)Map.ParcelTileCount(parcel) * Rules.LandCostPerTile;
 
     /// <summary>
+    /// A person takes or leaves the place of hospital <paramref name="seat"/> in a network game (the lockstep server's
+    /// <see cref="Commands.SetSeatCommand"/>). A place no person holds is vacant (<see cref="Hospital.IsVacant"/>): its
+    /// hospital gets no new patients and takes no part in what the hospitals share, as an unused hospital record of the
+    /// original's network game. With <paramref name="computer"/> a computer opponent plays in its stead until a person comes
+    /// (OpenWards' own: the original's network game has no computer opponents): one of the level's twenty not playing
+    /// yet, drawn at random, with its traits (<see cref="LevelRules.ReserveCompetitors"/>), starting its scenario afresh
+    /// on a plot as big as the place's. When a person takes the place, its opponent leaves the game.
+    /// </summary>
+    internal void SetSeat(int seat, bool occupied, bool computer)
+    {
+        if (seat < 0 || seat >= _hospitals.Length)
+        {
+            return;
+        }
+
+        _hospitals[seat].IsVacant = !occupied;
+        var standIn = _competitors.FindIndex(competitor => competitor.Seat == seat);
+        if (occupied || !computer)
+        {
+            if (standIn >= 0)
+            {
+                _competitors.RemoveAt(standIn);
+            }
+
+            return;
+        }
+
+        if (standIn >= 0)
+        {
+            return;
+        }
+
+        var free = Rules.ReserveCompetitors.Where(planned => _competitors.All(competitor => competitor.Number != planned.Number)).ToList();
+        if (free.Count == 0)
+        {
+            return;
+        }
+
+        var chosen = free[CompetitorRandom.Next(free.Count)];
+        _competitors.Add(CompetitorHospital.ForSeat(chosen, Rules, Map.ParcelTileCount(seat + 1), seat, Tick));
+    }
+
+    /// <summary>The hospitals a person holds, in turn: all but the vacant places of a network game.</summary>
+    public IEnumerable<Hospital> HeldHospitals => _hospitals.Where(hospital => !hospital.IsVacant);
+
+    /// <summary>
+    /// Whether the player has the money for the parcel: its price alone (CorsixTH's <c>Hospital:purchasePlot</c>), but more
+    /// than its price to open an auction in a game of several hospitals (<see cref="LandAuction.Start"/>).
+    /// </summary>
+    public bool CanAffordParcel(int parcel, int player)
+    {
+        if (player < 0 || player >= _hospitals.Length)
+        {
+            return false;
+        }
+
+        var price = ParcelPrice(parcel);
+        var balance = _hospitals[player].Balance;
+        return _hospitals.Length > 1 ? balance > price : balance >= price;
+    }
+
+    /// <summary>
     /// <c>Hospital:purchasePlot</c>: the player buys a parcel they may buy and can afford; it adds its price to the
     /// hospital's value.
     /// </summary>
@@ -856,7 +933,7 @@ public sealed class Simulation
 
         var hospital = _hospitals[player];
         var price = ParcelPrice(parcel);
-        if (price <= hospital.Balance)
+        if (CanAffordParcel(parcel, player))
         {
             SetParcelOwner(parcel, player + 1);
             hospital.Spend(Hours, checked((int)price), TransactionKind.BuyLand, parcel.ToString(CultureInfo.InvariantCulture));
