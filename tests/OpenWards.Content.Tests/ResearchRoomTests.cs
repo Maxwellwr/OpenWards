@@ -56,10 +56,18 @@ public class ResearchRoomTests
         Assert.Contains("computer", used);
         var research = hospital.Research;
 
-        // Two months of a researcher's 1,550 to 2,550 points a day, over 5, by the areas' shares.
+        // Each day the areas in turn take their 20 % of what is left in the pool: 20, 16, 12.8, 10.24 and 8.19 % of it, so
+        // diagnosis gets 16 of every 67.2 points taken. No disease is chosen for specialisation, so its share is lost but
+        // its slider stays on and keeps taking it.
+        var specialisation = research.Area(ResearchCategory.Specialisation);
+        Assert.True(specialisation.Current.IsNone);
+        Assert.Equal(20, specialisation.Share);
+        var distributed = hospital.ResearchDistributedThisYear;
+        Assert.True(distributed > 5_000, $"Only {distributed} points distributed in two months.");
         var diagnosis = research.Area(ResearchCategory.Diagnosis).Current;
-        Assert.Equal(ResearchTargetKind.Object, diagnosis.Kind);
-        Assert.True(research.Objects[diagnosis.Id].Points > 2_000, $"Only {research.Objects[diagnosis.Id].Points} points for {diagnosis.Id}.");
+        Assert.Equal(new ResearchTarget(ResearchTargetKind.Object, "x_ray"), diagnosis);
+        var points = research.Objects[diagnosis.Id].Points;
+        Assert.InRange(points * 1_000L / distributed, 228, 248);
 
         // Research costs nothing of its own (the specification); only the researcher's wages are paid.
         Assert.DoesNotContain(hospital.Transactions, t => t.Kind == TransactionKind.Research);
