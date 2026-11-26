@@ -69,9 +69,22 @@ internal static class NetMissionTexts
     /// <summary>A string of the original's 0-based section and index.</summary>
     private static string? Original(IWindowHost host, int section, int index) => host.Texts?.String(section + 1, index + 1);
 
-    /// <summary>Puts the numbers into the string's <c>%d</c> in turn.</summary>
-    private static string Fill(string text, params int[] numbers)
+    /// <summary>
+    /// Puts the numbers into the string's slots: a numbered slot <c>%n$d</c> takes the n-th number, as the German text of
+    /// mission 7 has them (<see cref="Formats.StringTable.FixGerman"/>), and plain <c>%d</c> take them in turn.
+    /// </summary>
+    internal static string Fill(string text, params int[] numbers)
     {
+        if (text.Contains("$d", StringComparison.Ordinal))
+        {
+            for (var i = 0; i < numbers.Length; i++)
+            {
+                text = text.Replace($"%{i + 1}$d", numbers[i].ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+            }
+
+            return text;
+        }
+
         foreach (var number in numbers)
         {
             var at = text.IndexOf("%d", StringComparison.Ordinal);

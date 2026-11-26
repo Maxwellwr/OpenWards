@@ -180,7 +180,8 @@ public sealed class StringTable
     /// <summary>
     /// Fixes the German version's strings as CorsixTH's <c>fixGermanStrings</c> does: splits a joined string in section
     /// 44 and shifts the rest, removes a duplicate in section 28, applies the spelling reform, and adds the space
-    /// missing at the end of the good and bad staff descriptions (sections 47 and 48).
+    /// missing at the end of the good and bad staff descriptions (sections 47 and 48). It also numbers the slots of
+    /// network mission 7's text, whose German wording gives the months first (OpenWards' own fix).
     /// </summary>
     public void FixGerman()
     {
@@ -225,6 +226,17 @@ public sealed class StringTable
 
                 section[i] = text;
             }
+        }
+
+        // OpenWards' own fix, not CorsixTH's: the German text of network mission 7 (reputation) names the months before
+        // the target, the other languages and the German missions 4 to 6 the target first. The numbers go in by meaning,
+        // so the slots are numbered: the target is the first number, the months the second.
+        if (SectionSize(66) > 20 && _sections[66][20] is var reputation
+            && reputation.IndexOf("%d", StringComparison.Ordinal) is var first and >= 0
+            && reputation.AsSpan(first).StartsWith("%d Monat", StringComparison.Ordinal)
+            && reputation.IndexOf("%d", first + 2, StringComparison.Ordinal) is var second and >= 0)
+        {
+            _sections[66][20] = reputation[..first] + "%2$d" + reputation[(first + 2)..second] + "%1$d" + reputation[(second + 2)..];
         }
 
         foreach (var index in (ReadOnlySpan<int>)[46, 47])
