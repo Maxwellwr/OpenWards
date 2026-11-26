@@ -30,14 +30,34 @@ public enum RestingPhase : byte
 }
 
 /// <summary>
+/// Where a member of staff goes once rested. The original keeps no room for them: what they did is all it remembers
+/// (the game expert's answer of 26.11.2026, from the developers' notes).
+/// </summary>
+public enum RestReturn : byte
+{
+    /// <summary>Back to work like anyone free: the nearest room calling for their kind, or wandering about.</summary>
+    None,
+
+    /// <summary>A researcher: to the research department with the most desks left free.</summary>
+    Research,
+
+    /// <summary>A doctor from the training room: a consultant to one without a lecturer, a student to the most chairs.</summary>
+    Training,
+
+    /// <summary>A nurse: to one of the hospital's wards at random.</summary>
+    Ward,
+}
+
+/// <summary>
 /// A member of staff tired past the hospital's <c>goto_staffroom</c> policy, who has left their work for the nearest staff
 /// room. Every rest there takes fatigue off (<see cref="RestRules.Recovery"/>) and brings a point of mood: every
 /// <see cref="Tiredness.RestPeriod"/> ticks standing (<see cref="RestRules.RestStanding"/>) or on the sofa
 /// (<see cref="RestRules.RestSofa"/>), a whole game of the
 /// video game (<see cref="RestRules.RestGame"/>, doctors and nurses) or of pool (<see cref="RestRules.RestSnooker"/>,
 /// doctors and handymen). After every rest they choose again: one time in ten pool, one time in ten the video game, if
-/// there is a free one, else a sofa, else standing. Fully rested, their discontent halves and they go back to work (their
-/// usual behaviour again, free for any room).
+/// there is a free one, else a sofa, else standing. Fully rested, their discontent halves and they go back to work: free
+/// for any room, except that a researcher, a doctor from the training room and a nurse look for that kind of room first
+/// (<see cref="RestReturn"/>).
 /// </summary>
 public sealed class RestingBehaviour : HumanoidBehaviour
 {
@@ -45,11 +65,11 @@ public sealed class RestingBehaviour : HumanoidBehaviour
     private const string PoolTable = "pool_table";
     private const string VideoGame = "video_game";
 
-    internal RestingBehaviour(int roomId, int parcel, int returnRoomId = 0)
+    internal RestingBehaviour(int roomId, int parcel, RestReturn returnTo = RestReturn.None)
     {
         RoomId = roomId;
         Parcel = parcel;
-        ReturnRoomId = returnRoomId;
+        ReturnTo = returnTo;
     }
 
     public override BehaviourKind Kind => BehaviourKind.Resting;
@@ -65,11 +85,14 @@ public sealed class RestingBehaviour : HumanoidBehaviour
     /// <summary>A handyman's parcel, given back afterwards.</summary>
     public int Parcel { get; }
 
+    /// <summary>What kind of room they look for first once rested.</summary>
+    public RestReturn ReturnTo { get; private set; }
+
     /// <summary>
-    /// The research department or training room they rested from, which they go back to once rested if it has room for
-    /// them (CorsixTH's <c>last_room</c>), or 0.
+    /// A save from before format 119 kept the research department or training room itself (CorsixTH's
+    /// <c>last_room</c>); its kind is taken from it once they are rested, if it is still there.
     /// </summary>
-    public int ReturnRoomId { get; private set; }
+    private int _legacyReturnRoomId;
 
     /// <summary>The use of the object, while it lasts.</summary>
     public ObjectUse? Use { get; private set; }
@@ -159,12 +182,19 @@ public sealed class RestingBehaviour : HumanoidBehaviour
                     return;
                 }
 
-                BackToWork(simulation, humanoid);
-                if (ReturnRoomId != 0)
+                var returnTo = ReturnTo;
+                if (_legacyReturnRoomId != 0)
                 {
-                    // Back to the research department or training room if it still has room for them.
-                    RoomVisits.ReturnToLastRoom(simulation, humanoid, ReturnRoomId);
+                    returnTo = simulation.FindEntity(_legacyReturnRoomId) switch
+                    {
+                        Room { RoomType: RoomVisits.ResearchRoom } => RestReturn.Research,
+                        Room { RoomType: Training.RoomType } => RestReturn.Training,
+                        _ => RestReturn.None,
+                    };
                 }
+
+                BackToWork(simulation, humanoid);
+                RoomVisits.ReturnAfterRest(simulation, humanoid, returnTo);
 
                 break;
         }
@@ -380,7 +410,7 @@ public sealed class RestingBehaviour : HumanoidBehaviour
         writer.WriteInt32(_useTime);
         writer.WriteInt32(_nextTargetId);
         writer.WriteInt32(_meanders);
-        writer.WriteInt32(ReturnRoomId);
+        writer.WriteByte((byte)ReturnTo);
         writer.WriteInt32(_restTicks);
     }
 
@@ -397,7 +427,17 @@ public sealed class RestingBehaviour : HumanoidBehaviour
         resting._useTime = reader.ReadInt32();
         resting._nextTargetId = reader.ReadInt32();
         resting._meanders = reader.ReadInt32();
-        resting.ReturnRoomId = reader.Version is 0 or >= 74 ? reader.ReadInt32() : 0;
+        // Version 119 keeps the kind of room looked for after the rest rather than the room left.
+        if (reader.Version is 0 or >= 119)
+        {
+            var returnTo = reader.ReadByte();
+            resting.ReturnTo = returnTo <= (byte)RestReturn.Ward ? (RestReturn)returnTo : throw new InvalidDataException($"Bad rest return {returnTo}.");
+        }
+        else if (reader.Version >= 74)
+        {
+            resting._legacyReturnRoomId = reader.ReadInt32();
+        }
+
         resting._restTicks = reader.Version is 0 or >= 114 ? reader.ReadInt32() : 0;
         return resting;
     }

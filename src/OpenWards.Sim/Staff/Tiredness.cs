@@ -317,10 +317,19 @@ internal static class Tiredness
         // Staff:goToStaffRoom: out of the room (Room:createLeaveAction) and to the nearest staff room.
         var parcel = humanoid.Behaviour is HandymanBehaviour handyman ? handyman.Parcel : 0;
 
-        // last_room: a researcher or a doctor in training goes back there once rested, if it still has room for them.
-        var returnRoom = humanoid.Behaviour is DoctorBehaviour doctor && simulation.FindEntity(doctor.RoomId) is Room { RoomType: RoomVisits.ResearchRoom or Training.RoomType } working
-            ? working.Id
-            : 0;
+        // Once rested, a researcher or a doctor in training looks for that kind of room again, and a nurse for a ward;
+        // nobody keeps their room (the original remembers what they did, not where).
+        var returnTo = humanoid.Behaviour switch
+        {
+            DoctorBehaviour doctor => simulation.FindEntity(doctor.RoomId) switch
+            {
+                Room { RoomType: RoomVisits.ResearchRoom } => RestReturn.Research,
+                Room { RoomType: Training.RoomType } => RestReturn.Training,
+                _ => RestReturn.None,
+            },
+            NurseBehaviour => RestReturn.Ward,
+            _ => RestReturn.None,
+        };
         // A surgeon changes back into a doctor at the theatre's screen first (operating_theatre.lua's must-happen actions).
         if (humanoid.Behaviour is DoctorBehaviour { IsChangingBack: true }
             || (humanoid.Type == HumanoidType.Surgeon && humanoid.Behaviour is DoctorBehaviour surgeon && surgeon.ChangeBackBeforeRest(simulation, humanoid)))
@@ -334,7 +343,7 @@ internal static class Tiredness
             humanoid.Type = HumanoidType.Doctor;
         }
 
-        humanoid.Behaviour = new RestingBehaviour(staffRoom.Id, parcel, returnRoom);
+        humanoid.Behaviour = new RestingBehaviour(staffRoom.Id, parcel, returnTo);
     }
 
     /// <summary>
