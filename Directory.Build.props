@@ -12,11 +12,11 @@
   </PropertyGroup>
 
   <!--
-    The version. Builds are development builds ("0.1.0-dev", which never look for updates) unless the release
+    The version. Builds are development builds ("0.2.0-dev", which never look for updates) unless the release
     workflow builds with OpenWardsRelease=true. Bump VersionPrefix for each release; the tag is v$(VersionPrefix).
   -->
   <PropertyGroup>
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>0.2.0</VersionPrefix>
     <VersionSuffix Condition="'$(OpenWardsRelease)' != 'true'">dev</VersionSuffix>
     <Product>OpenWards</Product>
     <Company>OpenWards</Company>
