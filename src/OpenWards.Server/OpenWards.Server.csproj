@@ -12,4 +12,12 @@
     <ProjectReference Include="../OpenWards.Net/OpenWards.Net.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenWards.Server.Tests" />
+  </ItemGroup>
+
 </Project>

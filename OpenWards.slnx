@@ -21,6 +21,7 @@
     <Project Path="tests/OpenWards.Formats.Tests/OpenWards.Formats.Tests.csproj" />
     <Project Path="tests/OpenWards.LuaConverter.Tests/OpenWards.LuaConverter.Tests.csproj" />
     <Project Path="tests/OpenWards.Net.Tests/OpenWards.Net.Tests.csproj" />
+    <Project Path="tests/OpenWards.Server.Tests/OpenWards.Server.Tests.csproj" />
     <Project Path="tests/OpenWards.Sim.Tests/OpenWards.Sim.Tests.csproj" />
   </Folder>
 </Solution>
